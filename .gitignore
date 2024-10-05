@@ -15,3 +15,14 @@ buildNumber.properties
 .project
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
+.settings
+.metadata
+
+# Npm
+node
+node_modules
+dist
+*.tsbuildinfo
+.last-run.json
+.nyc_output
+coverage
