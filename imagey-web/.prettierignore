@@ -3,3 +3,6 @@ node
 node_modules
 target
 coverage
+.nyc_output
+pacts
+test-results

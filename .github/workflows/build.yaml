@@ -33,7 +33,7 @@ jobs:
         distribution: 'temurin'
         cache: maven
     - name: Build with Maven
-      run: mvn -B install
+      run: mvn -B clean install
 
   deploy:
 
@@ -71,4 +71,8 @@ jobs:
           mv ~/imagey-server/target/imagey-server-meecrowave-distribution.zip ~/
           ~/imagey-server-distribution/bin/meecrowave.sh stop
           unzip -o ~/imagey-server-meecrowave-distribution.zip
+          export SMTP_HOST=${{ vars.SMTP_HOST }}
+          export SMTP_PORT=${{ vars.SMTP_PORT }}
+          export SMTP_USER=${{ vars.SMTP_USER }}
+          export SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
           ~/imagey-server-distribution/bin/meecrowave.sh start
