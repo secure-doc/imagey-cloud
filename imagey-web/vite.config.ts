@@ -3,11 +3,16 @@ import react from "@vitejs/plugin-react";
 import istanbul from "vite-plugin-istanbul";
 
 export default defineConfig({
+  server: {
+    proxy: {
+      "/users": "http://localhost:8080",
+    },
+  },
   plugins: [
     react(),
     istanbul({
       include: ["src/**/*"], // files to track coverage on
-      exclude: ["node_modules"], // files to NOT track coverage on
+      exclude: ["node_modules", "src/authentication/ConversionService.ts"], // files to NOT track coverage on
       requireEnv: false,
     }),
   ],

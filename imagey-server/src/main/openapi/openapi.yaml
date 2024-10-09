@@ -1,0 +1,55 @@
+openapi: 3.1.0
+info:
+  title: Imagey - Store and share your images and documents safely.
+  description: |-
+    This documentation describes the api of imagey.
+  termsOfService: http://imagey.cloud/terms/
+  contact:
+    email: info@imagey.cloud
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 0.1.0
+externalDocs:
+  description: Find out more about Imagey.
+  url: http://www.imagey.cloud
+servers:
+  - url: https://imagey.cloud
+paths:
+  /index.html:
+    get:
+      summary: The start page. If you are logged in, will show you latest news.
+  /users:
+    post:
+      summary: Login of a user
+      description: If a user is already registered, a login mail is sent, if not a registration mail is sent.
+      operationId: loginOrRegister
+      requestBody:
+        description: The email of the user
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '201':
+          description: The user was registered successfully and a registration mail is sent.
+        '202':
+          description: The user already is registered and a login mail is sent.
+  /users/{email}:
+    get:
+      summary: Returns the profile information of the user of this email
+      responses:
+        '200':
+          description: The profile information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+      - email: string
+      required: email
