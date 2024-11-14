@@ -75,4 +75,7 @@ jobs:
           export SMTP_PORT=${{ vars.SMTP_PORT }}
           export SMTP_USER=${{ vars.SMTP_USER }}
           export SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          export ROOT_PATH=${{ secrets.ROOT_PATH }}
+          export ACME_CHALLENGE_PATH=${{ secrets.ACME_CHALLENGE_PATH }}
+          export AUTHENTICATION_SECRET=${{ secrets.AUTHENTICATION_SECRET }}
           ~/imagey-server-distribution/bin/meecrowave.sh start

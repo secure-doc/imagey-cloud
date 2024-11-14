@@ -58,6 +58,7 @@ public class RegistrationFilter extends HttpFilter {
         Optional<DecodedToken> decoded = tokenService.decode(registrationToken);
         if (decoded.isEmpty()) {
             response.sendError(SC_FORBIDDEN);
+            return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
         User user = new User(email);

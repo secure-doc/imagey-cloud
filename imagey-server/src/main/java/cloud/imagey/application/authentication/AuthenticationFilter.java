@@ -59,11 +59,13 @@ public class AuthenticationFilter extends HttpFilter {
         Optional<DecodedToken> decoded = tokenService.decode(registrationToken);
         if (decoded.isEmpty()) {
             response.sendError(SC_FORBIDDEN);
+            return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
         User user = new User(email);
         if (!userRepository.exists(user)) {
             response.sendError(SC_NOT_FOUND);
+            return;
         }
         Token token = tokenService.generateToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + token.token() + "; HttpOnly; SameSite=strict");
