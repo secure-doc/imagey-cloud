@@ -113,9 +113,10 @@ public class LoginTest {
     }
 
     private String extractLink(MimeMessage message) throws IOException, MessagingException {
-        String registrationMail = ((MimeMultipart)message.getContent()).getBodyPart(0).getContent().toString();
-        int startIndex = registrationMail.indexOf("href=\"") + "href=\"".length();
-        int endIndex = registrationMail.indexOf('"', startIndex);
-        return registrationMail.substring(startIndex, endIndex);
+        String loginMail = ((MimeMultipart)message.getContent()).getBodyPart(0).getContent().toString();
+        int startIndex = loginMail.indexOf("href=\"") + "href=\"".length();
+        int endIndex = loginMail.indexOf('"', startIndex);
+        return loginMail.substring(startIndex, endIndex)
+            .replace("https://imagey.cloud", "http://localhost:" + config.getHttpPort());
     }
 }

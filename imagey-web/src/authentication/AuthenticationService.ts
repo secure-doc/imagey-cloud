@@ -12,6 +12,7 @@ export const authenticationService = {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "same-origin",
       body: JSON.stringify({ email: email }),
     });
     return response.status === 202
@@ -28,6 +29,7 @@ export const authenticationService = {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "same-origin",
       body: JSON.stringify(symmetricJsonWebKey),
     });
     if (response.ok) {
@@ -46,6 +48,7 @@ export const authenticationService = {
       headers: {
         Accept: "application/json",
       },
+      credentials: "same-origin",
     });
     if (response.status === 404) {
       return authenticationService.initializeSymmetricKey(email);

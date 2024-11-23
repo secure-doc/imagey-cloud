@@ -68,7 +68,7 @@ public class AuthenticationFilter extends HttpFilter {
             return;
         }
         Token token = tokenService.generateToken(user, ONE_HOUR);
-        response.setHeader("Set-Cookie", "token=" + token.token() + "; HttpOnly; SameSite=strict");
+        response.setHeader("Set-Cookie", "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/");
         response.sendRedirect("/?email=" + email.address());
     }
 

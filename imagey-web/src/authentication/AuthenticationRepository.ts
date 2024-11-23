@@ -13,6 +13,7 @@ export const authenticationRepository = {
           "Content-Type": "application/json",
           Authorization: "Bearer " + token,
         },
+        credentials: "same-origin",
         body: JSON.stringify(key),
       },
     );

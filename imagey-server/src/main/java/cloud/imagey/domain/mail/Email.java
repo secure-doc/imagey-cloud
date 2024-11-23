@@ -17,5 +17,7 @@
 package cloud.imagey.domain.mail;
 
 public record Email(String address) {
-
+    public Email {
+        address = address.toLowerCase();
+    }
 }

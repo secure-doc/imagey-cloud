@@ -20,8 +20,6 @@ import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
-import javax.inject.Provider;
-import javax.servlet.http.HttpServletRequest;
 
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
@@ -51,18 +49,14 @@ public class UserService {
     private TokenService tokenService;
     @Inject
     private MailService mailService;
-    @Inject
-    private Provider<HttpServletRequest> requestProvider;
 
     public AuthenticationStatus startAuthenticationProcess(User user) {
-        HttpServletRequest request = requestProvider.get();
-        String requestUri = request.getScheme() + "://" + request.getRemoteHost() + ':' + request.getServerPort();
         Token token = tokenService.generateToken(user, ONE_DAY);
         if (userRepository.exists(user)) {
-            mailService.send(user.email(), LOGIN_MAIL.formatted(requestUri + "/authentications/" + token.token()));
+            mailService.send(user.email(), LOGIN_MAIL.formatted("https://imagey.cloud/authentications/" + token.token()));
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
-            mailService.send(user.email(), REGISTRATION_MAIL.formatted(requestUri + "/registrations/" + token.token()));
+            mailService.send(user.email(), REGISTRATION_MAIL.formatted("https://imagey.cloud/registrations/" + token.token()));
             return AuthenticationStatus.REGISTRATION_STARTED;
         }
     }
