@@ -14,11 +14,19 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.infrastructure;
+package cloud.imagey.junit;
 
-public class ResourceConflictException extends RuntimeException {
+import static java.lang.annotation.ElementType.TYPE;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
-    public ResourceConflictException(String reason) {
-        super(reason);
-    }
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
+
+import org.junit.jupiter.api.extension.ExtendWith;
+
+@Target(TYPE)
+@Retention(RUNTIME)
+@ExtendWith(ImageyGreenMailExtension.class)
+public @interface GreenMail {
+
 }

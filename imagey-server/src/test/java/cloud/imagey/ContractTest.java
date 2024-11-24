@@ -20,8 +20,6 @@ import static au.com.dius.pact.provider.junit5.HttpTestTarget.fromUrl;
 import static cloud.imagey.ContractTest.TokenState.INVALID_TOKEN;
 import static cloud.imagey.ContractTest.TokenState.VALID_TOKEN;
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
-import static com.icegreen.greenmail.configuration.GreenMailConfiguration.aConfig;
-import static com.icegreen.greenmail.util.ServerSetupTest.SMTP;
 import static java.net.URI.create;
 import static org.apache.commons.io.FileUtils.forceDelete;
 
@@ -41,9 +39,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.extension.RegisterExtension;
-
-import com.icegreen.greenmail.junit5.GreenMailExtension;
 
 import au.com.dius.pact.provider.junit5.PactVerificationContext;
 import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvider;
@@ -54,15 +49,13 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.junit.GreenMail;
 
+@GreenMail
 @MonoMeecrowaveConfig
 @Provider("imagey-server")
 @PactFolder("target/pacts")
 public class ContractTest {
-
-    @RegisterExtension
-    private static GreenMailExtension greenMail = new GreenMailExtension(SMTP)
-        .withConfiguration(aConfig().withUser("user", "password"));
 
     @ConfigurationInject
     private static Meecrowave.Builder config;

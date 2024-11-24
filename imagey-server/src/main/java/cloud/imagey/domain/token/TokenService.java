@@ -38,7 +38,6 @@ import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -62,15 +61,6 @@ public class TokenService {
             return new Token(signedJWT.serialize());
         } catch (JOSEException e) {
             throw new IllegalStateException(e);
-        }
-    }
-
-    public Email extractEmail(Token token) {
-        try {
-            SignedJWT signedJWT = SignedJWT.parse(token.token());
-            return new Email(signedJWT.getJWTClaimsSet().getSubject());
-        } catch (ParseException e) {
-            throw new IllegalArgumentException("email could not extracted", e);
         }
     }
 

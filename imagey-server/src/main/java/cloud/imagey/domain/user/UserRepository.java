@@ -45,10 +45,10 @@ public class UserRepository {
     public void persist(User user) {
         File userHome = getUserHome(user);
         if (userHome.exists()) {
-            throw new ResourceConflictException();
+            throw new ResourceConflictException(userHome + " already exists.");
         }
         if (!userHome.mkdir()) {
-            throw new ResourceConflictException();
+            throw new ResourceConflictException(userHome + " could not be created.");
         }
     }
 
@@ -77,7 +77,7 @@ public class UserRepository {
         }
         File keyFile = new File(symmetricKeysFolder, kid.id() + ".json");
         if (keyFile.exists()) {
-            throw new ResourceConflictException();
+            throw new ResourceConflictException(keyFile + " already exists.");
         }
         FileUtils.write(keyFile, key, UTF_8, false);
     }

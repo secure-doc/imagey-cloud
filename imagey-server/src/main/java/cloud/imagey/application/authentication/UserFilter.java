@@ -53,12 +53,14 @@ public class UserFilter implements ContainerRequestFilter {
         Cookie cookie = requestContext.getCookies().get("token");
         if (cookie == null) {
             requestContext.abortWith(Response.status(UNAUTHORIZED).build());
+            return;
         }
         Token token = new Token(cookie.getValue());
 
         User user = extractUser(requestContext.getUriInfo());
         if (!tokenService.verify(token, user)) {
             requestContext.abortWith(Response.status(FORBIDDEN).build());
+            return;
         }
     }
 
