@@ -16,8 +16,6 @@
  */
 package cloud.imagey;
 
-import static com.icegreen.greenmail.configuration.GreenMailConfiguration.aConfig;
-import static com.icegreen.greenmail.util.ServerSetupTest.SMTP;
 import static javax.ws.rs.client.ClientBuilder.newClient;
 import static javax.ws.rs.client.Entity.json;
 import static javax.ws.rs.core.Response.Status.FOUND;
@@ -37,24 +35,21 @@ import org.apache.meecrowave.testing.ConfigurationInject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.RegisterExtension;
 
-import com.icegreen.greenmail.junit5.GreenMailExtension;
+import com.icegreen.greenmail.base.GreenMailOperations;
 
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.junit.GreenMail;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 
+@GreenMail
 @MonoMeecrowaveConfig
 public class LoginTest {
-
-    @RegisterExtension
-    private static GreenMailExtension greenMail = new GreenMailExtension(SMTP)
-        .withConfiguration(aConfig().withUser("user", "password"));
 
     @ConfigurationInject
     private static Meecrowave.Builder config;
@@ -63,6 +58,8 @@ public class LoginTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private GreenMailOperations greenMail;
 
     @Test
     public void register() throws IOException, MessagingException {
