@@ -6,6 +6,8 @@ export default defineConfig({
   server: {
     proxy: {
       "/users": "http://localhost:8080",
+      "/authentications": "http://localhost:8080",
+      "/registrations": "http://localhost:8080",
     },
   },
   plugins: [

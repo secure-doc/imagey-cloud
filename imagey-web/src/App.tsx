@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "@mdi/react";
 import { mdiImageMultiple } from "@mdi/js";
-import "./App.css";
 import { deviceRepository } from "./device/DeviceRepository";
 import { deviceService } from "./device/DeviceService";
 import EmailDialog from "./authentication/EmailDialog";
@@ -47,23 +46,92 @@ function App() {
     return <EmailDialog onEmailSelected={(email) => setUser(email)} />;
   }
   return (
-    <>
-      <div>
-        <Icon path={mdiImageMultiple} size={10} />
-      </div>
-      <h1>Imagey</h1>
-      <div className="card">
-        <p>Store and share your images and documents safely.</p>
-        <p>{privateKey ? "Private key loaded" : "Loading private key"}</p>
-        <button>count is 1</button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <main>
+      <header>Imagey</header>
+      <section>
+        <nav>
+          <ul>
+            <li>Dokumente</li>
+            <li>Chats</li>
+          </ul>
+        </nav>
+        <article>
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        asdkfjlöadjf
+        </article>
+        <aside>
+          <h3>Moin</h3>
+        </aside>
+      </section>
+      <footer>by Arne Limburg</footer>
+    </main>
   );
 }
 
