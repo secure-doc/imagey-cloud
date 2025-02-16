@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import Icon from "@mdi/react";
-import { mdiImageMultiple } from "@mdi/js";
-import "./App.css";
+import "./imagey.css";
 import { deviceRepository } from "./device/DeviceRepository";
 import { deviceService } from "./device/DeviceService";
 import EmailDialog from "./authentication/EmailDialog";
+import Navigation from "./components/Navigation";
+import { BrowserRouter, Route, Routes } from "react-router";
+import Images from "./pages/Images";
+import Image from "./pages/Image";
+import Chats from "./pages/Chats";
 
 function App() {
   /*
@@ -47,23 +50,23 @@ function App() {
     return <EmailDialog onEmailSelected={(email) => setUser(email)} />;
   }
   return (
-    <>
-      <div>
-        <Icon path={mdiImageMultiple} size={10} />
+    <BrowserRouter>
+      <header>
+        <h1>Imagey</h1>
+      </header>
+      <div id="page">
+        <Navigation />
+        <Routes>
+          <Route path="/" element={<Images privateKey={privateKey} />} />
+          <Route path="images">
+            <Route index element={<Images privateKey={privateKey} />} />
+            <Route path=":id" element={<Image />} />
+          </Route>
+          <Route path="chats" element={<Chats />} />
+        </Routes>
+        <aside></aside>
       </div>
-      <h1>Imagey</h1>
-      <div className="card">
-        <p>Store and share your images and documents safely.</p>
-        <p>{privateKey ? "Private key loaded" : "Loading private key"}</p>
-        <button>count is 1</button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </BrowserRouter>
   );
 }
 
