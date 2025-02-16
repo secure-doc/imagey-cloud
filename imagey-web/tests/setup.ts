@@ -27,6 +27,50 @@ export async function clearLocalStorage(page: Page) {
   );
 }
 
+export async function loginAsMary(page: Page) {
+  provider
+    .given("default")
+    .uponReceiving("a request of mary to get symmetric key")
+    .withRequest({
+      method: "GET",
+      path: "/users/mary@imagey.cloud/symmetric-keys/0",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+    .willRespondWith({
+      status: 200,
+      body: {
+        alg: "A256CTR",
+        ext: true,
+        k: "3--L_Xfr9Tmh5l6vI9KEp6qbdrEdq2FhPBVMi9Tkq2c",
+        key_ops: ["encrypt", "decrypt"],
+        kty: "oct",
+      },
+    });
+  await page.goto("/");
+  await page.evaluate(
+    ({ marysEmail }) => localStorage.setItem("imagey.user", marysEmail),
+    { marysEmail },
+  );
+  await page.evaluate(
+    ({ marysDeviceId }) =>
+      localStorage.setItem(
+        "imagey.deviceIds[mary@imagey.cloud]",
+        marysDeviceId,
+      ),
+    { marysDeviceId },
+  );
+  await page.evaluate(
+    ({ marysDeviceId, marysEncryptedPrivateKey }) =>
+      localStorage.setItem(
+        "imagey.devices[" + marysDeviceId + "].key",
+        marysEncryptedPrivateKey,
+      ),
+    { marysDeviceId, marysEncryptedPrivateKey },
+  );
+}
+
 export async function setupMockServer(page: Page, mockServer: V3MockServer) {
   const mockServerUrl = new URL(mockServer.url);
   await page.route("/users/**", async (route, request) => {
@@ -43,6 +87,7 @@ export async function setupMockServer(page: Page, mockServer: V3MockServer) {
   });
 }
 
+export const marysEmail = "mary@imagey.cloud";
 export const joesToken =
   "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2ltYWdleS5jbG91ZCIsInN1YiI6ImpvZUBpbWFnZXkuY2xvdWQiLCJleHAiOi05MjIzMzcwMzA1NjkxNjk4fQ._O3_-Z5ivyd-gr7FOG459m2OGpooHTVFOv0Q0jWEDoc";
 export const marysToken =

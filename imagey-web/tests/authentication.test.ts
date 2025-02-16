@@ -211,7 +211,7 @@ test("new user clicks registration link", async ({ page }) => {
     await page.goto("/?email=joe@imagey.cloud");
 
     // Then
-    await expect(page.getByText(/Private key loaded/)).toBeVisible();
+    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });
 
@@ -270,7 +270,7 @@ test("existing user clicks login link for new device", async ({ page }) => {
     await page.goto("/?email=mary@imagey.cloud");
 
     // Then
-    await expect(page.getByText(/Private key loaded/)).toBeVisible();
+    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });
 
@@ -315,7 +315,7 @@ test("existing user clicks login link on existing device", async ({ page }) => {
     await page.goto("/?email=mary@imagey.cloud");
 
     // Then
-    await expect(page.getByText(/Private key loaded/)).toBeVisible();
+    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });
 
@@ -360,7 +360,7 @@ test("visit page on existing device", async ({ page }) => {
     await page.goto("/");
 
     // Then
-    await expect(page.getByText(/Private key loaded/)).toBeVisible();
+    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });
 
@@ -407,7 +407,7 @@ test("login with missing email", async ({ page }) => {
     page.getByText("OK").click();
 
     // Then
-    await expect(page.getByText(/Private key loaded/)).toBeVisible();
+    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });
 
@@ -473,6 +473,6 @@ test("login with lost private key", async ({ page }) => {
     await page.goto("/");
 
     // Then
-    await expect(page.getByText(/Private key loaded/)).toBeVisible();
+    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });

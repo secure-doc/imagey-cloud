@@ -1,0 +1,67 @@
+nav.rail {
+  margin: 0;
+  padding: 0;
+  padding-top: 12px;
+  width: 80px;
+  height: 100vh;
+  background-color: #006bd6;
+}
+
+nav.rail svg {
+  margin-top: 12px;
+  margin-left: 16px;
+  margin-right: 16px;
+  width: 24px;
+  height: 24px;
+  fill: white;
+}
+
+nav.rail ul {
+  margin: 0;
+  padding: 0;
+  list-style-type: none;
+}
+
+nav.rail a {
+  margin-left: 12px;
+  margin-right: 12px;
+  margin-bottom: 12px;
+  display: block;
+  width: 56px;
+  height: 56px;
+  color: white;
+  font-size: 12px;
+  text-align: center;
+  text-decoration: none;
+}
+
+nav.rail a:hover {
+  background-color: white;
+  color: #006bd6;
+  fill: #006bd6;
+}
+
+nav.rail a:hover svg {
+  fill: #006bd6;
+}
+
+nav.rail a.active {
+  background-color: white;
+  color: #006bd6;
+  fill: #006bd6;
+}
+
+nav.rail a.active svg {
+  fill: #006bd6;
+}
+
+nav.sub-nav {
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
+nav.sub-nav a {
+  height: 56px;
+  display: block;
+}

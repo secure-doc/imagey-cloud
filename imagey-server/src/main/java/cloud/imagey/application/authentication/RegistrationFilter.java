@@ -54,9 +54,11 @@ public class RegistrationFilter extends HttpFilter {
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException, ServletException {
+        LOG.info("Registration started");
         Token registrationToken = extractToken(request.getRequestURI());
         Optional<DecodedToken> decoded = tokenService.decode(registrationToken);
         if (decoded.isEmpty()) {
+            LOG.warn("Invalid registration token");
             response.sendError(SC_FORBIDDEN);
             return;
         }
@@ -66,6 +68,7 @@ public class RegistrationFilter extends HttpFilter {
         Token authenticationToken = tokenService.generateToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
         response.sendRedirect("/?email=" + email.address());
+        LOG.info("User registered");
     }
 
     private Token extractToken(String requestUri) {

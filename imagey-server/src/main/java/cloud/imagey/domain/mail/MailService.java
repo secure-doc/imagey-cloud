@@ -22,6 +22,8 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.inject.Provider;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import jakarta.mail.Authenticator;
@@ -39,6 +41,8 @@ import jakarta.mail.internet.MimeMultipart;
 
 @ApplicationScoped
 public class MailService {
+
+    private static final Logger LOG = LogManager.getLogger(MailService.class);
 
     @Inject
     @ConfigProperty(name = "smtp.host")
@@ -75,6 +79,7 @@ public class MailService {
 
     private Session createMailSession() {
         Properties prop = new Properties();
+        LOG.info(host.get() + " " + user.get() + " " + password.get());
         prop.put("mail.smtp.auth", true);
         prop.put("mail.smtp.starttls.enable", true);
         prop.put("mail.smtp.host", host.get());
