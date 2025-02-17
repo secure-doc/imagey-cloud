@@ -1,0 +1,42 @@
+{
+  "id": "imagey",
+  "name": "Imagey - Your image vault",
+  "short_name": "Imagey",
+  "description": "Store and share your images and documents safely.",
+  "start_url": "https://imagey.cloud",
+  "display": "fullscreen",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "imagey512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Images",
+      "url": "/images",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "type": "image/png",
+          "sizes": "192x192"
+        },
+        {
+          "src": "icon-512.png",
+          "type": "image/png",
+          "sizes": "512x512"
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "url": "/chats"
+    }
+  ]
+}
