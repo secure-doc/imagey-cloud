@@ -25,10 +25,13 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Optional;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.token.Kid;
@@ -37,18 +40,25 @@ import cloud.imagey.infrastructure.ResourceConflictException;
 @ApplicationScoped
 public class UserRepository {
 
+    private static final Logger LOG = LogManager.getLogger(UserRepository.class);
     private static final Charset UTF_8 = Charset.forName("UTF-8");
+
     @Inject
     @ConfigProperty(name = "root.path")
     private String rootPath;
 
+    @PostConstruct
+    public void logRootPath() {
+        LOG.info("root.path = {}", rootPath);
+    }
+
     public void persist(User user) {
         File userHome = getUserHome(user);
         if (userHome.exists()) {
-            throw new ResourceConflictException(userHome + " already exists.");
+            throw new ResourceConflictException(userHome + " already exists");
         }
         if (!userHome.mkdir()) {
-            throw new ResourceConflictException(userHome + " could not be created.");
+            throw new ResourceConflictException(userHome + " could not be created");
         }
     }
 
@@ -57,14 +67,19 @@ public class UserRepository {
     }
 
     public Optional<String> loadSymmetricKey(User user, Kid kid) {
+        LOG.info("Loading symmetric key.");
         File symmetricKeysFolder = new File(getUserHome(user), "symmetric-keys");
         File keyFile = new File(symmetricKeysFolder, kid.id() + ".json");
         if (!keyFile.exists()) {
+            LOG.info("Symmetric key does not exist.");
             return empty();
         } else {
             try {
-                return of(readFileToString(keyFile, UTF_8));
+                Optional<String> symmetricKey = of(readFileToString(keyFile, UTF_8));
+                LOG.info("Symmetric key loaded");
+                return symmetricKey;
             } catch (IOException e) {
+                LOG.error("Symmetric key could not be loaded", e);
                 throw new IllegalStateException(e);
             }
         }

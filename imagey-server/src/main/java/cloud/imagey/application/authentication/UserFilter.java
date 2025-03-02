@@ -32,6 +32,9 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.Provider;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -40,6 +43,8 @@ import cloud.imagey.domain.user.User;
 @Provider
 @ApplicationScoped
 public class UserFilter implements ContainerRequestFilter {
+
+    private static final Logger LOG = LogManager.getLogger(UserFilter.class);
 
     @Inject
     private TokenService tokenService;
@@ -52,6 +57,7 @@ public class UserFilter implements ContainerRequestFilter {
         }
         Cookie cookie = requestContext.getCookies().get("token");
         if (cookie == null) {
+            LOG.info("No authentication cookie found");
             requestContext.abortWith(Response.status(UNAUTHORIZED).build());
             return;
         }
@@ -59,6 +65,7 @@ public class UserFilter implements ContainerRequestFilter {
 
         User user = extractUser(requestContext.getUriInfo());
         if (!tokenService.verify(token, user)) {
+            LOG.info("Token not verified");
             requestContext.abortWith(Response.status(FORBIDDEN).build());
             return;
         }

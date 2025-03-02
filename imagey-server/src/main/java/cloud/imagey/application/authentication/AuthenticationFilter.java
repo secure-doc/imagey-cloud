@@ -46,7 +46,7 @@ import cloud.imagey.domain.user.UserRepository;
 @WebFilter(urlPatterns = "/authentications/*")
 public class AuthenticationFilter extends HttpFilter {
 
-    private static final Logger LOG = LogManager.getLogger(RegistrationFilter.class);
+    private static final Logger LOG = LogManager.getLogger(AuthenticationFilter.class);
     @Inject
     private TokenService tokenService;
     @Inject
@@ -55,15 +55,18 @@ public class AuthenticationFilter extends HttpFilter {
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        Token registrationToken = extractToken(request.getRequestURI());
-        Optional<DecodedToken> decoded = tokenService.decode(registrationToken);
+        LOG.info("Authentication started");
+        Token authenticationToken = extractToken(request.getRequestURI());
+        Optional<DecodedToken> decoded = tokenService.decode(authenticationToken);
         if (decoded.isEmpty()) {
+            LOG.info("Decoding not successful");
             response.sendError(SC_FORBIDDEN);
             return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
         User user = new User(email);
         if (!userRepository.exists(user)) {
+            LOG.info("User not found");
             response.sendError(SC_NOT_FOUND);
             return;
         }
@@ -73,7 +76,7 @@ public class AuthenticationFilter extends HttpFilter {
     }
 
     private Token extractToken(String requestUri) {
-        String registrationPart = "/authentications/";
-        return new Token(requestUri.substring(requestUri.indexOf(registrationPart) + registrationPart.length()));
+        String authenticationPart = "/authentications/";
+        return new Token(requestUri.substring(requestUri.indexOf(authenticationPart) + authenticationPart.length()));
     }
 }

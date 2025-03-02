@@ -18,6 +18,7 @@ package cloud.imagey;
 
 import static javax.ws.rs.client.ClientBuilder.newClient;
 import static javax.ws.rs.client.Entity.json;
+import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import static javax.ws.rs.core.Response.Status.FOUND;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +35,7 @@ import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.icegreen.greenmail.base.GreenMailOperations;
@@ -92,6 +94,22 @@ public class RegistrationTest {
         String tokenValue = token.substring(tokenKey.length() + 1);
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         assertThat(tokenService.verify(new Token(tokenValue), new User(new Email("joe@imagey.cloud")))).isTrue();
+    }
+
+    @Test
+    @DisplayName("Registration with invalid token fails")
+    public void loginInvalid() throws IOException, MessagingException {
+        // Given
+        String invalidToken = "invalid.token.value";
+
+        // When
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/registrations/" + invalidToken)
+            .request()
+            .get();
+
+        // Then
+        assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
     }
 
     @BeforeEach

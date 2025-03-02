@@ -65,6 +65,7 @@ public class MailService {
         } catch (MessagingException e) {
             throw new EmailException(e);
         }
+        LOG.info("Mail sent successfully");
     }
 
     private Message createMailMessage(Email recipient, EmailTemplate email) throws MessagingException, AddressException {
@@ -79,7 +80,6 @@ public class MailService {
 
     private Session createMailSession() {
         Properties prop = new Properties();
-        LOG.info(host.get() + " " + user.get() + " " + password.get());
         prop.put("mail.smtp.auth", true);
         prop.put("mail.smtp.starttls.enable", true);
         prop.put("mail.smtp.host", host.get());

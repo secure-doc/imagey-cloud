@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.token;
 
+import static java.lang.System.currentTimeMillis;
 import static java.util.Optional.empty;
 
 import java.text.ParseException;
@@ -26,6 +27,8 @@ import java.util.Optional;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import com.nimbusds.jose.JOSEException;
@@ -45,6 +48,7 @@ public class TokenService {
 
     public static final long ONE_HOUR = 24 * 60 * 60 * 1000;
     public static final long ONE_DAY = 24 * 60 * 60 * 1000;
+    private static final Logger LOG = LogManager.getLogger(TokenService.class);
     private static final String ISSUER = "https://imagey.cloud";
 
     @Inject
@@ -52,14 +56,17 @@ public class TokenService {
     private String sharedSecret;
 
     public Token generateToken(User user, long validityInMilliseconds) {
+        LOG.info("Generate token with validity {}", validityInMilliseconds);
         try {
             JWSSigner signer = new MACSigner(Base64.getDecoder().decode(sharedSecret));
             JWTClaimsSet claimsSet = new JWTClaimsSet.Builder().subject(user.email().address()).issuer(ISSUER)
                 .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds)).build();
             SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
             signedJWT.sign(signer);
+            LOG.info("Token generated.");
             return new Token(signedJWT.serialize());
         } catch (JOSEException e) {
+            LOG.error("Token could not be generated", e);
             throw new IllegalStateException(e);
         }
     }
@@ -70,6 +77,7 @@ public class TokenService {
             return false;
         }
         if (!user.email().address().equals(decoded.get().jwt().getSubject())) {
+            LOG.info("Wrong user");
             return false;
         }
         return true;
@@ -80,16 +88,21 @@ public class TokenService {
             SignedJWT signedJWT = SignedJWT.parse(token.token());
             JWSVerifier verifier = new MACVerifier(Base64.getDecoder().decode(sharedSecret));
             if (!signedJWT.verify(verifier)) {
+                LOG.info("Signature invalid");
                 return empty();
             }
             if (!ISSUER.equals(signedJWT.getJWTClaimsSet().getIssuer())) {
+                LOG.info("Wrong issuer");
                 return empty();
             }
-            if (!new Date().before(signedJWT.getJWTClaimsSet().getExpirationTime())) {
+            Date expirationTime = signedJWT.getJWTClaimsSet().getExpirationTime();
+            if (!new Date().before(expirationTime)) {
+                LOG.info("Token expired, current time: {}, expiration time: {}", currentTimeMillis(), expirationTime.getTime());
                 return empty();
             }
             return Optional.of(new DecodedToken(signedJWT.getJWTClaimsSet()));
         } catch (JOSEException | ParseException e) {
+            LOG.warn("Token not valid", e);
             return empty();
         }
     }

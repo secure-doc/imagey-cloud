@@ -153,6 +153,12 @@
         <groupId>org.apache.meecrowave</groupId>
         <artifactId>meecrowave-maven-plugin</artifactId>
         <version>1.2.15</version>
+        <configuration>
+          <watcherBouncing>1</watcherBouncing>
+          <properties>
+            <root.path>src/main/resources/data</root.path>
+          </properties>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.jacoco</groupId>
@@ -190,32 +196,32 @@
                     <limit>
                       <counter>INSTRUCTION</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.92</minimum>
+                      <minimum>0.93</minimum>
                     </limit>
                     <limit>
                       <counter>LINE</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.86</minimum>
+                      <minimum>0.91</minimum>
                     </limit>
                     <limit>
                       <counter>BRANCH</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.68</minimum>
+                      <minimum>0.74</minimum>
                     </limit>
                     <limit>
                       <counter>COMPLEXITY</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.77</minimum>
+                      <minimum>0.84</minimum>
                     </limit>
                     <limit>
                       <counter>METHOD</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.98</minimum>
+                      <minimum>1.00</minimum>
                     </limit>
                     <limit>
                       <counter>CLASS</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.95</minimum>
+                      <minimum>1.00</minimum>
                     </limit>
                   </limits>
                 </rule>
