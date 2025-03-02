@@ -1,13 +1,20 @@
-nav.rail {
+nav {
   margin: 0;
   padding: 0;
-  padding-top: 12px;
   width: 80px;
-  height: 100vh;
   background-color: #006bd6;
 }
 
-nav.rail svg {
+nav.rail {
+  padding-top: 12px;
+  height: 100vh;
+}
+
+nav.drawer {
+  margin-top: 64px;
+}
+
+nav svg {
   margin-top: 12px;
   margin-left: 16px;
   margin-right: 16px;
@@ -16,13 +23,13 @@ nav.rail svg {
   fill: white;
 }
 
-nav.rail ul {
+nav ul {
   margin: 0;
   padding: 0;
   list-style-type: none;
 }
 
-nav.rail a {
+nav a {
   margin-left: 12px;
   margin-right: 12px;
   margin-bottom: 12px;
@@ -35,7 +42,7 @@ nav.rail a {
   text-decoration: none;
 }
 
-nav.rail a:hover {
+nav a:hover {
   background-color: white;
   color: #006bd6;
   fill: #006bd6;
@@ -53,6 +60,25 @@ nav.rail a.active {
 
 nav.rail a.active svg {
   fill: #006bd6;
+}
+
+button.menu {
+  margin-left: 0px;
+  margin-top: 0px;
+  padding-left: 0px;
+  padding-top: 0px;
+}
+
+button.menu svg {
+  width: 24px;
+  height: 24px;
+  fill: white;
+}
+
+nav.drawer {
+  background-color: #006bd6;
+  color: white;
+  z-index: 2;
 }
 
 nav.sub-nav {

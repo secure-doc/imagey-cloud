@@ -2,9 +2,9 @@ import { NavLink } from "react-router";
 import ChatIcon from "../icons/ChatIcon";
 import ImageIcon from "../icons/ImageIcon";
 
-export default function Navigation() {
+export default function Navigation({ style }: { style: "rail" | "drawer" }) {
   return (
-    <nav className="rail">
+    <nav className={style}>
       <ul>
         <li>
           <NavLink

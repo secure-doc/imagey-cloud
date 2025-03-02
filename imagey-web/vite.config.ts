@@ -3,9 +3,14 @@ import react from "@vitejs/plugin-react";
 import istanbul from "vite-plugin-istanbul";
 
 export default defineConfig({
+  build: {
+    sourcemap: process.ENV === 'production' ? 'hidden' : true
+  },
   server: {
     proxy: {
       "/users": "http://localhost:8080",
+      "/authentications": "http://localhost:8080",
+      "/registrations": "http://localhost:8080",
     },
   },
   plugins: [
