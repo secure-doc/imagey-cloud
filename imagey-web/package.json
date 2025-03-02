@@ -39,6 +39,7 @@
     "eslint-plugin-react-refresh": "^0.4.12",
     "globals": "^15.9.0",
     "nyc": "^17.1.0",
+    "nyc-config-tsx": "^0.1.0",
     "playwright-test-coverage": "^1.2.12",
     "prettier": "^3.3.3",
     "typescript": "^5.5.3",

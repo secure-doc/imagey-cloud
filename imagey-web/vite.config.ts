@@ -4,7 +4,7 @@ import istanbul from "vite-plugin-istanbul";
 
 export default defineConfig({
   build: {
-    sourcemap: process.ENV === 'production' ? 'hidden' : true
+    sourcemap: process.env.stage === "production" ? "hidden" : true,
   },
   server: {
     proxy: {
@@ -18,7 +18,9 @@ export default defineConfig({
     istanbul({
       include: ["src/**/*"], // files to track coverage on
       exclude: ["node_modules", "src/authentication/ConversionService.ts"], // files to NOT track coverage on
+      extension: [".js", ".ts", ".tsx"],
       requireEnv: false,
+      forceBuildInstrument: true,
     }),
   ],
 });
