@@ -8,6 +8,7 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
+import MenuButton from "./components/MenuButton";
 
 function App() {
   /*
@@ -52,10 +53,12 @@ function App() {
   return (
     <BrowserRouter>
       <header>
+        <MenuButton />
         <h1>Imagey</h1>
+        <div className="action-bar" />
       </header>
       <div id="page">
-        <Navigation />
+        <Navigation style="rail" />
         <Routes>
           <Route path="/" element={<Images privateKey={privateKey} />} />
           <Route path="images">
