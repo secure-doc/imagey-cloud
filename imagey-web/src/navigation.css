@@ -14,7 +14,7 @@ nav.drawer {
   margin-top: 64px;
 }
 
-nav svg {
+svg {
   margin-top: 12px;
   margin-left: 16px;
   margin-right: 16px;
@@ -48,7 +48,7 @@ nav a:hover {
   fill: #006bd6;
 }
 
-nav.rail a:hover svg {
+nav a:hover svg {
   fill: #006bd6;
 }
 

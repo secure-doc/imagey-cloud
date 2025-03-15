@@ -8,7 +8,8 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
-import MenuButton from "./components/MenuButton";
+import { ActionBarContextProvider } from "./contexts/ActionBarContext";
+import AppBar from "./components/AppBar";
 
 function App() {
   /*
@@ -51,25 +52,23 @@ function App() {
     return <EmailDialog onEmailSelected={(email) => setUser(email)} />;
   }
   return (
-    <BrowserRouter>
-      <header>
-        <MenuButton />
-        <h1>Imagey</h1>
-        <div className="action-bar" />
-      </header>
-      <div id="page">
-        <Navigation style="rail" />
-        <Routes>
-          <Route path="/" element={<Images privateKey={privateKey} />} />
-          <Route path="images">
-            <Route index element={<Images privateKey={privateKey} />} />
-            <Route path=":id" element={<Image />} />
-          </Route>
-          <Route path="chats" element={<Chats />} />
-        </Routes>
-        <aside></aside>
-      </div>
-    </BrowserRouter>
+    <ActionBarContextProvider>
+      <BrowserRouter>
+        <AppBar />
+        <div id="page">
+          <Navigation style="rail" />
+          <Routes>
+            <Route path="/" element={<Images privateKey={privateKey} />} />
+            <Route path="images">
+              <Route index element={<Images privateKey={privateKey} />} />
+              <Route path=":id" element={<Image />} />
+            </Route>
+            <Route path="chats" element={<Chats />} />
+          </Routes>
+          <aside></aside>
+        </div>
+      </BrowserRouter>
+    </ActionBarContextProvider>
   );
 }
 

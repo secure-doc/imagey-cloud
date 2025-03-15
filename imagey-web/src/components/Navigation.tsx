@@ -9,7 +9,7 @@ export default function Navigation({ style }: { style: "rail" | "drawer" }) {
         <li>
           <NavLink
             to="/"
-            className={({ isActive }) => (isActive ? "active" : "")}
+            className={({ isActive }) => (isActive ? "active" : "icon")}
           >
             <ImageIcon />
             Bilder
@@ -18,7 +18,7 @@ export default function Navigation({ style }: { style: "rail" | "drawer" }) {
         <li>
           <NavLink
             to="/chats"
-            className={({ isActive }) => (isActive ? "active" : "")}
+            className={({ isActive }) => (isActive ? "active" : "icon")}
           >
             <ChatIcon />
             Chats

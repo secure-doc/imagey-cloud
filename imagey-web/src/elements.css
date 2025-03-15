@@ -92,7 +92,17 @@ img.avatar-large {
   font-weight: bold;
 }
 
-button.top-bar {
-  width: 48px;
-  height: 48px;
+a.icon {
+  color: #006bd6;
+  background-color: #006bd6;
+}
+
+div.action-bar svg {
+  margin-top: 18px;
+}
+
+input[type="file"] {
+  width: 0px;
+  height: 0px;
+  overflow: hidden;
 }
