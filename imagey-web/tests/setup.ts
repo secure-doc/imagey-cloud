@@ -1,5 +1,5 @@
 import { PactV3, V3MockServer } from "@pact-foundation/pact";
-import { Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
 
 export const provider = new PactV3({
   dir: process.env.PWD + "/target/test-classes", // prepare for maven packaging
@@ -29,26 +29,9 @@ export async function clearLocalStorage(page: Page) {
 
 export async function loginAsMary(page: Page) {
   await page.goto("/");
-  await page.evaluate(
-    ({ marysEmail }) => localStorage.setItem("imagey.user", marysEmail),
-    { marysEmail },
-  );
-  await page.evaluate(
-    ({ marysDeviceId }) =>
-      localStorage.setItem(
-        "imagey.deviceIds[mary@imagey.cloud]",
-        marysDeviceId,
-      ),
-    { marysDeviceId },
-  );
-  await page.evaluate(
-    ({ marysDeviceId, marysPrivateKey }) =>
-      localStorage.setItem(
-        "imagey.devices[" + marysDeviceId + "].key",
-        JSON.stringify(marysPrivateKey),
-      ),
-    { marysDeviceId, marysPrivateKey },
-  );
+  await setupMarysDevice(page);
+  await page.goto("/");
+  await inputMarysPassword(page);
 }
 
 export async function setupMockServer(page: Page, mockServer: V3MockServer) {
@@ -67,6 +50,29 @@ export async function setupMockServer(page: Page, mockServer: V3MockServer) {
   });
 }
 
+export async function setupMarysDevice(page: Page) {
+  await page.evaluate(() =>
+    localStorage.setItem("imagey.user", "mary@imagey.cloud"),
+  );
+  await page.evaluate(
+    (deviceId) =>
+      localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+    marysDeviceId,
+  );
+  await page.evaluate(
+    ({ deviceId, key }) =>
+      localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
+    { deviceId: marysDeviceId, key: marysEncryptedDeviceKey },
+  );
+}
+
+export async function inputMarysPassword(page: Page) {
+  const passwordInput = page.getByLabel("password");
+  await expect(passwordInput).toBeVisible();
+  passwordInput.fill("MarysPassword123");
+  page.getByText("OK").click();
+}
+
 export const marysEmail = "mary@imagey.cloud";
 export const joesToken =
   "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2ltYWdleS5jbG91ZCIsInN1YiI6ImpvZUBpbWFnZXkuY2xvdWQiLCJleHAiOi05MjIzMzcwMzA1NjkxNjk4fQ._O3_-Z5ivyd-gr7FOG459m2OGpooHTVFOv0Q0jWEDoc";
@@ -80,6 +86,8 @@ export const marysSymmetricKey = `{
     kty: "oct",
 }`;
 export const marysDeviceId = "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c";
+export const marysEncryptedDeviceKey =
+  "313a26339214d0c7eb0b2bd476bfaece04e2c1434d1f3db3d707f1eb1912e9b4cd83dad11a1211deb5e84deb4fa3a0b3145d6018a5a5583f71758c4980d71fb290d5346f16ad1237fe65a976a3d8713e16a52e1dd6c3ed5c7bde67bacc172597321bf9a8c2e3ee9764f73b2aba11fbc0ce5af428bd920281934695b8adeb8799f7cc44504cd54209931a74790071f2fd30aab0a62b5a3aa6103746e6f2e569d3ae287c048a9190b9f75dcb3cc58a31b2bcc6cfe5b728ec9ee0c493b7aabda93008b46d479bb3a7c016a41f9f00ac33f497f36803e7608838eb023726bd10929f8b630c92d7dacd6a295b50a753af4885d2748b39164bd06feea6a75b9eaf10";
 export const marysEncryptedPrivateKey =
   "96c89d696e663c0b187a4376a483bc60ec042fb45b0300b8ea149240202d09a1dc5073954c47df83954eaa56d6485fe64720875fda3108d8f768c520ca81a2bf906159761563ad18e6f440089744cb79b2fdf7bf1f1cfa08348bbade72362f97f08d3a40d4fd72b4319b75a07f309b0bb1b233e0a57a176f63b4e4b420b1a94c8ae579ac4ccabfb4b8cb51ed4da6a95d2f43d2d66cee568c477efee51e751cbd188c3de2f6f0adee04c14d812ecd0a6c7ddf180e181c31b1ea46f81a0b6ac72b390c086a544667a09dc1391bab09db003c0a05";
 export const marysPrivateKey = {
