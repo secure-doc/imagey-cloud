@@ -1,6 +1,7 @@
 import test, { expect } from "@playwright/test";
 import {
   clearLocalStorage,
+  inputMarysPassword,
   loginAsMary,
   provider,
   setupMockServer,
@@ -17,7 +18,6 @@ test("navigate to chats", async ({ page }) => {
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
-    await page.goto("/");
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     const chatsLink = page.getByText("Chats");
     await expect(chatsLink).toBeVisible();
@@ -39,7 +39,7 @@ test("open and close navigation drawer on mobile resolution", async ({
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
-    await page.goto("/");
+
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
@@ -66,7 +66,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
-    await page.goto("/");
+
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
@@ -91,9 +91,10 @@ test("navigate to image details", async ({ page }) => {
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
-    await page.goto("/");
+
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     await page.goto("/images/5");
+    await inputMarysPassword(page);
 
     // Then
     await expect(page.getByText(/Bild nicht gefunden/)).toBeVisible();

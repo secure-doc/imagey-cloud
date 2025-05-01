@@ -1,0 +1,7 @@
+export enum AuthenticationError {
+  UNKNOWN,
+  PRIVATE_KEY_MISSING,
+  WRONG_PASSWORD,
+  UNAUTHORIZED,
+  FORBIDDEN,
+}

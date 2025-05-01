@@ -1,9 +1,11 @@
 import test, { expect } from "@playwright/test";
 import {
   clearLocalStorage,
+  inputMarysPassword,
   marysDeviceId,
-  marysPrivateKey,
+  marysEncryptedDeviceKey,
   provider,
+  setupMarysDevice,
   setupMockServer,
 } from "./setup";
 import { MatchersV3 } from "@pact-foundation/pact";
@@ -176,6 +178,11 @@ test("new user clicks registration link", async ({ page }) => {
     await setupMockServer(page, mockServer);
     await page.goto("/?email=joe@imagey.cloud");
 
+    const passwordInput = page.getByLabel("password");
+    await expect(passwordInput).toBeVisible();
+    passwordInput.fill("marysPassword123");
+    page.getByText("OK").click();
+
     // Then
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
@@ -212,6 +219,11 @@ test("existing user clicks login link for new device", async ({ page }) => {
     await setupMockServer(page, mockServer);
     await page.goto("/?email=mary@imagey.cloud");
 
+    const passwordInput = page.getByLabel("password");
+    await expect(passwordInput).toBeVisible();
+    passwordInput.fill("marysPassword123");
+    page.getByText("OK").click();
+
     // Then
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
@@ -232,14 +244,16 @@ test("existing user clicks login link on existing device", async ({ page }) => {
     );
     await page.evaluate(
       ({ deviceId, key }) => {
-        localStorage.setItem(
-          "imagey.devices[" + deviceId + "].key",
-          JSON.stringify(key),
-        );
+        localStorage.setItem("imagey.devices[" + deviceId + "].key", key);
       },
-      { deviceId: marysDeviceId, key: marysPrivateKey },
+      { deviceId: marysDeviceId, key: marysEncryptedDeviceKey },
     );
     await page.goto("/?email=mary@imagey.cloud");
+
+    const passwordInput = page.getByLabel("password");
+    await expect(passwordInput).toBeVisible();
+    passwordInput.fill("MarysPassword123");
+    page.getByText("OK").click();
 
     // Then
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
@@ -251,26 +265,34 @@ test("visit page on existing device", async ({ page }) => {
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
-    await page.evaluate(() =>
-      localStorage.setItem("imagey.user", "mary@imagey.cloud"),
-    );
-    await page.evaluate(
-      (deviceId) =>
-        localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-      marysDeviceId,
-    );
-    await page.evaluate(
-      ({ deviceId, key }) =>
-        localStorage.setItem(
-          "imagey.devices[" + deviceId + "].key",
-          JSON.stringify(key),
-        ),
-      { deviceId: marysDeviceId, key: marysPrivateKey },
-    );
+    await setupMarysDevice(page);
     await page.goto("/");
+
+    const passwordInput = page.getByLabel("password");
+    await expect(passwordInput).toBeVisible();
+    passwordInput.fill("MarysPassword123");
+    page.getByText("OK").click();
 
     // Then
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+  });
+});
+
+test("visit page on existing device with wrong password", async ({ page }) => {
+  // Given
+  await provider.executeTest(async (mockServer) => {
+    // When
+    await setupMockServer(page, mockServer);
+    await setupMarysDevice(page);
+    await page.goto("/");
+
+    const passwordInput = page.getByLabel("password");
+    await expect(passwordInput).toBeVisible();
+    passwordInput.fill("wrongPassword");
+    page.getByText("OK").click();
+
+    // Then
+    await expect(page.getByText(/Wrong password/)).toBeVisible();
   });
 });
 
@@ -286,11 +308,8 @@ test("login with missing email", async ({ page }) => {
     );
     await page.evaluate(
       ({ deviceId, key }) =>
-        localStorage.setItem(
-          "imagey.devices[" + deviceId + "].key",
-          JSON.stringify(key),
-        ),
-      { deviceId: marysDeviceId, key: marysPrivateKey },
+        localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
+      { deviceId: marysDeviceId, key: marysEncryptedDeviceKey },
     );
     await page.goto("/");
     const emailInput = page.getByPlaceholder("email@imagey.cloud");
@@ -298,6 +317,8 @@ test("login with missing email", async ({ page }) => {
 
     emailInput.fill("mary@imagey.cloud");
     page.getByText("OK").click();
+
+    await inputMarysPassword(page);
 
     // Then
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
@@ -344,6 +365,15 @@ test("login with lost private key", async ({ page }) => {
     await page.goto("/");
 
     // Then
+    const passwordInput = page.getByLabel("password");
+    await expect(passwordInput).toBeVisible();
+    passwordInput.fill("MarysPassword123");
+    page.getByText("OK").click();
+
+    const newPasswordInput = page.getByLabel(/Private key missing/);
+    await expect(newPasswordInput).toBeVisible();
+    newPasswordInput.fill("MarysPassword123");
+    page.getByText("OK").click();
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
   });
 });

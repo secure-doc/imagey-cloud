@@ -66,6 +66,14 @@ public class UserRepository {
         return getUserHome(user).exists();
     }
 
+    public String getUser(User user) {
+        return String.format("""
+                {
+                    "email": "%s"
+                }
+                """, user.email());
+    }
+
     public Optional<String> loadPublicKey(User user, Kid kid) {
         LOG.info("Loading public key with kid {}", kid);
         File publicKeysFolder = new File(getUserHome(user), "public-keys");

@@ -1,37 +1,47 @@
+import { AuthenticationError } from "../authentication/AuthenticationError";
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
 import { cryptoService } from "../authentication/CryptoService";
 import { deviceRepository } from "./DeviceRepository";
 
 export const deviceService = {
-  setupDevice: async (email: string) => {
-    deviceRepository.storeUser(email);
-    let deviceId = deviceRepository.loadDeviceId(email);
-    let privateKey = undefined;
+  registerDevice: async (
+    email: string,
+    password: string,
+    deviceId?: string,
+  ) => {
     if (!deviceId) {
-      deviceId = generateDeviceId();
-      privateKey = await initializePrivateKey(email, deviceId);
-    } else {
-      const encodedPrivateKey = deviceRepository.loadKey(deviceId);
-      if (encodedPrivateKey) {
-        privateKey = JSON.parse(encodedPrivateKey);
-      } else {
-        privateKey = await initializePrivateKey(email, deviceId);
-      }
+      deviceId = generateDeviceId(email);
     }
-    return privateKey;
+    const keyPair = await cryptoService.initializeKeyPair();
+    const encryptedPrivateKey = await cryptoService.encryptPrivateKey(
+      keyPair.privateKey,
+      password,
+    );
+    deviceRepository.storeKey(deviceId, encryptedPrivateKey);
+    await authenticationRepository.storePublicKey(
+      email,
+      deviceId,
+      keyPair.publicKey,
+    );
+    return keyPair.privateKey;
+  },
+  setupDevice: async (email: string, password: string) => {
+    const deviceId = deviceRepository.loadDeviceId(email);
+    if (deviceId) {
+      const encryptedKey = deviceRepository.loadKey(deviceId);
+      if (encryptedKey) {
+        return cryptoService.decryptPrivateKey(encryptedKey, password);
+      } else {
+        return Promise.reject(AuthenticationError.PRIVATE_KEY_MISSING);
+      }
+    } else {
+      return deviceService.registerDevice(email, password);
+    }
   },
 };
 
-function generateDeviceId(): string {
-  return crypto.randomUUID();
-}
-
-async function initializePrivateKey(
-  email: string,
-  deviceId: string,
-): Promise<JsonWebKey> {
-  const keyPair = await cryptoService.initializeKeyPair();
-  authenticationRepository.storeKey(email, deviceId, keyPair.publicKey);
-  deviceRepository.storeKey(deviceId, JSON.stringify(keyPair.privateKey));
-  return keyPair.privateKey;
+function generateDeviceId(email: string): string {
+  const deviceId = crypto.randomUUID();
+  deviceRepository.storeDeviceId(email, deviceId);
+  return deviceId;
 }

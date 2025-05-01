@@ -18,7 +18,7 @@ test("upload image", async ({ page }) => {
   // When
   await provider.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
-    await page.goto("/");
+
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
 
     const fileChooserPromise = page.waitForEvent("filechooser");

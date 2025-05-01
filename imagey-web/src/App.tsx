@@ -1,8 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import "./imagey.css";
-import { deviceRepository } from "./device/DeviceRepository";
-import { deviceService } from "./device/DeviceService";
-import EmailDialog from "./authentication/EmailDialog";
 import Navigation from "./components/Navigation";
 import { BrowserRouter, Route, Routes } from "react-router";
 import Images from "./pages/Images";
@@ -10,6 +7,7 @@ import Image from "./pages/Image";
 import Chats from "./pages/Chats";
 import { ActionBarContextProvider } from "./contexts/ActionBarContext";
 import AppBar from "./components/AppBar";
+import AuthenticationDialog from "./authentication/AuthenticationDialog";
 
 function App() {
   /*
@@ -35,21 +33,11 @@ function App() {
   4. User comes with registration token.
      Create symmetric key, register device. User is logged in.
   */
-  const params = new URLSearchParams(window.location.search);
-  const [user, setUser] = useState(
-    params.get("email") ?? deviceRepository.loadUser(),
-  );
   const [privateKey, setPrivateKey] = useState<JsonWebKey>();
-  useEffect(() => {
-    if (user) {
-      deviceService
-        .setupDevice(user)
-        .then((privateKey) => setPrivateKey(privateKey))
-        .catch(() => setUser(undefined));
-    }
-  }, [user]);
-  if (!user) {
-    return <EmailDialog onEmailSelected={(email) => setUser(email)} />;
+  if (!privateKey) {
+    return (
+      <AuthenticationDialog onKeyDecrypted={(key) => setPrivateKey(key)} />
+    );
   }
   return (
     <ActionBarContextProvider>
