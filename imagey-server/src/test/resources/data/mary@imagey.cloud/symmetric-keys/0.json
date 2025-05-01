@@ -1,7 +1,0 @@
-{
-    "alg": "A256CTR",
-    "ext": true,
-    "k": "3--L_Xfr9Tmh5l6vI9KEp6qbdrEdq2FhPBVMi9Tkq2c",
-    "key_ops": ["encrypt", "decrypt"],
-    "kty": "oct"
-}

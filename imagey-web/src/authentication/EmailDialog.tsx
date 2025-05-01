@@ -164,13 +164,8 @@ async function selectEmail(
   setResultMessage: (message: string) => void,
 ) {
   if (deviceRepository.loadDeviceId(email)) {
-    try {
-      await authenticationService.loadSymmetricKey(email);
-      onEmailSelected(email);
-      return;
-    } catch {
-      // ignore and go on
-    }
+    onEmailSelected(email);
+    return;
   }
   setResultMessage("Registering...");
   try {

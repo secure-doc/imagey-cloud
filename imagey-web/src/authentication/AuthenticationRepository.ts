@@ -3,15 +3,13 @@ export const authenticationRepository = {
     email: string,
     deviceId: string,
     key: JsonWebKey,
-    token?: string,
   ): Promise<void> => {
     const response = await fetch(
-      "/users/" + email + "/devices/" + deviceId + "/keys/0",
+      "/users/" + email + "/public-keys/" + deviceId,
       {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
         },
         credentials: "same-origin",
         body: JSON.stringify(key),

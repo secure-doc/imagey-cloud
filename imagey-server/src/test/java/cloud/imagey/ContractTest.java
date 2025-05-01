@@ -88,6 +88,10 @@ public class ContractTest {
         }
 
         File marysData = new File(rootPath, "mary@imagey.cloud");
+        File marysPublicKeys = new File(marysData, "public-keys");
+        if (marysPublicKeys.exists()) {
+            forceDelete(marysPublicKeys);
+        }
         File marysDevices = new File(marysData, "devices");
         File marysCreatedDevice = new File(marysDevices, "123e4567-e89b-12d3-a456-426655440000");
         if (marysCreatedDevice.exists()) {

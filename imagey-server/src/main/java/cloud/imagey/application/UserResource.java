@@ -62,17 +62,17 @@ public class UserResource {
     }
 
     @GET
-    @Path("{email}/symmetric-keys/{kid}")
+    @Path("{email}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {
-        return userRepository.loadSymmetricKey(user, kid).orElseThrow(() -> new NotFoundException());
+        return userRepository.loadPublicKey(user, kid).orElseThrow(() -> new NotFoundException());
     }
 
     @PUT
-    @Path("{email}/symmetric-keys/{kid}")
+    @Path("{email}/public-keys/{kid}")
     @Consumes(APPLICATION_JSON)
-    public Response storeSymmetricKey(@PathParam("email") User user, @PathParam("kid") Kid kid, String key) throws IOException {
-        userRepository.storeSymmetricKey(user, kid, key);
+    public Response storePublicKey(@PathParam("email") User user, @PathParam("kid") Kid kid, String key) throws IOException {
+        userRepository.storePublicKey(user, kid, key);
         return Response.ok().build();
     }
 
