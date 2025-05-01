@@ -13,7 +13,8 @@
     "test:coverage": "nyc --reporter=lcov playwright test",
     "test:coverage:report": "nyc --reporter=html report",
     "test:coverage:ui": "open coverage/index.html",
-    "test:ui": "playwright test --ui"
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",

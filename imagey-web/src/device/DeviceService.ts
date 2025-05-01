@@ -1,32 +1,21 @@
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
-import { authenticationService } from "../authentication/AuthenticationService";
 import { cryptoService } from "../authentication/CryptoService";
 import { deviceRepository } from "./DeviceRepository";
 
 export const deviceService = {
-  setupDevice: async (email: string, symmetricKey?: JsonWebKey) => {
-    if (!symmetricKey) {
-      try {
-        symmetricKey = await authenticationService.loadSymmetricKey(email);
-      } catch (e) {
-        return Promise.reject(e);
-      }
-    }
+  setupDevice: async (email: string) => {
     deviceRepository.storeUser(email);
     let deviceId = deviceRepository.loadDeviceId(email);
     let privateKey = undefined;
     if (!deviceId) {
       deviceId = generateDeviceId();
-      privateKey = await initializePrivateKey(email, deviceId, symmetricKey);
+      privateKey = await initializePrivateKey(email, deviceId);
     } else {
-      const encryptedPrivateKey = deviceRepository.loadKey(deviceId);
-      if (encryptedPrivateKey) {
-        privateKey = await cryptoService.decryptPrivateKey(
-          encryptedPrivateKey,
-          symmetricKey,
-        );
+      const encodedPrivateKey = deviceRepository.loadKey(deviceId);
+      if (encodedPrivateKey) {
+        privateKey = JSON.parse(encodedPrivateKey);
       } else {
-        privateKey = await initializePrivateKey(email, deviceId, symmetricKey);
+        privateKey = await initializePrivateKey(email, deviceId);
       }
     }
     return privateKey;
@@ -40,15 +29,9 @@ function generateDeviceId(): string {
 async function initializePrivateKey(
   email: string,
   deviceId: string,
-  symmetricKey: JsonWebKey,
-  token?: string,
 ): Promise<JsonWebKey> {
   const keyPair = await cryptoService.initializeKeyPair();
-  authenticationRepository.storeKey(email, deviceId, keyPair.publicKey, token);
-  const encryptedKey = await cryptoService.encryptPrivateKey(
-    keyPair.privateKey,
-    symmetricKey,
-  );
-  deviceRepository.storeKey(deviceId, encryptedKey);
+  authenticationRepository.storeKey(email, deviceId, keyPair.publicKey);
+  deviceRepository.storeKey(deviceId, JSON.stringify(keyPair.privateKey));
   return keyPair.privateKey;
 }

@@ -66,31 +66,31 @@ public class UserRepository {
         return getUserHome(user).exists();
     }
 
-    public Optional<String> loadSymmetricKey(User user, Kid kid) {
-        LOG.info("Loading symmetric key.");
-        File symmetricKeysFolder = new File(getUserHome(user), "symmetric-keys");
-        File keyFile = new File(symmetricKeysFolder, kid.id() + ".json");
+    public Optional<String> loadPublicKey(User user, Kid kid) {
+        LOG.info("Loading public key with kid {}", kid);
+        File publicKeysFolder = new File(getUserHome(user), "public-keys");
+        File keyFile = new File(publicKeysFolder, kid.id() + ".json");
         if (!keyFile.exists()) {
-            LOG.info("Symmetric key does not exist.");
+            LOG.info("Public key does not exist.");
             return empty();
         } else {
             try {
-                Optional<String> symmetricKey = of(readFileToString(keyFile, UTF_8));
-                LOG.info("Symmetric key loaded");
-                return symmetricKey;
+                Optional<String> publicKey = of(readFileToString(keyFile, UTF_8));
+                LOG.info("Public key loaded");
+                return publicKey;
             } catch (IOException e) {
-                LOG.error("Symmetric key could not be loaded", e);
+                LOG.error("Public key could not be loaded", e);
                 throw new IllegalStateException(e);
             }
         }
     }
 
-    public void storeSymmetricKey(User user, Kid kid, String key) throws IOException {
-        File symmetricKeysFolder = new File(getUserHome(user), "symmetric-keys");
-        if (!symmetricKeysFolder.exists()) {
-            symmetricKeysFolder.mkdirs();
+    public void storePublicKey(User user, Kid kid, String key) throws IOException {
+        File publicKeysFolder = new File(getUserHome(user), "public-keys");
+        if (!publicKeysFolder.exists()) {
+            publicKeysFolder.mkdirs();
         }
-        File keyFile = new File(symmetricKeysFolder, kid.id() + ".json");
+        File keyFile = new File(publicKeysFolder, kid.id() + ".json");
         if (keyFile.exists()) {
             throw new ResourceConflictException(keyFile + " already exists.");
         }
