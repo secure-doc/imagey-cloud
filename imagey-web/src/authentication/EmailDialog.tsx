@@ -11,11 +11,6 @@ import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
 import MuiCard from "@mui/material/Card";
 import { styled } from "@mui/material/styles";
-import {
-  RegistrationResult,
-  authenticationService,
-} from "./AuthenticationService";
-import { deviceRepository } from "../device/DeviceRepository";
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: "flex",
@@ -67,7 +62,6 @@ export default function EmailDialog({
 }: EmailDialogProperties) {
   const [emailError, setEmailError] = useState(false);
   const [emailErrorMessage, setEmailErrorMessage] = useState("");
-  const [resultMessage, setResultMessage] = useState<string>();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -77,7 +71,7 @@ export default function EmailDialog({
     const data = new FormData(event.currentTarget);
     const email = data.get("email")?.toString();
     if (email) {
-      selectEmail(email, onEmailSelected, setResultMessage);
+      onEmailSelected(email);
     }
   };
 
@@ -144,40 +138,12 @@ export default function EmailDialog({
               fullWidth
               variant="contained"
               onClick={validateInputs}
-              disabled={resultMessage !== undefined}
             >
               OK
             </Button>
-            <Typography variant="h6" component="span">
-              {resultMessage}
-            </Typography>
           </Box>
         </Card>
       </SignInContainer>
     </>
   );
-}
-
-async function selectEmail(
-  email: string,
-  onEmailSelected: (email: string) => void,
-  setResultMessage: (message: string) => void,
-) {
-  if (deviceRepository.loadDeviceId(email)) {
-    onEmailSelected(email);
-    return;
-  }
-  setResultMessage("Registering...");
-  try {
-    const result = await authenticationService.register(email);
-    if (result === RegistrationResult.RegistrationStarted) {
-      setResultMessage(
-        "A mail with a verification link was sent. Click on it to register",
-      );
-    } else {
-      setResultMessage("A mail with a login link was sent.");
-    }
-  } catch {
-    setResultMessage("Registration error.");
-  }
 }

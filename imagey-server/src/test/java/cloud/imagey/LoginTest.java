@@ -65,17 +65,13 @@ public class LoginTest {
     private GreenMailOperations greenMail;
 
     @Test
-    public void login() throws IOException, MessagingException {
+    public void verifyExistingLogin() throws IOException, MessagingException {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users")
+            .path("users/mary@imagey.cloud/verifications")
             .request()
-            .post(json("""
-                {
-                    "email": "mary@imagey.cloud"
-                }
-            """));
+            .post(json(""));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
@@ -98,18 +94,14 @@ public class LoginTest {
     }
 
     @Test
-    @DisplayName("Login for unregistered user fails")
-    public void loginUnregistered() throws IOException, MessagingException {
+    @DisplayName("Verification of unregistered user leads to registration mail")
+    public void verifyUnregistered() throws IOException, MessagingException {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users")
+            .path("users/joe@imagey.cloud/verifications")
             .request()
-            .post(json("""
-                {
-                    "email": "joe@imagey.cloud"
-                }
-            """));
+            .post(json(""));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);

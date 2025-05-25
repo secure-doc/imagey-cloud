@@ -68,13 +68,9 @@ public class RegistrationTest {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users")
+            .path("users/joe@imagey.cloud/verifications")
             .request()
-            .post(json("""
-                {
-                    "email": "joe@imagey.cloud"
-                }
-            """));
+            .post(json(""));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);

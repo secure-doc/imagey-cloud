@@ -1,5 +1,4 @@
-import { AuthenticationError } from "./AuthenticationError";
-import { buf2hex, hex2buf, text2buf } from "./ConversionService";
+import { buf2hex, buf2text, hex2buf, text2buf } from "./ConversionService";
 
 export const cryptoService = {
   generatePasswordKey: async (
@@ -38,29 +37,47 @@ export const cryptoService = {
     return { privateKey, publicKey };
   },
 
-  encryptPrivateKey: async (
+  encryptPrivatePasswordKey: async (
     privateKey: JsonWebKey,
     password: string,
   ): Promise<string> => {
-    try {
-      return encrypt(JSON.stringify(privateKey), password);
-    } catch (error) {
-      console.warn(error);
-      throw AuthenticationError.WRONG_PASSWORD;
-    }
+    return encryptWithPassword(JSON.stringify(privateKey), password);
   },
 
-  decryptPrivateKey: async (
+  decryptPrivatePasswordKey: async (
     encryptedPrivateKey: string,
     password: string,
   ): Promise<JsonWebKey> => {
-    try {
-      const decryptedPrivateKey = await decrypt(encryptedPrivateKey, password);
-      return JSON.parse(decryptedPrivateKey);
-    } catch (error) {
-      console.warn(error);
-      throw AuthenticationError.WRONG_PASSWORD;
-    }
+    const decryptedPrivateKey = await decryptWithPassword(
+      encryptedPrivateKey,
+      password,
+    );
+    return JSON.parse(decryptedPrivateKey);
+  },
+
+  encryptKey: async (
+    keyToEncrypt: JsonWebKey,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+  ): Promise<string> => {
+    const derivedKey = await deriveKey(privateKey, publicKey);
+    const encodedKeyToEncrypt = text2buf(JSON.stringify(keyToEncrypt));
+    const encryptedKey = await encrypt(encodedKeyToEncrypt, derivedKey);
+    return buf2hex(encryptedKey);
+  },
+
+  decryptKey: async (
+    keyToDecrypt: string,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+  ): Promise<JsonWebKey> => {
+    const derivedKey = await deriveKey(privateKey, publicKey);
+    const decryptedJsonWebKey = await decrypt(
+      hex2buf(keyToDecrypt),
+      derivedKey,
+    );
+    const decodedJsonWebKey = buf2text(decryptedJsonWebKey);
+    return JSON.parse(decodedJsonWebKey);
   },
 };
 
@@ -85,7 +102,45 @@ const getPasswordKey = (password: string) =>
     ["deriveKey"],
   );
 
-const deriveKey = (
+const deriveKey = async (privateKey: JsonWebKey, publicKey: JsonWebKey) => {
+  const privateCryptoKey = await importPrivateKey(privateKey);
+  const publicCryptoKey = await importPublicKey(publicKey);
+  return crypto.subtle.deriveKey(
+    { name: "ECDH", public: publicCryptoKey },
+    privateCryptoKey,
+    { name: "AES-CTR", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+};
+
+async function importPrivateKey(key: JsonWebKey) {
+  return crypto.subtle.importKey(
+    "jwk",
+    key,
+    {
+      name: "ECDH",
+      namedCurve: "P-256",
+    },
+    true,
+    ["deriveKey"],
+  );
+}
+
+async function importPublicKey(key: JsonWebKey) {
+  return crypto.subtle.importKey(
+    "jwk",
+    key,
+    {
+      name: "ECDH",
+      namedCurve: "P-256",
+    },
+    true,
+    [],
+  );
+}
+
+const derivePasswordKey = (
   passwordKey: CryptoKey,
   salt: ArrayBuffer,
   keyUsage: KeyUsage[],
@@ -102,12 +157,27 @@ const deriveKey = (
     false,
     keyUsage,
   );
+async function encrypt(payload: ArrayBuffer, key: CryptoKey) {
+  return crypto.subtle.encrypt(
+    { name: "AES-CTR", counter: new Uint8Array(16), length: 16 * 8 },
+    key,
+    payload,
+  );
+}
 
-async function encrypt(secretData: string, password: string) {
+async function decrypt(payload: ArrayBuffer, key: CryptoKey) {
+  return crypto.subtle.decrypt(
+    { name: "AES-CTR", counter: new Uint8Array(16), length: 16 * 8 },
+    key,
+    payload,
+  );
+}
+
+async function encryptWithPassword(secretData: string, password: string) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const passwordKey = await getPasswordKey(password);
-  const aesKey = await deriveKey(passwordKey, salt, ["encrypt"]);
+  const aesKey = await derivePasswordKey(passwordKey, salt, ["encrypt"]);
   const encryptedContent = await window.crypto.subtle.encrypt(
     {
       name: "AES-GCM",
@@ -127,13 +197,13 @@ async function encrypt(secretData: string, password: string) {
   return buf2hex(buffer);
 }
 
-async function decrypt(encryptedData: string, password: string) {
+async function decryptWithPassword(encryptedData: string, password: string) {
   const encryptedDataBuff = hex2buf(encryptedData);
   const salt = encryptedDataBuff.slice(0, 16);
   const iv = encryptedDataBuff.slice(16, 16 + 12);
   const data = encryptedDataBuff.slice(16 + 12);
   const passwordKey = await getPasswordKey(password);
-  const aesKey = await deriveKey(passwordKey, salt, ["decrypt"]);
+  const aesKey = await derivePasswordKey(passwordKey, salt, ["decrypt"]);
   const decryptedContent = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",

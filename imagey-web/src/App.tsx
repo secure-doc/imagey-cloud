@@ -7,7 +7,7 @@ import Image from "./pages/Image";
 import Chats from "./pages/Chats";
 import { ActionBarContextProvider } from "./contexts/ActionBarContext";
 import AppBar from "./components/AppBar";
-import AuthenticationDialog from "./authentication/AuthenticationDialog";
+import AuthenticationComponent from "./authentication/AuthenticationComponent";
 
 function App() {
   /*
@@ -36,7 +36,7 @@ function App() {
   const [privateKey, setPrivateKey] = useState<JsonWebKey>();
   if (!privateKey) {
     return (
-      <AuthenticationDialog onKeyDecrypted={(key) => setPrivateKey(key)} />
+      <AuthenticationComponent onKeyDecrypted={(key) => setPrivateKey(key)} />
     );
   }
   return (

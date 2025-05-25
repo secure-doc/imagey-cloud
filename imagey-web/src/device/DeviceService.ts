@@ -1,41 +1,57 @@
-import { AuthenticationError } from "../authentication/AuthenticationError";
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
 import { cryptoService } from "../authentication/CryptoService";
 import { deviceRepository } from "./DeviceRepository";
 
 export const deviceService = {
-  registerDevice: async (
-    email: string,
-    password: string,
-    deviceId?: string,
-  ) => {
-    if (!deviceId) {
-      deviceId = generateDeviceId(email);
-    }
-    const keyPair = await cryptoService.initializeKeyPair();
-    const encryptedPrivateKey = await cryptoService.encryptPrivateKey(
-      keyPair.privateKey,
-      password,
+  initializeDevice: async (email: string, password: string) => {
+    const deviceId = generateDeviceId(email);
+    const deviceKeyPair = await cryptoService.initializeKeyPair();
+    const encryptedPrivateDeviceKey =
+      await cryptoService.encryptPrivatePasswordKey(
+        deviceKeyPair.privateKey,
+        password,
+      );
+    deviceRepository.storeKey(deviceId, encryptedPrivateDeviceKey);
+    return {
+      deviceId,
+      publicKey: deviceKeyPair.publicKey,
+      privateKey: deviceKeyPair.privateKey,
+    };
+  },
+  registerDevice: async (email: string, password: string) => {
+    const device = await deviceService.initializeDevice(email, password);
+    await authenticationRepository.storePublicDeviceKey(
+      email,
+      device.deviceId,
+      device.publicKey,
     );
-    deviceRepository.storeKey(deviceId, encryptedPrivateKey);
-    await authenticationRepository.storePublicKey(
+    // TODO, this is wrong, device has to be activated by another device
+    return device.privateKey;
+  },
+  setupDevice: async (
+    email: string,
+    deviceId: string,
+    devicePassword: string,
+  ) => {
+    const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
       email,
       deviceId,
-      keyPair.publicKey,
     );
-    return keyPair.privateKey;
-  },
-  setupDevice: async (email: string, password: string) => {
-    const deviceId = deviceRepository.loadDeviceId(email);
-    if (deviceId) {
-      const encryptedKey = deviceRepository.loadKey(deviceId);
-      if (encryptedKey) {
-        return cryptoService.decryptPrivateKey(encryptedKey, password);
-      } else {
-        return Promise.reject(AuthenticationError.PRIVATE_KEY_MISSING);
-      }
+    const encryptedDeviceKey = deviceRepository.loadKey(deviceId);
+    if (encryptedDeviceKey) {
+      const privateDeviceKey = await cryptoService.decryptPrivatePasswordKey(
+        encryptedDeviceKey,
+        devicePassword,
+      );
+      const encryptedPrivateMasterKey =
+        await authenticationRepository.loadPrivateKey(email, deviceId);
+      return cryptoService.decryptKey(
+        encryptedPrivateMasterKey,
+        publicDeviceKey,
+        privateDeviceKey,
+      );
     } else {
-      return deviceService.registerDevice(email, password);
+      return Promise.reject("Private Key missing");
     }
   },
 };

@@ -27,11 +27,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import javax.json.bind.JsonbBuilder;
+
 public abstract class AbstractRecordConverter {
 
     protected Object instantiate(Type type, Object value) {
         if (value instanceof Map) {
-            return instantiate((Class<?>)type, ((Map<String, Object>)value)::get);
+            return instantiate((Class<?>)type, (Map<String, Object>)value);
         } else if (value instanceof List) {
             return instantiate(type, (List<?>)value);
         } else if (value instanceof String) {
@@ -46,6 +48,15 @@ public abstract class AbstractRecordConverter {
             return null;
         } else {
             throw new IllegalArgumentException("Unexpected value: " + value.getClass());
+        }
+    }
+
+    protected Object instantiate(Class<?> type, Map<String, Object> value) {
+        RecordComponent[] recordComponents = type.getRecordComponents();
+        if (recordComponents.length == 1 && recordComponents[0].getType().equals(String.class)) {
+            return instantiate(type, JsonbBuilder.create().toJson(value));
+        } else {
+            return instantiate(type, value::get);
         }
     }
 

@@ -73,6 +73,10 @@ public class TokenService {
 
     public boolean verify(Token token, User user) {
         Optional<DecodedToken> decoded = decode(token);
+        return verify(decoded, user);
+    }
+
+    public boolean verify(Optional<DecodedToken> decoded, User user) {
         if (decoded.isEmpty()) {
             return false;
         }
