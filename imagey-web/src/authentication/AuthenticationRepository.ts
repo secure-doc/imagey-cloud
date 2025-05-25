@@ -1,23 +1,19 @@
-import { AuthenticationError } from "./AuthenticationError";
+import { ResponseError } from "./ResponseError";
 
 export const authenticationRepository = {
-  loadPrivateKey: async (
-    email: string,
-    deviceId: string,
-    key: JsonWebKey,
-  ): Promise<void> => {
+  loadPrivateKey: async (email: string, deviceId: string): Promise<string> => {
     const response = await fetch(
       "/users/" + email + "/devices/" + deviceId + "/private-keys/0",
       {
-        method: "PUT",
+        method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "same-origin",
-        body: JSON.stringify(key),
       },
     );
-    return resolve(response);
+    const resolvedResponse = await resolve(response);
+    return resolvedResponse.text();
   },
   storePrivateKey: async (
     email: string,
@@ -37,9 +33,25 @@ export const authenticationRepository = {
         body: JSON.stringify(key),
       },
     );
-    return resolve(response);
+    await resolve(response);
   },
-  loadPublicKey: async (email: string, deviceId: string): Promise<void> => {
+  loadPublicKey: async (email: string): Promise<JsonWebKey> => {
+    console.log("load public key");
+    const response = await fetch("/users/" + email + "/public-keys/0", {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+    });
+    console.log("public key loaded");
+    const resolvedResponse = await resolve(response);
+    return resolvedResponse.json();
+  },
+  loadPublicDeviceKey: async (
+    email: string,
+    deviceId: string,
+  ): Promise<JsonWebKey> => {
     const response = await fetch(
       "/users/" + email + "/public-keys/" + deviceId,
       {
@@ -50,17 +62,18 @@ export const authenticationRepository = {
         credentials: "same-origin",
       },
     );
-    return resolve(response);
+    const resolvedResponse = await resolve(response);
+    return resolvedResponse.json();
   },
-  storePublicKey: async (
+  storePublicDeviceKey: async (
     email: string,
     deviceId: string,
     key: JsonWebKey,
   ): Promise<void> => {
     const response = await fetch(
-      "/users/" + email + "/public-keys/" + deviceId,
+      "/users/" + email + "/devices/" + deviceId + "/public-keys/",
       {
-        method: "PUT",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -68,16 +81,19 @@ export const authenticationRepository = {
         body: JSON.stringify(key),
       },
     );
-    return resolve(response);
+    await resolve(response);
   },
 };
 
-async function resolve(response: Response): Promise<void> {
+async function resolve(response: Response): Promise<Response> {
+  console.log(response.status);
   return response.status >= 200 && response.status <= 300
-    ? Promise.resolve()
+    ? Promise.resolve(response)
     : response.status === 401
-      ? Promise.reject(AuthenticationError.UNAUTHORIZED)
+      ? Promise.reject(ResponseError.UNAUTHORIZED)
       : response.status === 403
-        ? Promise.reject(AuthenticationError.FORBIDDEN)
-        : Promise.reject(AuthenticationError.UNKNOWN);
+        ? Promise.reject(ResponseError.FORBIDDEN)
+        : response.status == 404
+          ? Promise.reject(ResponseError.NOT_FOUND)
+          : Promise.reject(ResponseError.UNKNOWN);
 }

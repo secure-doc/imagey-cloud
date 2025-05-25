@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
 import MuiCard from "@mui/material/Card";
 import { styled } from "@mui/material/styles";
+import { useState } from "react";
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: "flex",
@@ -50,21 +51,26 @@ const SignInContainer = styled(Stack)(({ theme }) => ({
   },
 }));
 
-interface PasswordDialogProperties {
+interface PasswordDialogProperties<R> {
   message: string;
-  onPasswordSelected: (password: string) => void;
+  validatePassword: (password: string) => Promise<R>;
+  onPasswordValid: (result: R) => void;
 }
 
-export default function PasswordDialog({
+export default function PasswordDialog<R>({
   message,
-  onPasswordSelected,
-}: PasswordDialogProperties) {
+  validatePassword,
+  onPasswordValid,
+}: PasswordDialogProperties<R>) {
+  const [passwordError, setPasswordError] = useState(false);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const password = data.get("password")?.toString();
     if (password) {
-      onPasswordSelected(password);
+      validatePassword(password)
+        .then((result) => onPasswordValid(result))
+        .catch(() => setPasswordError(true));
     }
   };
 
@@ -93,15 +99,18 @@ export default function PasswordDialog({
           >
             <FormControl>
               <FormLabel htmlFor="password">{message}</FormLabel>
+
               <TextField
                 id="password"
                 type="password"
                 name="password"
+                error={passwordError}
+                helperText={passwordError ? "Wrong password" : ""}
                 autoFocus
                 required
                 fullWidth
                 variant="outlined"
-                color={"primary"}
+                color={passwordError ? "error" : "primary"}
                 sx={{ ariaLabel: "password" }}
               />
             </FormControl>

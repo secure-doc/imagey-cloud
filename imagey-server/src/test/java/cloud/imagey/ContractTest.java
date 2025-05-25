@@ -18,9 +18,11 @@ package cloud.imagey;
 
 import static au.com.dius.pact.provider.junit5.HttpTestTarget.fromUrl;
 import static cloud.imagey.ContractTest.TokenState.INVALID_TOKEN;
+import static cloud.imagey.ContractTest.TokenState.NO_TOKEN;
 import static cloud.imagey.ContractTest.TokenState.VALID_TOKEN;
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 import static java.net.URI.create;
+import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.forceDelete;
 
 import java.io.File;
@@ -66,6 +68,7 @@ public class ContractTest {
     private TokenService tokenService;
 
     private TokenState tokenState = VALID_TOKEN;
+    private User user;
 
     @BeforeEach
     void before(PactVerificationContext context) throws MalformedURLException {
@@ -88,25 +91,45 @@ public class ContractTest {
         }
 
         File marysData = new File(rootPath, "mary@imagey.cloud");
-        File marysPublicKeys = new File(marysData, "public-keys");
-        if (marysPublicKeys.exists()) {
-            forceDelete(marysPublicKeys);
-        }
         File marysDevices = new File(marysData, "devices");
         File marysCreatedDevice = new File(marysDevices, "123e4567-e89b-12d3-a456-426655440000");
         if (marysCreatedDevice.exists()) {
             forceDelete(marysCreatedDevice);
         }
+        tokenState = NO_TOKEN;
+    }
+
+    @State("Joe has registration token")
+    void setJoesToken() throws URISyntaxException, IOException {
+        initializeDefaultState();
         tokenState = VALID_TOKEN;
+        user = new User(new Email("joe@imagey.cloud"));
+    }
+
+    @State("Marys token is invalid")
+    void invalidateMarysToken() throws URISyntaxException, IOException {
+        initializeDefaultState();
+        tokenState = INVALID_TOKEN;
+        user = new User(new Email("mary@imagey.cloud"));
     }
 
     private Optional<Token> generateToken(HttpRequest request) {
-        Optional<User> user = extractUser(request);
+        Optional<User> extractedUser = extractUser(request);
+        if (tokenState == NO_TOKEN) {
+            if (extractedUser.filter(this::userExists).isPresent()) {
+                tokenState = VALID_TOKEN;
+            } else {
+                return empty();
+            }
+        }
         long validity = tokenState == VALID_TOKEN ? ONE_DAY : -1;
-        return user.map(u -> tokenService.generateToken(u, validity));
+        return extractedUser.map(u -> tokenService.generateToken(u, validity));
     }
 
     private Optional<User> extractUser(HttpRequest request) {
+        if (user != null) {
+            return Optional.of(user);
+        }
         String path = request.getPath();
         int startIndex = "/users/".length();
         int endIndex = path.indexOf('/', startIndex + 1);
@@ -116,13 +139,11 @@ public class ContractTest {
         return Optional.of(new User(new Email(path.substring(startIndex, endIndex).replace("%40", "@"))));
     }
 
-    @State("marys token is invalid")
-    void invalidateMarysToken() throws URISyntaxException, IOException {
-        initializeDefaultState();
-        tokenState = INVALID_TOKEN;
+    private boolean userExists(User userToCheck) {
+        return new File("./" + rootPath, userToCheck.email().address()).exists();
     }
 
     public enum TokenState {
-        VALID_TOKEN, INVALID_TOKEN
+        NO_TOKEN, VALID_TOKEN, INVALID_TOKEN
     }
 }

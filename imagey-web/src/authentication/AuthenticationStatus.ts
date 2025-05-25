@@ -1,0 +1,7 @@
+export enum AuthenticationStatus {
+  IN_PROGRESS,
+  UNAUTHENTICATED,
+  NOT_REGISTERED,
+  AUTHENTICATED,
+  UNKNOWN_ERROR,
+}

@@ -105,14 +105,14 @@ public class UserRepository {
         FileUtils.write(keyFile, key, UTF_8, false);
     }
 
-    public void storeDeviceKey(User user, DeviceId deviceId, Kid kid, String key) throws IOException {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "keys");
+    public void createDevicePublicKey(User user, DeviceId deviceId, String key) throws IOException {
+        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
         if (!keyDirectory.exists()) {
             keyDirectory.mkdirs();
         }
-        File keyFile = new File(keyDirectory, kid.id() + ".json");
+        File keyFile = new File(keyDirectory, "0.json");
         if (keyFile.exists()) {
-            keyFile.delete(); // override existing
+            throw new ResourceConflictException(keyFile + " already exists.");
         }
         FileUtils.write(keyFile, key, UTF_8, false);
     }

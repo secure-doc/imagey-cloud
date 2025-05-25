@@ -16,19 +16,25 @@
  */
 package cloud.imagey.application.authentication;
 
+import static java.util.function.Predicate.not;
 import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import static javax.ws.rs.core.Response.Status.UNAUTHORIZED;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerRequestFilter;
 import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.Provider;
 
@@ -36,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -48,12 +55,13 @@ public class UserFilter implements ContainerRequestFilter {
 
     @Inject
     private TokenService tokenService;
+    @Inject
+    private HttpServletRequest request;
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
-        if (isEmpty(requestContext.getUriInfo().getPathSegments())
-            && requestContext.getMethod().equalsIgnoreCase("POST")) {
-            return; // POST /users/ is allowed for anyone
+        if (isVerification(requestContext) || isAuthentication(requestContext)) {
+            return;
         }
         Cookie cookie = requestContext.getCookies().get("token");
         if (cookie == null) {
@@ -61,22 +69,78 @@ public class UserFilter implements ContainerRequestFilter {
             requestContext.abortWith(Response.status(UNAUTHORIZED).build());
             return;
         }
-        Token token = new Token(cookie.getValue());
+        Optional<DecodedToken> decodedToken = tokenService.decode(new Token(cookie.getValue()));
+        setupPrincipal(requestContext, decodedToken);
 
+        if (isCreation(requestContext)) {
+            return;
+        }
         User user = extractUser(requestContext.getUriInfo());
-        if (!tokenService.verify(token, user)) {
+        if (!tokenService.verify(decodedToken, user)) {
             LOG.info("Token not verified");
             requestContext.abortWith(Response.status(FORBIDDEN).build());
             return;
         }
     }
 
+    private boolean isCreation(ContainerRequestContext requestContext) {
+        // creation request is a POST to /users
+        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
+        return size(pathSegments) == 0
+            && requestContext.getMethod().equalsIgnoreCase("POST");
+    }
+
+    private boolean isVerification(ContainerRequestContext requestContext) {
+        // verification request is a POST to /users/{email}/verifications
+        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
+        return size(pathSegments) == 2
+            && "verifications".equals(pathSegments.get(1).getPath())
+            && requestContext.getMethod().equalsIgnoreCase("POST");
+    }
+
+    private boolean isAuthentication(ContainerRequestContext requestContext) {
+        // authentication request is a POST to /users/{email}/authentications
+        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
+        return size(pathSegments) == 2
+            && "authentications".equals(pathSegments.get(1).getPath())
+            && requestContext.getMethod().equalsIgnoreCase("POST");
+    }
+
     private User extractUser(UriInfo uriInfo) {
         return new User(new Email(uriInfo.getPathSegments().get(0).getPath()));
     }
 
-    private boolean isEmpty(List<PathSegment> pathSegments) {
-        return pathSegments.isEmpty()
-            || (pathSegments.size() == 1 && pathSegments.get(0).getPath().isEmpty());
+    private long size(List<PathSegment> pathSegments) {
+        return pathSegments.stream().map(PathSegment::getPath).filter(not(String::isEmpty)).count();
+    }
+
+    private void setupPrincipal(ContainerRequestContext requestContext, Optional<DecodedToken> decodedToken) {
+        if (decodedToken.isEmpty()) {
+            return;
+        }
+        requestContext.setSecurityContext(new SecurityContext() {
+
+            @Override
+            public Principal getUserPrincipal() {
+                return decodedToken.get().jwt()::getSubject;
+            }
+
+            @Override
+            public boolean isUserInRole(String role) {
+                return false;
+            }
+
+            @Override
+            public boolean isSecure() {
+                return true;
+            }
+
+            @Override
+            public String getAuthenticationScheme() {
+                return DIGEST_AUTH;
+            }
+        });
+        Supplier<Principal> principalSupplier = requestContext.getSecurityContext()::getUserPrincipal;
+        request.setAttribute(Principal.class.getName() + ".supplier", principalSupplier);
     }
 }

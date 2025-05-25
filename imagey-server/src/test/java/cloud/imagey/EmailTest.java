@@ -50,18 +50,14 @@ public class EmailTest {
     @Test
     public void emailServerNotAccessible() throws IOException, MessagingException {
         // Given
-        String newUser = """
-                {
-                    "email": "joe@imagey.cloud"
-                }
-            """;
+        String verificationPath = "users/joe@imagey.cloud/verifications";
 
         // When
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users")
+            .path(verificationPath)
             .request()
-            .post(json(newUser));
+            .post(json(""));
 
         // Then
         assertThat(response.getStatus()).isEqualTo(SERVICE_UNAVAILABLE.getStatusCode());

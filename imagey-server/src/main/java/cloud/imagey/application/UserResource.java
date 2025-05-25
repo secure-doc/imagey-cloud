@@ -18,15 +18,17 @@ package cloud.imagey.application;
 
 import static cloud.imagey.domain.user.UserService.AuthenticationStatus.REGISTRATION_STARTED;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
-import static javax.ws.rs.core.Response.accepted;
-import static javax.ws.rs.core.Response.status;
-import static javax.ws.rs.core.Response.Status.CONFLICT;
+import static javax.ws.rs.core.Response.Status.ACCEPTED;
+import static javax.ws.rs.core.Response.Status.CREATED;
 
 import java.io.IOException;
+import java.security.Principal;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import javax.inject.Provider;
 import javax.ws.rs.Consumes;
+import javax.ws.rs.ForbiddenException;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
@@ -36,29 +38,38 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Response;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserRegistration;
 import cloud.imagey.domain.user.UserRepository;
 import cloud.imagey.domain.user.UserService;
+import cloud.imagey.domain.user.UserService.AuthenticationStatus;
 
 @Path("/")
 @ApplicationScoped
 public class UserResource {
 
+    private static final Logger LOG = LogManager.getLogger(UserResource.class);
+
     @Inject
     private UserService userService;
     @Inject
     private UserRepository userRepository;
+    @Inject
+    private Provider<Principal> currentPrincipal;
 
     @POST
     @Consumes(APPLICATION_JSON)
-    public Response createUser(User user) {
-        if (userService.startAuthenticationProcess(user) == REGISTRATION_STARTED) {
-            return accepted().build();
-        } else {
-            return status(CONFLICT).build();
+    public Response registerUser(UserRegistration registration) {
+        if (!registration.email().address().equals(currentPrincipal.get().getName())) {
+            LOG.warn("Current user is trying to register another user.");
+            throw new ForbiddenException("User is only allowed to register itself.");
         }
+        return Response.ok().build();
     }
 
     @GET
@@ -76,16 +87,24 @@ public class UserResource {
         return Response.ok().build();
     }
 
-    @PUT
-    @Path("{email}/devices/{deviceId}/keys/{kid}")
+    @POST
+    @Path("{email}/verifications")
     @Consumes(APPLICATION_JSON)
-    public Response storePublicKey(
+    public Response verfiyUser(@PathParam("email") User user) throws IOException {
+
+        AuthenticationStatus status = userService.startAuthenticationProcess(user);
+        return status == REGISTRATION_STARTED ? Response.status(CREATED).build() : Response.status(ACCEPTED).build();
+    }
+
+    @POST
+    @Path("{email}/devices/{deviceId}/public-keys")
+    @Consumes(APPLICATION_JSON)
+    public Response storeDevicePublicKey(
         @PathParam("email") User user,
         @PathParam("deviceId") DeviceId deviceId,
-        @PathParam("kid") Kid kid,
         String key) throws IOException {
 
-        userRepository.storeDeviceKey(user, deviceId, kid, key);
+        userRepository.createDevicePublicKey(user, deviceId, key);
         return Response.ok().build();
     }
 }

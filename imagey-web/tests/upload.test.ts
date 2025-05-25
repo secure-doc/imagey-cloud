@@ -3,6 +3,7 @@ import path from "path";
 import {
   clearLocalStorage,
   loginAsMary,
+  prepareMarysLogin,
   provider,
   setupMockServer,
 } from "./setup";
@@ -13,11 +14,12 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 
 test("upload image", async ({ page }) => {
   // Given
-  await loginAsMary(page);
+  await prepareMarysLogin(page);
 
   // When
   await provider.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
+    await loginAsMary(page);
 
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
 

@@ -3,6 +3,7 @@ import {
   clearLocalStorage,
   inputMarysPassword,
   loginAsMary,
+  prepareMarysLogin,
   provider,
   setupMockServer,
 } from "./setup";
@@ -13,11 +14,13 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 
 test("navigate to chats", async ({ page }) => {
   // Given
-  await loginAsMary(page);
+  await prepareMarysLogin(page);
 
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     const chatsLink = page.getByText("Chats");
     await expect(chatsLink).toBeVisible();
@@ -35,10 +38,13 @@ test("open and close navigation drawer on mobile resolution", async ({
     viewport: { width: 412, height: 915 },
   });
   const page = await context.newPage();
-  await loginAsMary(page);
+  await page.goto("/");
+
+  await prepareMarysLogin(page);
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
+    await loginAsMary(page);
 
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
@@ -62,10 +68,13 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
     viewport: { width: 412, height: 915 },
   });
   const page = await context.newPage();
-  await loginAsMary(page);
+  await page.goto("/");
+  await prepareMarysLogin(page);
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
+    await loginAsMary(page);
 
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
@@ -86,11 +95,12 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
 
 test("navigate to image details", async ({ page }) => {
   // Given
-  await loginAsMary(page);
+  await prepareMarysLogin(page);
 
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
+    await loginAsMary(page);
 
     await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
     await page.goto("/images/5");
