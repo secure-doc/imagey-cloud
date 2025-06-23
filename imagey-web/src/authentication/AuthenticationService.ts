@@ -10,9 +10,9 @@ export const authenticationService = {
   register: async (email: string, password: string): Promise<JsonWebKey> => {
     const device = await deviceService.initializeDevice(email, password);
 
-    const passKeyPair = await cryptoService.initializeKeyPair();
-    const encryptedPrivatePassKey = await cryptoService.encryptKey(
-      passKeyPair.privateKey,
+    const mainKeyPair = await cryptoService.initializeKeyPair();
+    const encryptedPrivateMainKey = await cryptoService.encryptKey(
+      mainKeyPair.privateKey,
       device.publicKey,
       device.privateKey,
     );
@@ -25,12 +25,13 @@ export const authenticationService = {
       body: JSON.stringify({
         email: email,
         deviceId: device.deviceId,
-        publicKey: passKeyPair.publicKey,
-        encryptedPrivateKey: encryptedPrivatePassKey,
+        devicePublicKey: device.publicKey,
+        mainPublicKey: mainKeyPair.publicKey,
+        encryptedPrivateKey: encryptedPrivateMainKey,
       }),
     });
     return response.status >= 200 && response.status < 300
-      ? Promise.resolve(passKeyPair.privateKey)
+      ? Promise.resolve(mainKeyPair.privateKey)
       : Promise.reject();
   },
   startAuthentication: async (email: string): Promise<RegistrationResult> => {

@@ -41,6 +41,7 @@ import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
@@ -64,11 +65,12 @@ public class UserResource {
 
     @POST
     @Consumes(APPLICATION_JSON)
-    public Response registerUser(UserRegistration registration) {
+    public Response registerUser(UserRegistration registration) throws IOException {
         if (!registration.email().address().equals(currentPrincipal.get().getName())) {
             LOG.warn("Current user is trying to register another user.");
             throw new ForbiddenException("User is only allowed to register itself.");
         }
+        userService.register(registration);
         return Response.ok().build();
     }
 
@@ -82,7 +84,7 @@ public class UserResource {
     @PUT
     @Path("{email}/public-keys/{kid}")
     @Consumes(APPLICATION_JSON)
-    public Response storePublicKey(@PathParam("email") User user, @PathParam("kid") Kid kid, String key) throws IOException {
+    public Response storePublicKey(@PathParam("email") User user, @PathParam("kid") Kid kid, PublicKey key) throws IOException {
         userRepository.storePublicKey(user, kid, key);
         return Response.ok().build();
     }
