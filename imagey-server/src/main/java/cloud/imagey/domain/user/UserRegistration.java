@@ -24,5 +24,6 @@ public record UserRegistration(
     DeviceId deviceId,
     Email email,
     EncryptedPrivateKey encryptedPrivateKey,
-    PublicKey publicKey) {
+    PublicKey mainPublicKey,
+    PublicKey devicePublicKey) {
 }

@@ -18,6 +18,8 @@ package cloud.imagey.domain.user;
 
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 
+import java.io.IOException;
+
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
@@ -26,6 +28,7 @@ import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
 import cloud.imagey.domain.mail.EmailTemplate;
 import cloud.imagey.domain.mail.MailService;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 
@@ -63,6 +66,12 @@ public class UserService {
 
     public void create(User user) {
         userRepository.persist(user);
+    }
+
+    public void register(UserRegistration registration) throws IOException {
+        User user = new User(registration.email());
+        userRepository.storePublicKey(user, new Kid("0"), registration.mainPublicKey());
+        userRepository.storeEncryptedPrivateKey(user, registration.deviceId(), registration.encryptedPrivateKey());
     }
 
     public enum AuthenticationStatus {

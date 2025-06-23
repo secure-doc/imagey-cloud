@@ -191,7 +191,15 @@ test("new user clicks registration link", async ({ page }) => {
       body: {
         email: "joe@imagey.cloud",
         deviceId: MatchersV3.string("ab85c7ca-8288-4a67-9d7a-15b82e22e75b"),
-        publicKey: {
+        devicePublicKey: {
+          crv: "P-256",
+          ext: true,
+          key_ops: [],
+          kty: "EC",
+          x: MatchersV3.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
+          y: MatchersV3.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
+        },
+        mainPublicKey: {
           crv: "P-256",
           ext: true,
           key_ops: [],
