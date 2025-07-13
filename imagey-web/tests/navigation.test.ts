@@ -3,6 +3,7 @@ import {
   clearLocalStorage,
   inputMarysPassword,
   loginAsMary,
+  prepareMarysDocuments,
   prepareMarysLogin,
   provider,
   setupMockServer,
@@ -15,13 +16,17 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
+  await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
 
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const chatsLink = page.getByText("Chats");
     await expect(chatsLink).toBeVisible();
     chatsLink.click();
@@ -41,12 +46,16 @@ test("open and close navigation drawer on mobile resolution", async ({
   await page.goto("/");
 
   await prepareMarysLogin(page);
+  await prepareMarysDocuments();
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
 
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
     menuButton.click();
@@ -70,13 +79,17 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/");
   await prepareMarysLogin(page);
+  await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
 
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
     menuButton.click();
@@ -96,13 +109,17 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
 test("navigate to image details", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
+  await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
 
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     await page.goto("/images/5");
     await inputMarysPassword(page);
 

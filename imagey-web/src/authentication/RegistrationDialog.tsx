@@ -3,7 +3,7 @@ import { authenticationService } from "./AuthenticationService";
 
 interface RegistrationDialogProperties {
   email: string;
-  onKeyDecrypted: (key: JsonWebKey) => void;
+  onKeyDecrypted: (publicKey: JsonWebKey, privateKey: JsonWebKey) => void;
 }
 
 export default function RegistrationDialog({
@@ -17,7 +17,9 @@ export default function RegistrationDialog({
       onPasswordValid={(password) => {
         authenticationService
           .register(email, password)
-          .then((privatePassKey) => onKeyDecrypted(privatePassKey));
+          .then((keyPair) =>
+            onKeyDecrypted(keyPair.publicKey, keyPair.privateKey),
+          );
       }}
     />
   );

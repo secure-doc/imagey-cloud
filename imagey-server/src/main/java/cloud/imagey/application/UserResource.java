@@ -32,7 +32,6 @@ import javax.ws.rs.ForbiddenException;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
-import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
@@ -41,9 +40,7 @@ import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
-import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserRegistration;
 import cloud.imagey.domain.user.UserRepository;
@@ -78,15 +75,8 @@ public class UserResource {
     @Path("{email}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {
+        LOG.info("Loading public key");
         return userRepository.loadPublicKey(user, kid).orElseThrow(() -> new NotFoundException());
-    }
-
-    @PUT
-    @Path("{email}/public-keys/{kid}")
-    @Consumes(APPLICATION_JSON)
-    public Response storePublicKey(@PathParam("email") User user, @PathParam("kid") Kid kid, PublicKey key) throws IOException {
-        userRepository.storePublicKey(user, kid, key);
-        return Response.ok().build();
     }
 
     @POST
@@ -96,17 +86,5 @@ public class UserResource {
 
         AuthenticationStatus status = userService.startAuthenticationProcess(user);
         return status == REGISTRATION_STARTED ? Response.status(CREATED).build() : Response.status(ACCEPTED).build();
-    }
-
-    @POST
-    @Path("{email}/devices/{deviceId}/public-keys")
-    @Consumes(APPLICATION_JSON)
-    public Response storeDevicePublicKey(
-        @PathParam("email") User user,
-        @PathParam("deviceId") DeviceId deviceId,
-        String key) throws IOException {
-
-        userRepository.createDevicePublicKey(user, deviceId, key);
-        return Response.ok().build();
     }
 }

@@ -1,4 +1,5 @@
 import { deviceService } from "../device/DeviceService";
+import { authenticationRepository } from "./AuthenticationRepository";
 import { cryptoService } from "./CryptoService";
 
 export enum RegistrationResult {
@@ -7,7 +8,13 @@ export enum RegistrationResult {
 }
 
 export const authenticationService = {
-  register: async (email: string, password: string): Promise<JsonWebKey> => {
+  register: async (
+    email: string,
+    password: string,
+  ): Promise<{
+    privateKey: JsonWebKey;
+    publicKey: JsonWebKey;
+  }> => {
     const device = await deviceService.initializeDevice(email, password);
 
     const mainKeyPair = await cryptoService.initializeKeyPair();
@@ -30,8 +37,9 @@ export const authenticationService = {
         encryptedPrivateKey: encryptedPrivateMainKey,
       }),
     });
+
     return response.status >= 200 && response.status < 300
-      ? Promise.resolve(mainKeyPair.privateKey)
+      ? Promise.resolve(mainKeyPair)
       : Promise.reject();
   },
   startAuthentication: async (email: string): Promise<RegistrationResult> => {
@@ -47,5 +55,23 @@ export const authenticationService = {
       : response.status === 202
         ? Promise.resolve(RegistrationResult.AuthenticationStarted)
         : Promise.reject();
+  },
+  loadPrivateKey: async (
+    email: string,
+    deviceId: string,
+    privateDeviceKey: JsonWebKey,
+  ): Promise<JsonWebKey> => {
+    const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
+      email,
+      deviceId,
+    );
+    const encryptedPrivateMainKey =
+      await authenticationRepository.loadPrivateKey(email, deviceId);
+    const decryptedPrivateMainKey = await cryptoService.decryptKey(
+      encryptedPrivateMainKey,
+      publicDeviceKey,
+      privateDeviceKey,
+    );
+    return decryptedPrivateMainKey;
   },
 };

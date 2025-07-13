@@ -57,7 +57,7 @@ export const deviceService = {
 };
 
 function generateDeviceId(email: string): string {
-  const deviceId = crypto.randomUUID();
+  const deviceId = cryptoService.generateUuid();
   deviceRepository.storeDeviceId(email, deviceId);
   return deviceId;
 }

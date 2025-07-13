@@ -3,9 +3,10 @@ import {
   clearLocalStorage,
   inputMarysPassword,
   marysDeviceId,
-  marysEncryptedDeviceKey,
   marysPassword,
-  marysPublicKey,
+  marysPublicMainKey,
+  prepareMarysDocuments,
+  prepareMarysLogin,
   provider,
   setupMarysDevice,
   setupMockServer,
@@ -14,6 +15,10 @@ import { MatchersV3 } from "@pact-foundation/pact";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
+});
+
+test.afterEach("Wait for running requests", async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("new user enters wrong email", async ({ page }) => {
@@ -167,7 +172,7 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
 test("new user clicks registration link", async ({ page }) => {
   // Given
   provider
-    .given("Joe has registration token")
+    .given("Joe is registered")
     .uponReceiving("a request of joe to get public key")
     .withRequest({
       method: "GET",
@@ -180,7 +185,7 @@ test("new user clicks registration link", async ({ page }) => {
       status: 404,
     });
   provider
-    .given("Joe has registration token")
+    .given("Joe is registered")
     .uponReceiving("a request to register joe")
     .withRequest({
       method: "POST",
@@ -215,6 +220,22 @@ test("new user clicks registration link", async ({ page }) => {
     .willRespondWith({
       status: 200,
     });
+  provider
+    .given("Joe is registered")
+    .uponReceiving("a request of joe to get documents")
+    .withRequest({
+      method: "GET",
+      path: "/users/joe@imagey.cloud/documents",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+    .willRespondWith({
+      status: 200,
+      contentType: "application/json",
+      body: [],
+    });
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
@@ -245,7 +266,7 @@ test("existing user clicks login link for new device", async ({ page }) => {
     .willRespondWith({
       status: 200,
       contentType: "application/json",
-      body: marysPublicKey,
+      body: marysPublicMainKey,
     });
   provider
     .given("default")
@@ -292,67 +313,32 @@ test("existing user clicks login link for new device", async ({ page }) => {
 
 test("existing user clicks login link on existing device", async ({ page }) => {
   // Given
-  provider
-    .given("default")
-    .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysPublicKey,
-    });
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await page.evaluate(() =>
       localStorage.setItem("imagey.user", "bob@imagey.cloud"),
     );
-    await page.evaluate(
-      (deviceId) =>
-        localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-      marysDeviceId,
-    );
-    await page.evaluate(
-      ({ deviceId, key }) => {
-        localStorage.setItem("imagey.devices[" + deviceId + "].key", key);
-      },
-      { deviceId: marysDeviceId, key: marysEncryptedDeviceKey },
-    );
     await page.goto("/?email=mary@imagey.cloud");
 
-    const passwordInput = page.getByLabel("password");
-    await expect(passwordInput).toBeVisible();
-    passwordInput.fill(marysPassword);
-    page.getByText("OK").click();
+    await inputMarysPassword(page);
 
     // Then
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
   });
 });
 
 test("visit page on existing device", async ({ page }) => {
   // Given
-  provider
-    .given("default")
-    .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysPublicKey,
-    });
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
@@ -365,7 +351,10 @@ test("visit page on existing device", async ({ page }) => {
     page.getByText("OK").click();
 
     // Then
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
   });
 });
 
@@ -384,7 +373,7 @@ test("visit page on existing device with wrong password", async ({ page }) => {
     .willRespondWith({
       status: 200,
       contentType: "application/json",
-      body: marysPublicKey,
+      body: marysPublicMainKey,
     });
   await provider.executeTest(async (mockServer) => {
     // When
@@ -404,35 +393,14 @@ test("visit page on existing device with wrong password", async ({ page }) => {
 
 test("login with missing email", async ({ page }) => {
   // Given
-  provider
-    .given("default")
-    .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysPublicKey,
-    });
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
-    await page.evaluate(
-      (deviceId) =>
-        localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-      marysDeviceId,
-    );
-    await page.evaluate(
-      ({ deviceId, key }) =>
-        localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
-      { deviceId: marysDeviceId, key: marysEncryptedDeviceKey },
-    );
-    await page.goto("/");
+    await page.evaluate(() => localStorage.removeItem("imagey.user"));
+    await page.reload();
     const emailInput = page.getByPlaceholder("email@imagey.cloud");
     await expect(emailInput).toBeVisible();
 
@@ -442,7 +410,10 @@ test("login with missing email", async ({ page }) => {
     await inputMarysPassword(page);
 
     // Then
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
   });
 });
 
@@ -461,7 +432,7 @@ test.skip("login with lost private key", async ({ page }) => {
     .willRespondWith({
       status: 200,
       contentType: "application/json",
-      body: marysPublicKey,
+      body: marysPublicMainKey,
     });
   provider
     .given("default")

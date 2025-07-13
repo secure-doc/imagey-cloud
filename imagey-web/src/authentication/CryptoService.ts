@@ -1,6 +1,18 @@
 import { buf2hex, buf2text, hex2buf, text2buf } from "./ConversionService";
 
 export const cryptoService = {
+  generateUuid: () => {
+    return crypto.randomUUID();
+  },
+  generateSymmetricKey: async (): Promise<JsonWebKey> => {
+    const symmetricKey = await crypto.subtle.generateKey(
+      { name: "AES-CTR", length: 256 }, // AES in "counter" mode
+      true, // Allow exporting the key
+      ["encrypt", "decrypt"],
+    );
+    return exportKey(symmetricKey);
+  },
+
   generatePasswordKey: async (
     deviceId: string,
     password: string,
@@ -60,10 +72,15 @@ export const cryptoService = {
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<string> => {
-    const derivedKey = await deriveKey(privateKey, publicKey);
-    const encodedKeyToEncrypt = text2buf(JSON.stringify(keyToEncrypt));
-    const encryptedKey = await encrypt(encodedKeyToEncrypt, derivedKey);
-    return buf2hex(encryptedKey);
+    try {
+      const derivedKey = await deriveKey(privateKey, publicKey);
+      const encodedKeyToEncrypt = text2buf(JSON.stringify(keyToEncrypt));
+      const encryptedKey = await encrypt(encodedKeyToEncrypt, derivedKey);
+      const hexKey = buf2hex(encryptedKey);
+      return hexKey;
+    } catch (e) {
+      return Promise.reject(e);
+    }
   },
 
   decryptKey: async (
@@ -71,13 +88,26 @@ export const cryptoService = {
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
+    const keyBuf = hex2buf(keyToDecrypt);
     const derivedKey = await deriveKey(privateKey, publicKey);
-    const decryptedJsonWebKey = await decrypt(
-      hex2buf(keyToDecrypt),
-      derivedKey,
-    );
+    const decryptedJsonWebKey = await decrypt(keyBuf, derivedKey);
     const decodedJsonWebKey = buf2text(decryptedJsonWebKey);
     return JSON.parse(decodedJsonWebKey);
+  },
+
+  encryptDocument: async (
+    keyToEncrypt: JsonWebKey,
+    content: ArrayBuffer[],
+  ): Promise<ArrayBuffer[]> => {
+    const cryptoKey = await importSymmetricKey(keyToEncrypt);
+    return Promise.all(content.map((buffer) => encrypt(buffer, cryptoKey)));
+  },
+  decryptDocument: async (
+    keyToDecrypt: JsonWebKey,
+    content: ArrayBuffer,
+  ): Promise<ArrayBuffer> => {
+    const cryptoKey = await importSymmetricKey(keyToDecrypt);
+    return decrypt(content, cryptoKey);
   },
 };
 
@@ -108,14 +138,25 @@ const deriveKey = async (privateKey: JsonWebKey, publicKey: JsonWebKey) => {
   return crypto.subtle.deriveKey(
     { name: "ECDH", public: publicCryptoKey },
     privateCryptoKey,
+
     { name: "AES-CTR", length: 256 },
     true,
     ["encrypt", "decrypt"],
   );
 };
 
-async function importPrivateKey(key: JsonWebKey) {
+async function importSymmetricKey(key: JsonWebKey) {
   return crypto.subtle.importKey(
+    "jwk",
+    key,
+    { name: "AES-CTR", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+async function importPrivateKey(key: JsonWebKey) {
+  const cryptoKey = await crypto.subtle.importKey(
     "jwk",
     key,
     {
@@ -125,6 +166,7 @@ async function importPrivateKey(key: JsonWebKey) {
     true,
     ["deriveKey"],
   );
+  return cryptoKey;
 }
 
 async function importPublicKey(key: JsonWebKey) {

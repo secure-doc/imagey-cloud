@@ -23,5 +23,4 @@ import javax.ws.rs.core.Application;
 @ApplicationPath("/users")
 @ApplicationScoped
 public class ImageyApplication extends Application {
-
 }

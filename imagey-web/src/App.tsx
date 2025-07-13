@@ -34,9 +34,16 @@ function App() {
      Create symmetric key, register device. User is logged in.
   */
   const [privateKey, setPrivateKey] = useState<JsonWebKey>();
+  const [user, setUser] = useState<string>();
   if (!privateKey) {
     return (
-      <AuthenticationComponent onKeyDecrypted={(key) => setPrivateKey(key)} />
+      <AuthenticationComponent
+        onKeyDecrypted={(user, publicKey, privateKey) => {
+          setUser(user);
+          console.log(JSON.stringify(publicKey));
+          setPrivateKey(privateKey);
+        }}
+      />
     );
   }
   return (
@@ -46,9 +53,15 @@ function App() {
         <div id="page">
           <Navigation style="rail" />
           <Routes>
-            <Route path="/" element={<Images privateKey={privateKey} />} />
+            <Route
+              path="/"
+              element={user && <Images user={user} privateKey={privateKey} />}
+            />
             <Route path="images">
-              <Route index element={<Images privateKey={privateKey} />} />
+              <Route
+                index
+                element={user && <Images user={user} privateKey={privateKey} />}
+              />
               <Route path=":id" element={<Image />} />
             </Route>
             <Route path="chats" element={<Chats />} />
