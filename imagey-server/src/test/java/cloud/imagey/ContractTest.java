@@ -22,7 +22,10 @@ import static cloud.imagey.ContractTest.TokenState.NO_TOKEN;
 import static cloud.imagey.ContractTest.TokenState.VALID_TOKEN;
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 import static java.net.URI.create;
+import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
+import static java.util.Set.of;
+import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 
 import java.io.File;
@@ -96,10 +99,22 @@ public class ContractTest {
         if (marysCreatedDevice.exists()) {
             forceDelete(marysCreatedDevice);
         }
+        File marysDocuments = new File(marysData, "documents");
+        if (marysDocuments.exists()) {
+            stream(marysDocuments.listFiles())
+                .filter(f -> !of("bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3", "f9910aa7-4db6-4b02-b596-c3ccf872ae98").contains(f.getName()))
+                .forEach(file -> {
+                    try {
+                        forceDelete(file);
+                    } catch (IOException e) {
+                        throw new IllegalStateException(e);
+                    }
+                });
+        }
         tokenState = NO_TOKEN;
     }
 
-    @State("Joe has registration token")
+    @State("Joe is registered")
     void setJoesToken() throws URISyntaxException, IOException {
         initializeDefaultState();
         tokenState = VALID_TOKEN;
@@ -111,6 +126,16 @@ public class ContractTest {
         initializeDefaultState();
         tokenState = INVALID_TOKEN;
         user = new User(new Email("mary@imagey.cloud"));
+    }
+
+    @State("Mary has uploaded document")
+    void maryHasUploadedDocument() throws URISyntaxException, IOException {
+        initializeDefaultState();
+        user = new User(new Email("mary@imagey.cloud"));
+
+        File marysData = new File(rootPath, "mary@imagey.cloud");
+        File marysDocuments = new File(marysData, "documents");
+        copyDirectory(new File(marysData.getParentFile().getParentFile(), "uploaded-data"), marysDocuments);
     }
 
     private Optional<Token> generateToken(HttpRequest request) {

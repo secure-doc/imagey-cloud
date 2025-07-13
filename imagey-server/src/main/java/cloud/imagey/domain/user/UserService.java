@@ -47,11 +47,13 @@ public class UserService {
         new EmailBody("Please click the link to sign in to Imagey: <a href=\"%s\">Sign in</a>"));
 
     @Inject
-    private UserRepository userRepository;
-    @Inject
     private TokenService tokenService;
     @Inject
     private MailService mailService;
+    @Inject
+    private UserRepository userRepository;
+    @Inject
+    private DeviceRepository deviceRepository;
 
     public AuthenticationStatus startAuthenticationProcess(User user) {
         Token token = tokenService.generateToken(user, ONE_DAY);
@@ -71,7 +73,8 @@ public class UserService {
     public void register(UserRegistration registration) throws IOException {
         User user = new User(registration.email());
         userRepository.storePublicKey(user, new Kid("0"), registration.mainPublicKey());
-        userRepository.storeEncryptedPrivateKey(user, registration.deviceId(), registration.encryptedPrivateKey());
+        deviceRepository.storeDevicePublicKey(user, registration.deviceId(), registration.devicePublicKey());
+        deviceRepository.storeEncryptedPrivateKey(user, registration.deviceId(), registration.encryptedPrivateKey());
     }
 
     public enum AuthenticationStatus {

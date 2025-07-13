@@ -1,7 +1,8 @@
 {
-  "alg": "A256CTR",
+  "crv": "P-256",
   "ext": true,
-  "k": "3--L_Xfr9Tmh5l6vI9KEp6qbdrEdq2FhPBVMi9Tkq2c",
-  "key_ops": ["encrypt", "decrypt"],
-  "kty": "oct"
+  "key_ops": [],
+  "kty": "EC",
+  "x": "OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY",
+  "y": "D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM"
 }

@@ -75,7 +75,7 @@ public abstract class AbstractRecordConverter {
         return instantiate(type, parameterTypes, parameters);
     }
 
-    private Object instantiate(Type type, List<?> value) {
+    protected Object instantiate(Type type, List<?> value) {
         if (!(type instanceof ParameterizedType)) {
             throw new IllegalArgumentException("Unsupported type " + type);
         }
@@ -85,10 +85,6 @@ public abstract class AbstractRecordConverter {
             list.add(instantiate(parameterizedType.getActualTypeArguments()[0], object));
         }
         return list;
-    }
-
-    private Object instantiate(Class<?> type, String value) {
-        return instantiate(type, new Class<?>[] {value.getClass()}, new Object[] {value});
     }
 
     protected Object instantiate(Class<?> type, Number value) {
@@ -101,13 +97,21 @@ public abstract class AbstractRecordConverter {
         return instantiate(type, new Class<?>[] {targetType}, new Object[] {convertedValue});
     }
 
-    private Object instantiate(Class<?> type, Boolean value) {
+    protected <T> T instantiate(Class<T> type, String value) {
         return instantiate(type, new Class<?>[] {value.getClass()}, new Object[] {value});
     }
 
-    private Object instantiate(Class<?> type, Class<?>[] parameterTypes, Object[] parameters) {
+    protected <T> T instantiate(Class<T> type, Boolean value) {
+        return instantiate(type, new Class<?>[] {value.getClass()}, new Object[] {value});
+    }
+
+    protected <T> T instantiate(Class<T> type, byte[] value) {
+        return instantiate(type, new Class<?>[] {value.getClass()}, new Object[] {value});
+    }
+
+    protected <T> T instantiate(Class<T> type, Class<?>[] parameterTypes, Object[] parameters) {
         try {
-            Constructor<?> constructor = type.getDeclaredConstructor(parameterTypes);
+            Constructor<T> constructor = type.getDeclaredConstructor(parameterTypes);
             constructor.setAccessible(true);
             return constructor.newInstance(parameters);
         } catch (ReflectiveOperationException e) {

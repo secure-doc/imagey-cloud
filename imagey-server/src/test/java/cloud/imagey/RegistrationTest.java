@@ -16,18 +16,26 @@
  */
 package cloud.imagey;
 
+import static java.lang.Integer.MAX_VALUE;
+import static java.math.BigDecimal.ONE;
+import static java.math.BigDecimal.valueOf;
 import static javax.ws.rs.client.ClientBuilder.newClient;
 import static javax.ws.rs.client.Entity.json;
 import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import static javax.ws.rs.core.Response.Status.FOUND;
+import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Map;
 
 import javax.inject.Inject;
+import javax.ws.rs.core.GenericType;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
@@ -64,7 +72,8 @@ public class RegistrationTest {
     private GreenMailOperations greenMail;
 
     @Test
-    public void register() throws IOException, MessagingException {
+    @DisplayName("Initial Registration results in mail")
+    public void initialRegistration() throws IOException, MessagingException {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
@@ -90,6 +99,60 @@ public class RegistrationTest {
         String tokenValue = token.substring(tokenKey.length() + 1);
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         assertThat(tokenService.verify(new Token(tokenValue), new User(new Email("joe@imagey.cloud")))).isTrue();
+    }
+
+    @Test
+    @DisplayName("Registration is successfull")
+    public void registration() throws IOException, MessagingException {
+        // Given
+        Token token = tokenService.generateToken(new User(new Email("joe@imagey.cloud")), MAX_VALUE);
+
+        // When
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .post(json("""
+                {
+                    "deviceId": "2d9e9f58-2f39-408a-b3d7-e66e6a431b45",
+                    "email": "joe@imagey.cloud",
+                    "encryptedPrivateKey": "<<encrypted private key>>",
+                    "mainPublicKey": {
+                        "main": "public",
+                        "key": 1
+                    },
+                    "devicePublicKey": {
+                        "device": "public",
+                        "key": 2
+                    }
+                }
+            """));
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+
+        // Then
+        Map<String, Object> publicMainKey = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/joe@imagey.cloud/public-keys/0")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .get(new GenericType<Map<String, Object>>() { });
+        assertThat(publicMainKey).contains(entry("main", "public"), entry("key", ONE));
+        Map<String, Object> publicDeviceKey = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/joe@imagey.cloud/devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/public-keys/0")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .get(new GenericType<Map<String, Object>>() { });
+        assertThat(publicDeviceKey).contains(entry("device", "public"), entry("key", valueOf(2)));
+        String encryptedPrivateKey = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/joe@imagey.cloud/devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/private-keys/0")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .accept(MediaType.TEXT_PLAIN)
+            .get(String.class);
+        assertThat(encryptedPrivateKey).isEqualTo("<<encrypted private key>>");
     }
 
     @Test

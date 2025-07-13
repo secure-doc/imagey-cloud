@@ -1,6 +1,7 @@
 import PasswordDialog from "./PasswordDialog";
 import { deviceRepository } from "../device/DeviceRepository";
 import { cryptoService } from "./CryptoService";
+import { authenticationService } from "./AuthenticationService";
 
 interface DeviceSetupDialogProperties {
   email: string;
@@ -9,6 +10,7 @@ interface DeviceSetupDialogProperties {
 }
 
 export default function DeviceSetupDialog({
+  email,
   deviceId,
   onKeyDecrypted,
 }: DeviceSetupDialogProperties) {
@@ -25,7 +27,12 @@ export default function DeviceSetupDialog({
           password,
         )
       }
-      onPasswordValid={(key) => onKeyDecrypted(key)}
+      onPasswordValid={(privateDeviceKey) =>
+        authenticationService
+          .loadPrivateKey(email, deviceId, privateDeviceKey)
+          .then((privateMainKey) => onKeyDecrypted(privateMainKey))
+          .catch((e) => console.log(e))
+      }
     />
   );
 }

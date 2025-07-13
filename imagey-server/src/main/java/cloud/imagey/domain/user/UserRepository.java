@@ -34,7 +34,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.encryption.EncryptedPrivateKey;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.infrastructure.ResourceConflictException;
@@ -105,30 +104,6 @@ public class UserRepository {
             throw new ResourceConflictException(keyFile + " already exists.");
         }
         FileUtils.write(keyFile, publicKey.key(), UTF_8, false);
-    }
-
-    public void createDevicePublicKey(User user, DeviceId deviceId, String key) throws IOException {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
-        if (!keyDirectory.exists()) {
-            keyDirectory.mkdirs();
-        }
-        File keyFile = new File(keyDirectory, "0.json");
-        if (keyFile.exists()) {
-            throw new ResourceConflictException(keyFile + " already exists.");
-        }
-        FileUtils.write(keyFile, key, UTF_8, false);
-    }
-
-    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, EncryptedPrivateKey privateKey) throws IOException {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
-        if (!keyDirectory.exists()) {
-            keyDirectory.mkdirs();
-        }
-        File keyFile = new File(keyDirectory, "0.json");
-        if (keyFile.exists()) {
-            throw new ResourceConflictException(keyFile + " already exists.");
-        }
-        FileUtils.write(keyFile, privateKey.key(), UTF_8, false);
     }
 
     private File getUserHome(User user) {

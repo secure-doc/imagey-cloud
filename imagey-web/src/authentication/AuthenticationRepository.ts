@@ -7,7 +7,7 @@ export const authenticationRepository = {
       {
         method: "GET",
         headers: {
-          "Content-Type": "application/json",
+          Accept: "text/plain",
         },
         credentials: "same-origin",
       },
@@ -36,7 +36,6 @@ export const authenticationRepository = {
     await resolve(response);
   },
   loadPublicKey: async (email: string): Promise<JsonWebKey> => {
-    console.log("load public key");
     const response = await fetch("/users/" + email + "/public-keys/0", {
       method: "GET",
       headers: {
@@ -44,7 +43,6 @@ export const authenticationRepository = {
       },
       credentials: "same-origin",
     });
-    console.log("public key loaded");
     const resolvedResponse = await resolve(response);
     return resolvedResponse.json();
   },
@@ -53,11 +51,11 @@ export const authenticationRepository = {
     deviceId: string,
   ): Promise<JsonWebKey> => {
     const response = await fetch(
-      "/users/" + email + "/public-keys/" + deviceId,
+      "/users/" + email + "/devices/" + deviceId + "/public-keys/0",
       {
         method: "GET",
         headers: {
-          "Content-Type": "application/json",
+          Accept: "application/json",
         },
         credentials: "same-origin",
       },
@@ -86,7 +84,6 @@ export const authenticationRepository = {
 };
 
 async function resolve(response: Response): Promise<Response> {
-  console.log(response.status);
   return response.status >= 200 && response.status <= 300
     ? Promise.resolve(response)
     : response.status === 401
