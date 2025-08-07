@@ -1,7 +1,10 @@
+import { useTranslation } from "react-i18next";
+
 export default function Chats() {
+  const { t } = useTranslation();
   return (
     <main>
-      <p>Chats nicht vorhanden</p>
+      <p>{t("No chats available")}</p>
     </main>
   );
 }

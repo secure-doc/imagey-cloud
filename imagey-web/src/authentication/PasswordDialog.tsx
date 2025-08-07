@@ -9,6 +9,7 @@ import Stack from "@mui/material/Stack";
 import MuiCard from "@mui/material/Card";
 import { styled } from "@mui/material/styles";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: "flex",
@@ -62,6 +63,7 @@ export default function PasswordDialog<R>({
   validatePassword,
   onPasswordValid,
 }: PasswordDialogProperties<R>) {
+  const { t } = useTranslation();
   const [passwordError, setPasswordError] = useState(false);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -99,13 +101,12 @@ export default function PasswordDialog<R>({
           >
             <FormControl>
               <FormLabel htmlFor="password">{message}</FormLabel>
-
               <TextField
                 id="password"
                 type="password"
                 name="password"
                 error={passwordError}
-                helperText={passwordError ? "Wrong password" : ""}
+                helperText={passwordError ? t("Wrong password") : ""}
                 autoFocus
                 required
                 fullWidth

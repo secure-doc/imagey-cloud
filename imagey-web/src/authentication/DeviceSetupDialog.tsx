@@ -2,6 +2,7 @@ import PasswordDialog from "./PasswordDialog";
 import { deviceRepository } from "../device/DeviceRepository";
 import { cryptoService } from "./CryptoService";
 import { authenticationService } from "./AuthenticationService";
+import { useTranslation } from "react-i18next";
 
 interface DeviceSetupDialogProperties {
   email: string;
@@ -14,13 +15,14 @@ export default function DeviceSetupDialog({
   deviceId,
   onKeyDecrypted,
 }: DeviceSetupDialogProperties) {
+  const { t } = useTranslation();
   const encryptedPrivateDeviceKey = deviceRepository.loadKey(deviceId);
   if (!encryptedPrivateDeviceKey) {
-    return <>{"Device key missing, please reregister device"}</>;
+    return <>{t("Device key missing, please reregister device")}</>;
   }
   return (
     <PasswordDialog<JsonWebKey>
-      message={"Input the password for this device"}
+      message={t("Input the password for this device")}
       validatePassword={(password) =>
         cryptoService.decryptPrivatePasswordKey(
           encryptedPrivateDeviceKey,

@@ -1,7 +1,10 @@
+import { useTranslation } from "react-i18next";
+
 export default function Image() {
+  const { t } = useTranslation();
   return (
     <main>
-      <p>Bild nicht gefunden</p>
+      <p>{t("No image found")}</p>
     </main>
   );
 }

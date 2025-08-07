@@ -32,7 +32,7 @@ test("navigate to chats", async ({ page }) => {
     chatsLink.click();
 
     // Then
-    await expect(page.getByText("Chats nicht vorhanden")).toBeVisible();
+    await expect(page.getByText("No chats available")).toBeVisible();
   });
 });
 
@@ -100,7 +100,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
     chatsLink.click();
 
     // Then
-    await expect(page.getByText("Chats nicht vorhanden")).toBeVisible();
+    await expect(page.getByText("No chats available")).toBeVisible();
     const chatsLinks = page.getByText("Chats", { exact: true });
     await expect(chatsLinks).not.toBeVisible();
   });
@@ -124,6 +124,6 @@ test("navigate to image details", async ({ page }) => {
     await inputMarysPassword(page);
 
     // Then
-    await expect(page.getByText(/Bild nicht gefunden/)).toBeVisible();
+    await expect(page.getByText(/No image found/)).toBeVisible();
   });
 });

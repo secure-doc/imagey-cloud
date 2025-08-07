@@ -1,7 +1,8 @@
 import { useState } from "react";
 import "./imagey.css";
-import Navigation from "./components/Navigation";
 import { BrowserRouter, Route, Routes } from "react-router";
+import "./translation/i18n";
+import Navigation from "./components/Navigation";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";

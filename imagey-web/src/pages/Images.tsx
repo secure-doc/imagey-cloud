@@ -3,6 +3,7 @@ import FileChooser from "../components/FileChooser";
 import { useEffect, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
+import { useTranslation } from "react-i18next";
 
 interface ImagesProperties {
   user: string;
@@ -10,6 +11,7 @@ interface ImagesProperties {
 }
 
 export default function Images({ user, privateKey }: ImagesProperties) {
+  const { t } = useTranslation();
   const [selectedFiles, setSelectedFiles] = useState<FileList | undefined>(
     undefined,
   );
@@ -54,9 +56,9 @@ export default function Images({ user, privateKey }: ImagesProperties) {
       <p>
         {" "}
         {!documents
-          ? "Bilder werden geladen"
+          ? t("Loading images")
           : documents.length === 0
-            ? "Keine Bilder vorhanden"
+            ? t("No images found")
             : documents.map((document) => {
                 const content = document.content;
                 if (content) {
@@ -71,7 +73,11 @@ export default function Images({ user, privateKey }: ImagesProperties) {
                     />
                   );
                 } else {
-                  return <span>Error loading {document.name}</span>;
+                  return (
+                    <span>
+                      {t("Error loading {{name}}", { name: document.name })}
+                    </span>
+                  );
                 }
               })}
       </p>

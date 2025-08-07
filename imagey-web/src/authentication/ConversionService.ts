@@ -9,7 +9,7 @@ export function hex2buf(hex: string): ArrayBuffer {
   for (let i = 0; i < hex.length; i += 2) {
     bytes.push(Number.parseInt(hex.slice(i, i + 2), 16));
   }
-  return new Uint8Array(bytes);
+  return new Uint8Array(bytes).buffer;
 }
 
 export function text2buf(text: string): ArrayBuffer {
@@ -38,7 +38,7 @@ export function text2buf(text: string): ArrayBuffer {
       );
     }
   }
-  return new Uint8Array(utf8);
+  return new Uint8Array(utf8).buffer;
 }
 
 export function buf2text(buffer: ArrayBuffer): string {

@@ -1,8 +1,10 @@
 import { NavLink } from "react-router";
 import ChatIcon from "../icons/ChatIcon";
 import ImageIcon from "../icons/ImageIcon";
+import { useTranslation } from "react-i18next";
 
 export default function Navigation({ style }: { style: "rail" | "drawer" }) {
+  const { t } = useTranslation();
   return (
     <nav className={style}>
       <ul>
@@ -12,7 +14,7 @@ export default function Navigation({ style }: { style: "rail" | "drawer" }) {
             className={({ isActive }) => (isActive ? "active" : "icon")}
           >
             <ImageIcon />
-            Bilder
+            {t("Images")}
           </NavLink>
         </li>
         <li>
@@ -21,7 +23,7 @@ export default function Navigation({ style }: { style: "rail" | "drawer" }) {
             className={({ isActive }) => (isActive ? "active" : "icon")}
           >
             <ChatIcon />
-            Chats
+            {t("Chats")}
           </NavLink>
         </li>
       </ul>

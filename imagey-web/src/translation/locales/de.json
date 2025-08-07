@@ -1,0 +1,20 @@
+{
+  "Loading public key": "Öffentlicher Schlüssel wird geladen",
+  "Uknown Authentication Error": "Unbekannter Authentifizierungsfehler",
+  "Registration Mail with verification link was sent": "Registrierungsmail mit Verifizierungslink wurde versendet",
+  "Mail with login link was sent": "Mail mit Login-Link wurde versendet",
+  "Authentication in progress": "Authentifizierung wird durchgeführt",
+  "Select a password for this device": "Password für dieses Gerät wählen",
+  "Device registered, you can now activate it with another device": "Dieses Gerät ist jetzt registriert. Es kann nun mit einem anderen Gerät freigeschaltet werden.",
+  "Device key missing, please reregister device": "Der Geräteschlüssel konnte nicht gefunden werden. Das Gerät muss neu registriert werden.",
+  "Input the password for this device": "Password für dieses Gerät eingeben",
+  "Please enter a valid email address": "Gültige E-Mail-Adresse eingeben",
+  "Wrong password": "Falsches Password",
+  "No chats available": "Keine Chats vorhanden",
+  "No image found": "Bild nicht vorhanden",
+  "Loading images": "Bilder werden geladen",
+  "No images found": "Keine Bilder gefunden",
+  "Error loading {{name}}": "Fehler beim Laden von {{name}}",
+  "Images": "Bilder",
+  "Chats": "Chats"
+}

@@ -3,6 +3,7 @@ import {
   authenticationService,
   RegistrationResult,
 } from "./AuthenticationService";
+import { useTranslation } from "react-i18next";
 
 interface AuthenticationDialogProperties {
   email: string;
@@ -11,6 +12,7 @@ interface AuthenticationDialogProperties {
 export default function AuthenticationDialog({
   email,
 }: AuthenticationDialogProperties) {
+  const { t } = useTranslation();
   const [registrationResult, setRegistrationResult] =
     useState<RegistrationResult>();
   useEffect(() => {
@@ -20,12 +22,12 @@ export default function AuthenticationDialog({
   });
   switch (registrationResult) {
     case RegistrationResult.RegistrationStarted: {
-      return <>{"Registration Mail with verification link was sent"}</>;
+      return <>{t("Registration Mail with verification link was sent")}</>;
     }
     case RegistrationResult.AuthenticationStarted: {
-      return <>{"Mail with login link was sent"}</>;
+      return <>{t("Mail with login link was sent")}</>;
     }
     default:
-      return <>{"Authentication in progress"}</>;
+      return <>{t("Authentication in progress")}</>;
   }
 }
