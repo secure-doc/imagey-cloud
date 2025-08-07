@@ -332,9 +332,10 @@ export async function prepareDocumentUpload() {
 }
 
 export async function setupMarysDevice(page: Page) {
-  await page.evaluate(() =>
-    localStorage.setItem("imagey.user", "mary@imagey.cloud"),
-  );
+  await page.evaluate(() => {
+    localStorage.setItem("i18nextLng", "en");
+    localStorage.setItem("imagey.user", "mary@imagey.cloud");
+  });
   await page.evaluate(
     (deviceId) =>
       localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),

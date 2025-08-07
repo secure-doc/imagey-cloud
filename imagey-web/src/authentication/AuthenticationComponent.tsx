@@ -8,6 +8,7 @@ import RegistrationDialog from "./RegistrationDialog";
 import AuthenticationDialog from "./AuthenticationDialog";
 import DeviceSetupDialog from "./DeviceSetupDialog";
 import DeviceRegistrationDialog from "./DeviceRegistrationDialog";
+import { useTranslation } from "react-i18next";
 
 interface AuthenticationComponentProperties {
   onKeyDecrypted: (
@@ -20,6 +21,7 @@ interface AuthenticationComponentProperties {
 export default function AuthenticationComponent({
   onKeyDecrypted,
 }: AuthenticationComponentProperties) {
+  const { t } = useTranslation();
   const [authenticationStatus, setAuthenticationStatus] = useState(
     AuthenticationStatus.IN_PROGRESS,
   );
@@ -89,9 +91,9 @@ export default function AuthenticationComponent({
           />
         );
       } else {
-        return <>{"Loading public key"}</>;
+        return <>{t("Loading public key")}</>;
       }
     default:
-      return <>{"Uknown Authentication Error"}</>;
+      return <>{t("Uknown Authentication Error")}</>;
   }
 }

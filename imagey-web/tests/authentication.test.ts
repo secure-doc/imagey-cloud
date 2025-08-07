@@ -247,7 +247,7 @@ test("new user clicks registration link", async ({ page }) => {
     page.getByText("OK").click();
 
     // Then
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByText(/No images found/)).toBeVisible();
   });
 });
 
@@ -481,6 +481,6 @@ test.skip("login with lost private key", async ({ page }) => {
     await expect(newPasswordInput).toBeVisible();
     newPasswordInput.fill("MarysPassword123");
     page.getByText("OK").click();
-    await expect(page.getByText(/Keine Bilder vorhanden/)).toBeVisible();
+    await expect(page.getByText(/No images found/)).toBeVisible();
   });
 });

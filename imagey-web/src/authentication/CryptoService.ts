@@ -219,7 +219,7 @@ async function encryptWithPassword(secretData: string, password: string) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const passwordKey = await getPasswordKey(password);
-  const aesKey = await derivePasswordKey(passwordKey, salt, ["encrypt"]);
+  const aesKey = await derivePasswordKey(passwordKey, salt.buffer, ["encrypt"]);
   const encryptedContent = await window.crypto.subtle.encrypt(
     {
       name: "AES-GCM",
@@ -236,7 +236,7 @@ async function encryptWithPassword(secretData: string, password: string) {
   buffer.set(salt, 0);
   buffer.set(iv, salt.byteLength);
   buffer.set(encryptedContentArr, salt.byteLength + iv.byteLength);
-  return buf2hex(buffer);
+  return buf2hex(buffer.buffer);
 }
 
 async function decryptWithPassword(encryptedData: string, password: string) {
