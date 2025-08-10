@@ -16,5 +16,8 @@
   "No images found": "Keine Bilder gefunden",
   "Error loading {{name}}": "Fehler beim Laden von {{name}}",
   "Images": "Bilder",
-  "Chats": "Chats"
+  "Chats": "Chats",
+  "Email": "Email",
+  "Confirm": "Bestätigen",
+  "Cancel": "Abbrechen"
 }

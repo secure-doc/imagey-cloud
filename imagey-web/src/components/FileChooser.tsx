@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import AddIcon from "../icons/AddIcon";
 
 export default function FileChooser({
   multiple,
@@ -10,12 +9,12 @@ export default function FileChooser({
 }) {
   const fileChooser = useRef<HTMLInputElement>(null);
   return (
-    <a
+    <button
       aria-label="add-image"
-      className="icon"
+      className="circle transparent"
       onClick={() => fileChooser.current?.click()}
     >
-      <AddIcon key={"add-icon"} />
+      <i>add</i>
       <input
         multiple={multiple ?? false}
         ref={fileChooser}
@@ -29,6 +28,6 @@ export default function FileChooser({
           onFilesSelected(fileChooser.current.files)
         }
       />
-    </a>
+    </button>
   );
 }

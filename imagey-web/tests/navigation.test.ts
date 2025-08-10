@@ -1,4 +1,4 @@
-import test, { expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   inputMarysPassword,
@@ -27,7 +27,7 @@ test("navigate to chats", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    const chatsLink = page.getByText("Chats");
+    const chatsLink = page.getByRole("link", { name: "Chats" });
     await expect(chatsLink).toBeVisible();
     chatsLink.click();
 
@@ -59,16 +59,14 @@ test("open and close navigation drawer on mobile resolution", async ({
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
     menuButton.click();
-    const chatsLink = page
-      .getByText("Chats", { exact: true })
-      .locator("visible=true");
-    await expect(chatsLink).toBeVisible();
+    const chatsLink = page.getByRole("link", { name: "Chats" });
+    await expect(chatsLink).toHaveCount(2);
 
     // When
-    menuButton.click();
+    await page.getByRole("banner").click({ position: { x: 411, y: 457 } });
 
     // Then
-    await expect(chatsLink).toHaveCount(0);
+    await expect(chatsLink).toHaveCount(1);
   });
 });
 
@@ -93,16 +91,15 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
     menuButton.click();
-    const chatsLink = page
-      .getByText("Chats", { exact: true })
-      .locator("visible=true");
-    await expect(chatsLink).toBeVisible();
-    chatsLink.click();
+    const chatsLink = page.getByRole("link", { name: "Chats" });
+    await expect(chatsLink).toHaveCount(2);
+    chatsLink.first().click();
 
     // Then
     await expect(page.getByText("No chats available")).toBeVisible();
-    const chatsLinks = page.getByText("Chats", { exact: true });
-    await expect(chatsLinks).not.toBeVisible();
+    const chatsLinks = page.getByRole("link", { name: "Chats" });
+
+    await expect(chatsLinks).toHaveCount(1);
   });
 });
 

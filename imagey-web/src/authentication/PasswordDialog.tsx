@@ -1,16 +1,7 @@
-import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
-import CssBaseline from "@mui/material/CssBaseline";
-import FormLabel from "@mui/material/FormLabel";
-import FormControl from "@mui/material/FormControl";
-import TextField from "@mui/material/TextField";
-import Typography from "@mui/material/Typography";
-import Stack from "@mui/material/Stack";
-import MuiCard from "@mui/material/Card";
-import { styled } from "@mui/material/styles";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+/*
 const Card = styled(MuiCard)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
@@ -51,7 +42,7 @@ const SignInContainer = styled(Stack)(({ theme }) => ({
     }),
   },
 }));
-
+*/
 interface PasswordDialogProperties<R> {
   message: string;
   validatePassword: (password: string) => Promise<R>;
@@ -77,50 +68,23 @@ export default function PasswordDialog<R>({
   };
 
   return (
-    <>
-      <CssBaseline enableColorScheme />
-      <SignInContainer direction="column" justifyContent="space-between">
-        <Card variant="outlined">
-          <Typography
-            component="h1"
-            variant="h4"
-            sx={{ width: "100%", fontSize: "clamp(2rem, 10vw, 2.15rem)" }}
-          >
-            Imagey
-          </Typography>
-          <Box
-            component="form"
-            onSubmit={handleSubmit}
-            noValidate
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              width: "100%",
-              gap: 2,
-            }}
-          >
-            <FormControl>
-              <FormLabel htmlFor="password">{message}</FormLabel>
-              <TextField
-                id="password"
-                type="password"
-                name="password"
-                error={passwordError}
-                helperText={passwordError ? t("Wrong password") : ""}
-                autoFocus
-                required
-                fullWidth
-                variant="outlined"
-                color={passwordError ? "error" : "primary"}
-                sx={{ ariaLabel: "password" }}
-              />
-            </FormControl>
-            <Button type="submit" fullWidth variant="contained">
-              OK
-            </Button>
-          </Box>
-        </Card>
-      </SignInContainer>
-    </>
+    <dialog className="surface-bright" open>
+      <h5 className="primary-text">{message}</h5>
+      <form onSubmit={handleSubmit}>
+        <div className={`field label border ${passwordError ? "invalid" : ""}`}>
+          <input id="password" name="password" type="password" />
+          <label htmlFor="password">{t("Password")}</label>
+          <span className="error">
+            {passwordError ? t("Wrong password") : ""}
+          </span>
+        </div>
+        <nav className="right-align no-space">
+          <button className="transparent link">{t("Cancel")}</button>
+          <button className="transparent link" type="submit">
+            {t("Confirm")}
+          </button>
+        </nav>
+      </form>
+    </dialog>
   );
 }

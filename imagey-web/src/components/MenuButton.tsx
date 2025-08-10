@@ -1,28 +1,33 @@
-import { Button } from "@mui/material";
-import MenuIcon from "../icons/MenuIcon";
 import { useEffect, useState } from "react";
-import Navigation from "./Navigation";
 import { useLocation } from "react-router";
+import Navigation from "./Navigation";
 
 export default function MenuButton() {
   const location = useLocation();
-  const [navigationDrawerVisible, setNavigationDrawerVisible] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  useEffect(() => {
-    // hide navigation drawer on page change
-    setNavigationDrawerVisible(false);
-  }, [location]);
+  useEffect(() => setDialogOpen(false), [location]);
 
   return (
     <>
-      <Button
+      <button
         aria-label="main-menu"
-        className={"menu"}
-        onClick={() => setNavigationDrawerVisible((visible) => !visible)}
+        className="circle transparent s"
+        onClick={() => setDialogOpen(true)}
       >
-        <MenuIcon />
-      </Button>
-      {navigationDrawerVisible && <Navigation style="drawer" />}
+        <i>menu</i>
+      </button>
+      {dialogOpen && (
+        <div
+          className="overlay active"
+          onClick={() => setDialogOpen(false)}
+        ></div>
+      )}
+      {dialogOpen && (
+        <dialog className="left" open>
+          <Navigation className="left max" />
+        </dialog>
+      )}
     </>
   );
 }
