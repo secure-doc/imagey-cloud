@@ -352,10 +352,10 @@ export async function inputMarysPassword(page: Page) {
   const passwordInput = page.getByLabel("password");
   await expect(passwordInput).toBeVisible();
   passwordInput.fill(marysPassword);
-  const okButton = page.getByText("OK");
-  await expect(okButton).toBeVisible();
-  okButton.click();
-  await expect(okButton).not.toBeVisible();
+  const confirmButton = page.getByText("Confirm");
+  await expect(confirmButton).toBeVisible();
+  confirmButton.click();
+  await expect(confirmButton).not.toBeVisible();
 }
 
 export const marysEmail = "mary@imagey.cloud";

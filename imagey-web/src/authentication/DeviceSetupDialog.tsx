@@ -18,7 +18,11 @@ export default function DeviceSetupDialog({
   const { t } = useTranslation();
   const encryptedPrivateDeviceKey = deviceRepository.loadKey(deviceId);
   if (!encryptedPrivateDeviceKey) {
-    return <>{t("Device key missing, please reregister device")}</>;
+    return (
+      <dialog className="surface-bright" open>
+        {t("Device key missing, please reregister device")}
+      </dialog>
+    );
   }
   return (
     <PasswordDialog<JsonWebKey>

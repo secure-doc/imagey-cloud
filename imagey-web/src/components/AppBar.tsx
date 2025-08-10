@@ -6,10 +6,12 @@ export default function AppBar() {
   const { actionIcons } = useContext(ActionBarContext);
 
   return (
-    <header>
-      <MenuButton />
-      <h1>Imagey</h1>
-      <div className="action-bar">{actionIcons}</div>
+    <header className="primary-container">
+      <nav>
+        <MenuButton />
+        <h6 className="center-align max">Imagey</h6>
+        {actionIcons}
+      </nav>
     </header>
   );
 }

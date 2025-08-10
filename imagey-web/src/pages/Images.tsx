@@ -53,8 +53,7 @@ export default function Images({ user, privateKey }: ImagesProperties) {
   }, [user, selectedFiles, privateKey]);
   return (
     <main>
-      <p>
-        {" "}
+      <div className="column scroll">
         {!documents
           ? t("Loading images")
           : documents.length === 0
@@ -70,17 +69,18 @@ export default function Images({ user, privateKey }: ImagesProperties) {
                       src={url}
                       alt={document.name}
                       loading="lazy"
+                      className="small-width small-height"
                     />
                   );
                 } else {
                   return (
-                    <span>
+                    <div className="small-width small-height">
                       {t("Error loading {{name}}", { name: document.name })}
-                    </span>
+                    </div>
                   );
                 }
               })}
-      </p>
+      </div>
     </main>
   );
 }

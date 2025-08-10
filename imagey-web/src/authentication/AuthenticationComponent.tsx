@@ -91,9 +91,17 @@ export default function AuthenticationComponent({
           />
         );
       } else {
-        return <>{t("Loading public key")}</>;
+        return (
+          <dialog className="surface-bright" open>
+            {t("Loading public key")}
+          </dialog>
+        );
       }
     default:
-      return <>{t("Uknown Authentication Error")}</>;
+      return (
+        <dialog className="surface-bright" open>
+          {t("Uknown Authentication Error")}
+        </dialog>
+      );
   }
 }

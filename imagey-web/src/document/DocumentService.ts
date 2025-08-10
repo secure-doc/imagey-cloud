@@ -80,17 +80,25 @@ export const documentService = {
       metadata.documentId,
     );
     const publicKey = await authenticationRepository.loadPublicKey(user);
-    const decryptedDocumentKey = await cryptoService.decryptKey(
-      encryptedDocumentKey,
-      publicKey,
-      privateKey,
-    );
-    const decryptedContent = await cryptoService.decryptDocument(
-      decryptedDocumentKey,
-      encryptedContent,
-    );
+    try {
+      const decryptedDocumentKey = await cryptoService.decryptKey(
+        encryptedDocumentKey,
+        publicKey,
+        privateKey,
+      );
+      const decryptedContent = await cryptoService.decryptDocument(
+        decryptedDocumentKey,
+        encryptedContent,
+      );
+      return {
+        content: decryptedContent,
+        documentId: metadata.documentId,
+        name: metadata.name,
+      };
+    } catch (e) {
+      console.error(e);
+    }
     return {
-      content: decryptedContent,
       documentId: metadata.documentId,
       name: metadata.name,
     };

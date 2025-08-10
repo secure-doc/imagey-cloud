@@ -1,4 +1,4 @@
-import test, { expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   inputMarysPassword,
@@ -29,7 +29,7 @@ test("new user enters wrong email", async ({ page }) => {
   const emailInput = page.getByPlaceholder("email@imagey.cloud");
   await expect(emailInput).toBeVisible();
   emailInput.fill("joe(at)imagey.cloud");
-  page.getByText("OK").click();
+  page.getByText("Confirm").click();
 
   // Then
   await expect(
@@ -70,7 +70,7 @@ test("new user visits page", async ({ page }) => {
     await expect(emailInput).toBeVisible();
 
     emailInput.fill("joe@imagey.cloud");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByText(/verification link/)).toBeVisible();
@@ -109,7 +109,7 @@ test("existing user visits page with new device", async ({ page }) => {
     await expect(emailInput).toBeVisible();
 
     emailInput.fill("mary@imagey.cloud");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByText(/login link/)).toBeVisible();
@@ -162,7 +162,7 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
     await expect(emailInput).toBeVisible();
 
     emailInput.fill("mary@imagey.cloud");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByText(/login link/)).toBeVisible();
@@ -244,7 +244,7 @@ test("new user clicks registration link", async ({ page }) => {
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
     passwordInput.fill(marysPassword);
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByText(/No images found/)).toBeVisible();
@@ -300,7 +300,7 @@ test("existing user clicks login link for new device", async ({ page }) => {
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
     passwordInput.fill(marysPassword);
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(
@@ -348,7 +348,7 @@ test("visit page on existing device", async ({ page }) => {
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
     passwordInput.fill("MarysPassword123");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
@@ -384,7 +384,7 @@ test("visit page on existing device with wrong password", async ({ page }) => {
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
     passwordInput.fill("wrongPassword");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByText(/Wrong password/)).toBeVisible();
@@ -405,7 +405,7 @@ test("login with missing email", async ({ page }) => {
     await expect(emailInput).toBeVisible();
 
     emailInput.fill("mary@imagey.cloud");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     await inputMarysPassword(page);
 
@@ -475,12 +475,12 @@ test.skip("login with lost private key", async ({ page }) => {
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
     passwordInput.fill("MarysPassword123");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
 
     const newPasswordInput = page.getByLabel(/Private key missing/);
     await expect(newPasswordInput).toBeVisible();
     newPasswordInput.fill("MarysPassword123");
-    page.getByText("OK").click();
+    page.getByText("Confirm").click();
     await expect(page.getByText(/No images found/)).toBeVisible();
   });
 });

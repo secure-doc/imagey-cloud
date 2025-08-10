@@ -21,13 +21,25 @@ export default function AuthenticationDialog({
       .then((registrationResult) => setRegistrationResult(registrationResult));
   });
   switch (registrationResult) {
-    case RegistrationResult.RegistrationStarted: {
-      return <>{t("Registration Mail with verification link was sent")}</>;
-    }
-    case RegistrationResult.AuthenticationStarted: {
-      return <>{t("Mail with login link was sent")}</>;
-    }
+    case RegistrationResult.RegistrationStarted:
+      return (
+        <dialog className="surface-bright" open>
+          {t("Registration Mail with verification link was sent")}
+        </dialog>
+      );
+
+    case RegistrationResult.AuthenticationStarted:
+      return (
+        <dialog className="surface-bright" open>
+          {t("Mail with login link was sent")}
+        </dialog>
+      );
+
     default:
-      return <>{t("Authentication in progress")}</>;
+      return (
+        <dialog className="surface-bright" open>
+          {t("Authentication in progress")}
+        </dialog>
+      );
   }
 }

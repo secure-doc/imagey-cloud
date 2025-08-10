@@ -1,14 +1,15 @@
-import { useState } from "react";
-import "./imagey.css";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { useEffect, useState } from "react";
 import "./translation/i18n";
+import "beercss";
+import "material-dynamic-colors";
+import AuthenticationComponent from "./authentication/AuthenticationComponent";
+import { ActionBarContextProvider } from "./contexts/ActionBarContext";
+import { BrowserRouter, Route, Routes } from "react-router";
 import Navigation from "./components/Navigation";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
-import { ActionBarContextProvider } from "./contexts/ActionBarContext";
 import AppBar from "./components/AppBar";
-import AuthenticationComponent from "./authentication/AuthenticationComponent";
 
 function App() {
   /*
@@ -36,6 +37,9 @@ function App() {
   */
   const [privateKey, setPrivateKey] = useState<JsonWebKey>();
   const [user, setUser] = useState<string>();
+  useEffect(() => {
+    ui("theme", "#1176f3");
+  }, []);
   if (!privateKey) {
     return (
       <AuthenticationComponent
@@ -51,24 +55,24 @@ function App() {
     <ActionBarContextProvider>
       <BrowserRouter>
         <AppBar />
-        <div id="page">
-          <Navigation style="rail" />
-          <Routes>
+        <Navigation className="left max l" />
+        <Navigation className="left m" />
+        <Routes>
+          <Route
+            path="/"
+            element={user && <Images user={user} privateKey={privateKey} />}
+          />
+          <Route path="images">
             <Route
-              path="/"
+              index
               element={user && <Images user={user} privateKey={privateKey} />}
             />
-            <Route path="images">
-              <Route
-                index
-                element={user && <Images user={user} privateKey={privateKey} />}
-              />
-              <Route path=":id" element={<Image />} />
-            </Route>
-            <Route path="chats" element={<Chats />} />
-          </Routes>
-          <aside></aside>
-        </div>
+            <Route path=":id" element={<Image />} />
+          </Route>
+          <Route path="chats" element={<Chats />} />
+        </Routes>
+        <aside></aside>
+        <Navigation className="bottom s" />
       </BrowserRouter>
     </ActionBarContextProvider>
   );

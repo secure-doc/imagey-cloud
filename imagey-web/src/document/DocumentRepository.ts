@@ -6,7 +6,7 @@ export const documentRepository = {
     metadata: DocumentMetadata,
     content: ArrayBuffer[],
   ) => {
-    const response = await fetch(
+    let response = await fetch(
       "/users/" +
         email +
         "/documents/" +
@@ -22,11 +22,8 @@ export const documentRepository = {
         body: content[0],
       },
     );
-    if (response.status >= 400) {
-      return Promise.reject();
-    }
-    if (metadata.smallImageId) {
-      const response = await fetch(
+    if (response.status < 400 && metadata.smallImageId) {
+      response = await fetch(
         "/users/" +
           email +
           "/documents/" +
@@ -42,12 +39,9 @@ export const documentRepository = {
           body: content[1],
         },
       );
-      if (response.status >= 400) {
-        return Promise.reject();
-      }
     }
-    if (metadata.previewImageId) {
-      const response = await fetch(
+    if (response.status < 400 && metadata.previewImageId) {
+      response = await fetch(
         "/users/" +
           email +
           "/documents/" +
@@ -63,10 +57,8 @@ export const documentRepository = {
           body: content[2],
         },
       );
-      if (response.status >= 400) {
-        return Promise.reject();
-      }
     }
+    return resolve(response, () => Promise.resolve());
   },
 
   loadDocuments: async (email: string): Promise<DocumentMetadata[]> => {
@@ -77,10 +69,7 @@ export const documentRepository = {
       },
       credentials: "same-origin",
     });
-    if (response.status >= 400) {
-      return Promise.reject();
-    }
-    return response.json();
+    return resolve(response, () => response.json());
   },
 
   loadKey: async (email: string, documentId: string): Promise<string> => {
@@ -99,10 +88,7 @@ export const documentRepository = {
         credentials: "same-origin",
       },
     );
-    if (response.status >= 400) {
-      return Promise.reject();
-    }
-    return response.text();
+    return resolve(response, () => response.text());
   },
   storeKey: async (email: string, documentId: string, key: string) => {
     const response = await fetch(
@@ -121,9 +107,7 @@ export const documentRepository = {
         body: key,
       },
     );
-    if (response.status >= 400) {
-      return Promise.reject();
-    }
+    return resolve(response, () => Promise.resolve());
   },
   loadContent: async (
     email: string,
@@ -140,9 +124,16 @@ export const documentRepository = {
         credentials: "same-origin",
       },
     );
-    if (response.status >= 400) {
-      return Promise.reject();
-    }
-    return response.arrayBuffer();
+    return resolve(response, () => response.arrayBuffer());
   },
 };
+
+async function resolve<T>(
+  response: Response,
+  result: () => Promise<T>,
+): Promise<T> {
+  if (response.status >= 400) {
+    return Promise.reject();
+  }
+  return result();
+}
