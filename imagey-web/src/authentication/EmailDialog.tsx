@@ -39,9 +39,10 @@ export default function EmailDialog({
 
   return (
     <dialog className="surface-bright" open>
-      <h5 className="primary-text">Default</h5>
+      <h5 className="primary-text">{t("Email")}</h5>
       <form onSubmit={handleSubmit}>
-        <div className={`field label border ${emailError ? "invalid" : ""}`}>
+        {t("Bitte geben Sie ihre Email ein, um Imagey nutzen zu können.")}
+        <div className={`field border ${emailError ? "invalid" : ""}`}>
           <input
             id="email"
             name="email"
@@ -49,7 +50,6 @@ export default function EmailDialog({
             placeholder="email@imagey.cloud"
             onChange={validateInputs}
           />
-          <label htmlFor="email">{t("Email")}</label>
           <span className="error">{emailErrorMessage}</span>
         </div>
         <nav className="right-align no-space">
