@@ -210,7 +210,7 @@ export async function prepareMarysDocuments() {
     });
 }
 
-export async function prepareDocumentUpload() {
+export async function prepareDocumentUpload(documentName: string) {
   provider
     .given("default")
     .uponReceiving("a request of mary to get public key")
@@ -263,7 +263,7 @@ export async function prepareDocumentUpload() {
         documentId: MatchersV3.string(marysUploadedDocumentId),
         previewImageId: MatchersV3.string(marysUploadedDocumentId),
         smallImageId: MatchersV3.string(marysUploadedDocumentId),
-        name: marysUploadedDocumentName,
+        name: documentName,
         size: MatchersV3.number(8000),
         type: "image/jpeg",
       },
@@ -328,6 +328,24 @@ export async function prepareDocumentUpload() {
       },
       contentType: "text/plain",
       body: "8349905db928f7aef27470a6995a83c1bcd99986c44d5652f791f6475853ac8fa242d7851fdd9e868acafd5b7c258527e6cbea614a6073a290ee59a53235927323556f9d994a27568ae0de859ab42fc9291caa88272c83f2e5728b09628d61e9fd4458be3d2e0cf0a9ff13d1848c60ed5056cab9d1c97d6faff5",
+    });
+}
+
+export async function prepareMarysDevices() {
+  provider
+    .given("default")
+    .uponReceiving("a request of mary to get devices")
+    .withRequest({
+      method: "GET",
+      path: "/users/mary@imagey.cloud/devices",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+    .willRespondWith({
+      status: 200,
+      contentType: "application/json",
+      body: [marysDeviceId],
     });
 }
 
@@ -403,5 +421,6 @@ export const marysPrivateMainKey = {
 };
 export const marysUploadedDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 export const marysUploadedDocumentName = "child-355176_1920.jpg";
+export const marysSmallImageName = "beach-4524911_480.jpg";
 export const joesToken =
   "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2ltYWdleS5jbG91ZCIsInN1YiI6ImpvZUBpbWFnZXkuY2xvdWQiLCJleHAiOi05MjIzMzcwMzA1NjkxNjk4fQ._O3_-Z5ivyd-gr7FOG459m2OGpooHTVFOv0Q0jWEDoc";

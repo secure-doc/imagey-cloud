@@ -28,32 +28,6 @@ export const deviceService = {
     // TODO, this is wrong, device has to be activated by another device
     return device.privateKey;
   },
-  setupDevice: async (
-    email: string,
-    deviceId: string,
-    devicePassword: string,
-  ) => {
-    const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
-      email,
-      deviceId,
-    );
-    const encryptedDeviceKey = deviceRepository.loadKey(deviceId);
-    if (encryptedDeviceKey) {
-      const privateDeviceKey = await cryptoService.decryptPrivatePasswordKey(
-        encryptedDeviceKey,
-        devicePassword,
-      );
-      const encryptedPrivateMasterKey =
-        await authenticationRepository.loadPrivateKey(email, deviceId);
-      return cryptoService.decryptKey(
-        encryptedPrivateMasterKey,
-        publicDeviceKey,
-        privateDeviceKey,
-      );
-    } else {
-      return Promise.reject("Private Key missing");
-    }
-  },
 };
 
 function generateDeviceId(email: string): string {

@@ -20,6 +20,7 @@ import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.MediaType.TEXT_PLAIN;
 
 import java.io.IOException;
+import java.util.List;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
@@ -49,6 +50,12 @@ public class DeviceResource {
 
     @Inject
     private DeviceRepository deviceRepository;
+
+    @GET
+    @Produces(APPLICATION_JSON)
+    public List<DeviceId> getDevices(@PathParam("email") User user) {
+        return deviceRepository.loadDevices(user);
+    }
 
     @POST
     @Path("{deviceId}/public-keys")

@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.user;
 
+import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static org.apache.commons.io.FileUtils.readFileToString;
@@ -23,6 +24,7 @@ import static org.apache.commons.io.FileUtils.readFileToString;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.Optional;
 
 import javax.enterprise.context.ApplicationScoped;
@@ -47,6 +49,11 @@ public class DeviceRepository {
     @Inject
     @ConfigProperty(name = "root.path")
     private String rootPath;
+
+    public List<DeviceId> loadDevices(User user) {
+        File devicesDirectory = new File(getUserHome(user), "devices");
+        return stream(devicesDirectory.list()).sorted().map(DeviceId::new).toList();
+    }
 
     public Optional<String> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
