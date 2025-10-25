@@ -5,6 +5,7 @@
   "Confirm": "Confirm",
   "Device key missing, please reregister device": "Device key missing, please reregister device",
   "Device registered, you can now activate it with another device": "Device registered, you can now activate it with another device",
+  "Devices": "Devices",
   "Email": "Email",
   "Error loading {{name}}": "Error loading {{name}}",
   "Images": "Images",
@@ -19,6 +20,7 @@
   "Please enter your email to use Imagey.": "Please enter your email to use Imagey.",
   "Registration Mail with verification link was sent": "Registration Mail with verification link was sent",
   "Select a password for this device": "Select a password for this device",
+  "Settings": "Settings",
   "Uknown Authentication Error": "Uknown Authentication Error",
   "Wrong password": "Wrong password"
 }

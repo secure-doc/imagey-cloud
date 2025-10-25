@@ -38,6 +38,7 @@ export default function AuthenticationComponent({
         .then((publicKey) => {
           setPublicKey(publicKey);
           setAuthenticationStatus(AuthenticationStatus.AUTHENTICATED);
+          deviceRepository.storeUser(email);
           setDeviceId(deviceRepository.loadDeviceId(email));
         })
         .catch((error) => {

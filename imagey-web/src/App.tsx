@@ -10,6 +10,8 @@ import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
 import AppBar from "./components/AppBar";
+import Settings from "./pages/Settings";
+import Devices from "./pages/Devices";
 
 function App() {
   /*
@@ -70,6 +72,10 @@ function App() {
             <Route path=":id" element={<Image />} />
           </Route>
           <Route path="chats" element={<Chats />} />
+          <Route path="settings">
+            <Route index element={<Settings />} />
+            <Route path="devices" element={user && <Devices user={user} />} />
+          </Route>
         </Routes>
         <aside></aside>
         <Navigation className="bottom s" />

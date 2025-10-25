@@ -5,6 +5,7 @@
   "Confirm": "Bestätigen",
   "Device key missing, please reregister device": "Der Geräteschlüssel konnte nicht gefunden werden. Das Gerät muss neu registriert werden.",
   "Device registered, you can now activate it with another device": "Dieses Gerät ist jetzt registriert. Es kann nun mit einem anderen Gerät freigeschaltet werden.",
+  "Devices": "Geräte",
   "Email": "Email",
   "Error loading {{name}}": "Fehler beim Laden von {{name}}",
   "Images": "Bilder",
@@ -19,6 +20,7 @@
   "Please enter your email to use Imagey.": "Bitte geben Sie ihre Email ein, um Imagey nutzen zu können.",
   "Registration Mail with verification link was sent": "Registrierungsmail mit Verifizierungslink wurde versendet",
   "Select a password for this device": "Password für dieses Gerät wählen",
+  "Settings": "Einstellungen",
   "Uknown Authentication Error": "Unbekannter Authentifizierungsfehler",
   "Wrong password": "Falsches Password"
 }

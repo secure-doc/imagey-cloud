@@ -1,6 +1,17 @@
 import { ResponseError } from "./ResponseError";
 
 export const authenticationRepository = {
+  findDevices: async (email: string): Promise<string[]> => {
+    const response = await fetch("/users/" + email + "/devices", {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+    });
+    const resolvedResponse = await resolve(response);
+    return resolvedResponse.json();
+  },
   loadPrivateKey: async (email: string, deviceId: string): Promise<string> => {
     const response = await fetch(
       "/users/" + email + "/devices/" + deviceId + "/private-keys/0",

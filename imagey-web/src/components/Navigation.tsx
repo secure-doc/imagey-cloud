@@ -17,6 +17,18 @@ export default function Navigation({ className }: { className?: string }) {
         <i>chat</i>
         <div>{t("Chats")}</div>
       </NavLink>
+      <NavLink
+        className="m l"
+        aria-label={t("Settings")}
+        to="/settings/devices"
+      >
+        <i>settings</i>
+        <div>{t("Settings")}</div>
+      </NavLink>
+      <NavLink className="s" aria-label={t("Settings")} to="/settings">
+        <i>settings</i>
+        <div>{t("Settings")}</div>
+      </NavLink>
     </nav>
   );
 }
