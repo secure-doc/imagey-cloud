@@ -81,18 +81,24 @@ export async function prepareMarysLogin(page: Page) {
     });
   provider
     .given("default")
-    .uponReceiving("a request of mary to get private device key")
+    .uponReceiving(
+      "a request of mary to get encrypted private main key for device",
+    )
     .withRequest({
       method: "GET",
       path: `/users/mary@imagey.cloud/devices/${marysDeviceId}/private-keys/0`,
       headers: {
-        Accept: "text/plain",
+        Accept: "application/json",
       },
     })
     .willRespondWith({
       status: 200,
-      contentType: "text/plain",
-      body: marysEncryptedPrivateMainKey,
+      contentType: "application/json",
+      body: {
+        kid: "0",
+        encryptingDeviceId: marysDeviceId,
+        key: marysEncryptedPrivateMainKey,
+      },
     });
   await setupMarysDevice(page);
 }

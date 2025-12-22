@@ -1,5 +1,7 @@
 import DocumentMetadata from "./DocumentMetadata";
 
+const cache: Map<string, ArrayBuffer> = new Map();
+
 export const documentRepository = {
   createDocument: async (
     email: string,
@@ -114,17 +116,23 @@ export const documentRepository = {
     documentId: string,
     contentId: string,
   ): Promise<ArrayBuffer> => {
-    const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/contents/" + contentId,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/octet-stream",
-        },
-        credentials: "same-origin",
+    const path = `/users/${email}/documents/${documentId}/contents/${contentId}`;
+    const cachedValue = cache.get(path);
+    if (cachedValue) {
+      console.log("use cache");
+      return cachedValue;
+    }
+    const response = await fetch(path, {
+      method: "GET",
+      headers: {
+        Accept: "application/octet-stream",
       },
-    );
-    return resolve(response, () => response.arrayBuffer());
+      credentials: "same-origin",
+    });
+    const content = await resolve(response, () => response.arrayBuffer());
+    cache.set(path, content);
+    console.log("fill cache");
+    return content;
   },
 };
 

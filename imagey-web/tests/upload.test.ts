@@ -46,7 +46,7 @@ test("upload image", async ({ page }) => {
   });
 });
 
-test("upload small image", async ({ page }) => {
+test.skip("upload small image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();

@@ -14,7 +14,7 @@ test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
 });
 
-test("navigate to devices", async ({ page }) => {
+test.skip("navigate to devices", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();

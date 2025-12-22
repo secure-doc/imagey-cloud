@@ -61,14 +61,14 @@ export const authenticationService = {
     deviceId: string,
     privateDeviceKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
-    const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
-      email,
-      deviceId,
-    );
     const encryptedPrivateMainKey =
       await authenticationRepository.loadPrivateKey(email, deviceId);
+    const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
+      email,
+      encryptedPrivateMainKey.encryptingDeviceId,
+    );
     const decryptedPrivateMainKey = await cryptoService.decryptKey(
-      encryptedPrivateMainKey,
+      encryptedPrivateMainKey.key,
       publicDeviceKey,
       privateDeviceKey,
     );

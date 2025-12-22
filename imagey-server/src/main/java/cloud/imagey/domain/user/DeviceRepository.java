@@ -19,12 +19,15 @@ package cloud.imagey.domain.user;
 import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
+import static javax.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.readFileToString;
+import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import javax.enterprise.context.ApplicationScoped;
@@ -35,7 +38,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.encryption.EncryptedPrivateKey;
+import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.infrastructure.ResourceConflictException;
@@ -55,17 +58,17 @@ public class DeviceRepository {
         return stream(devicesDirectory.list()).sorted().map(DeviceId::new).toList();
     }
 
-    public Optional<String> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
+    public Optional<PrivateKeyMetadata> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
-        File keyFile = new File(keyDirectory, kid.id() + ".enc");
+        File keyFile = new File(keyDirectory, kid.id() + ".json");
         if (!keyFile.exists()) {
             LOG.info("Private key does not exist.");
             return empty();
         } else {
             try {
-                Optional<String> publicKey = of(readFileToString(keyFile, UTF_8));
+                Optional<String> privateKey = of(readFileToString(keyFile, UTF_8));
                 LOG.info("Private key loaded");
-                return publicKey;
+                return privateKey.map(this::parse);
             } catch (IOException e) {
                 LOG.error("Private key could not be loaded", e);
                 throw new IllegalStateException(e);
@@ -103,19 +106,36 @@ public class DeviceRepository {
         }
     }
 
-    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, EncryptedPrivateKey privateKey) throws IOException {
+    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, PrivateKeyMetadata metadata) throws IOException {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
         if (!keyDirectory.exists()) {
             keyDirectory.mkdirs();
         }
-        File keyFile = new File(keyDirectory, "0.enc");
+        File keyFile = new File(keyDirectory, "0.json");
         if (keyFile.exists()) {
             throw new ResourceConflictException(keyFile + " already exists.");
         }
-        FileUtils.write(keyFile, privateKey.key(), UTF_8, false);
+        write(keyFile, convert(metadata), UTF_8, false);
     }
 
     private File getUserHome(User user) {
         return new File(rootPath, user.email().address());
+    }
+
+    private PrivateKeyMetadata parse(String json) {
+        Map<String, String> map = create().fromJson(json, Map.class);
+        return new PrivateKeyMetadata(map.get("kid"), map.get("encryptingDeviceId"), map.get("key"));
+    }
+
+    private String convert(PrivateKeyMetadata key) {
+        return """
+            {
+                "kid": "0",
+                "encryptingDeviceId": "${deviceId}",
+                "key": "${key}"
+            }
+        """
+        .replace("${deviceId}", key.encryptingDeviceId().id())
+        .replace("${key}", key.key().key());
     }
 }

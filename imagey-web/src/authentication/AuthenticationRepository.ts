@@ -12,28 +12,32 @@ export const authenticationRepository = {
     const resolvedResponse = await resolve(response);
     return resolvedResponse.json();
   },
-  loadPrivateKey: async (email: string, deviceId: string): Promise<string> => {
+  loadPrivateKey: async (
+    email: string,
+    deviceId: string,
+  ): Promise<{ kid: string; encryptingDeviceId: string; key: string }> => {
     const response = await fetch(
       "/users/" + email + "/devices/" + deviceId + "/private-keys/0",
       {
         method: "GET",
         headers: {
-          Accept: "text/plain",
+          Accept: "application/json",
         },
         credentials: "same-origin",
       },
     );
     const resolvedResponse = await resolve(response);
-    return resolvedResponse.text();
+    return resolvedResponse.json();
   },
   storePrivateKey: async (
     email: string,
-    deviceId: string,
+    encryptingDeviceId: string,
+    receivingDeviceId: string,
     key: JsonWebKey,
     token?: string,
   ): Promise<void> => {
     const response = await fetch(
-      "/users/" + email + "/devices/" + deviceId + "/private-keys/0",
+      "/users/" + email + "/devices/" + receivingDeviceId + "/private-keys/0",
       {
         method: "PUT",
         headers: {
@@ -41,7 +45,11 @@ export const authenticationRepository = {
           Authorization: "Bearer " + token,
         },
         credentials: "same-origin",
-        body: JSON.stringify(key),
+        body: JSON.stringify({
+          kid: "0",
+          encryptingDeviceId,
+          key: JSON.stringify(key),
+        }),
       },
     );
     await resolve(response);

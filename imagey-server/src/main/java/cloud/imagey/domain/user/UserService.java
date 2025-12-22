@@ -23,6 +23,7 @@ import java.io.IOException;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
+import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
@@ -74,7 +75,10 @@ public class UserService {
         User user = new User(registration.email());
         userRepository.storePublicKey(user, new Kid("0"), registration.mainPublicKey());
         deviceRepository.storeDevicePublicKey(user, registration.deviceId(), registration.devicePublicKey());
-        deviceRepository.storeEncryptedPrivateKey(user, registration.deviceId(), registration.encryptedPrivateKey());
+        deviceRepository.storeEncryptedPrivateKey(
+            user,
+            registration.deviceId(),
+            new PrivateKeyMetadata(new Kid("0"), registration.deviceId(), registration.encryptedPrivateKey()));
     }
 
     public enum AuthenticationStatus {

@@ -17,7 +17,6 @@
 package cloud.imagey.application;
 
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
-import static javax.ws.rs.core.MediaType.TEXT_PLAIN;
 
 import java.io.IOException;
 import java.util.List;
@@ -36,6 +35,7 @@ import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;
@@ -83,8 +83,8 @@ public class DeviceResource {
 
     @GET
     @Path("{deviceId}/private-keys/{kid}")
-    @Produces(TEXT_PLAIN)
-    public String getEncryptedPrivateKey(
+    @Produces(APPLICATION_JSON)
+    public PrivateKeyMetadata getEncryptedPrivateKey(
         @PathParam("email") User user,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {

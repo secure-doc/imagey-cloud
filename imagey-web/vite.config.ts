@@ -4,7 +4,7 @@ import istanbul from "vite-plugin-istanbul";
 
 export default defineConfig({
   build: {
-    sourcemap: process.env.stage === "production" ? "hidden" : true,
+    sourcemap: process?.env?.stage === "production" ? "hidden" : true,
   },
   server: {
     proxy: {
