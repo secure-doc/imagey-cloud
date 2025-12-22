@@ -1,3 +1,4 @@
+import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { deviceService } from "../device/DeviceService";
 import { authenticationRepository } from "./AuthenticationRepository";
 import { cryptoService } from "./CryptoService";
@@ -11,36 +12,26 @@ export const authenticationService = {
   register: async (
     email: string,
     password: string,
-  ): Promise<{
-    privateKey: JsonWebKey;
-    publicKey: JsonWebKey;
-  }> => {
+  ): Promise<JsonWebKeyPairs> => {
     const device = await deviceService.initializeDevice(email, password);
 
     const mainKeyPair = await cryptoService.initializeKeyPair();
     const encryptedPrivateMainKey = await cryptoService.encryptKey(
       mainKeyPair.privateKey,
-      device.publicKey,
-      device.privateKey,
+      device.deviceKeyPair.publicKey,
+      device.deviceKeyPair.privateKey,
     );
-    const response = await fetch("/users/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        email: email,
-        deviceId: device.deviceId,
-        devicePublicKey: device.publicKey,
-        mainPublicKey: mainKeyPair.publicKey,
-        encryptedPrivateKey: encryptedPrivateMainKey,
-      }),
-    });
-
-    return response.status >= 200 && response.status < 300
-      ? Promise.resolve(mainKeyPair)
-      : Promise.reject();
+    await authenticationRepository.register(
+      email,
+      device.deviceId,
+      mainKeyPair.publicKey,
+      encryptedPrivateMainKey,
+      device.deviceKeyPair.publicKey,
+    );
+    return {
+      mainKeyPair,
+      deviceKeyPair: device.deviceKeyPair,
+    };
   },
   startAuthentication: async (email: string): Promise<RegistrationResult> => {
     const response = await fetch("/users/" + email + "/verifications/", {
@@ -56,19 +47,19 @@ export const authenticationService = {
         ? Promise.resolve(RegistrationResult.AuthenticationStarted)
         : Promise.reject();
   },
-  loadPrivateKey: async (
+  loadPrivateMainKey: async (
     email: string,
     deviceId: string,
     privateDeviceKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
+    const encryptedPrivateMainKey =
+      await authenticationRepository.loadPrivateMainKey(email, deviceId);
     const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
       email,
-      deviceId,
+      encryptedPrivateMainKey.encryptingDeviceId,
     );
-    const encryptedPrivateMainKey =
-      await authenticationRepository.loadPrivateKey(email, deviceId);
     const decryptedPrivateMainKey = await cryptoService.decryptKey(
-      encryptedPrivateMainKey,
+      encryptedPrivateMainKey.key,
       publicDeviceKey,
       privateDeviceKey,
     );

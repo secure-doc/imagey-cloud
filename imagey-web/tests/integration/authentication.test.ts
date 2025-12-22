@@ -5,6 +5,8 @@ import {
   marysDeviceId,
   marysPassword,
   marysPublicMainKey,
+  marysSecondDeviceId,
+  marysSecondPublicDeviceKey,
   prepareMarysDocuments,
   prepareMarysLogin,
   provider,
@@ -251,7 +253,7 @@ test("new user clicks registration link", async ({ page }) => {
   });
 });
 
-test("existing user clicks login link for new device", async ({ page }) => {
+test("mary logges in with new device", async ({ page }) => {
   // Given
   provider
     .given("default")
@@ -275,7 +277,9 @@ test("existing user clicks login link for new device", async ({ page }) => {
       method: "POST",
       path: MatchersV3.regex(
         "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
-        "/users/mary@imagey.cloud/devices/123e4567-e89b-12d3-a456-426655440000/public-keys/",
+        "/users/mary@imagey.cloud/devices/" +
+          marysSecondDeviceId +
+          "/public-keys/",
       ),
       headers: {
         "Content-Type": "application/json",
@@ -285,13 +289,56 @@ test("existing user clicks login link for new device", async ({ page }) => {
         ext: true,
         key_ops: [],
         kty: "EC",
-        x: MatchersV3.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-        y: MatchersV3.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
+        x: MatchersV3.string("arFY-wWlA-rikTjcTc62L5ghQ2DaqOStDEdQ2f0nUJ8"),
+        y: MatchersV3.string("UsYeOva7ipzP218Va5RPJR46L1OXybK2vxISuVUAXyw"),
       },
     })
     .willRespondWith({
       status: 200,
     });
+  provider
+    .given("marys second device registered")
+    .uponReceiving(
+      "a request of mary to get public device key for second device",
+    )
+    .withRequest({
+      method: "GET",
+      path: MatchersV3.regex(
+        "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
+        "/users/mary@imagey.cloud/devices/" +
+          marysSecondDeviceId +
+          "/public-keys/0",
+      ),
+      headers: {
+        Accept: "application/json",
+      },
+    })
+    .willRespondWith({
+      status: 200,
+      contentType: "application/json",
+      body: marysSecondPublicDeviceKey,
+    });
+  provider
+    .given("marys second device registered")
+    .uponReceiving(
+      "a request of mary to get private main key for second device",
+    )
+    .withRequest({
+      method: "GET",
+      path: MatchersV3.regex(
+        "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
+        "/users/mary@imagey.cloud/devices/" +
+          marysSecondDeviceId +
+          "/private-keys/0",
+      ),
+      headers: {
+        Accept: "application/json",
+      },
+    })
+    .willRespondWith({
+      status: 404,
+    });
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
@@ -301,11 +348,18 @@ test("existing user clicks login link for new device", async ({ page }) => {
     await expect(passwordInput).toBeVisible();
     passwordInput.fill(marysPassword);
     page.getByText("Confirm").click();
+    await expect(
+      page.getByText(
+        /Device registered, you can now activate it with another device/,
+      ),
+    ).toBeVisible();
+
+    page.getByRole("button", { name: "OK" }).click();
 
     // Then
     await expect(
       page.getByText(
-        /Device registered, you can now activate it with another device/,
+        /Device registered, but still not unlocked. You need to unlock it with another device/,
       ),
     ).toBeVisible();
   });
@@ -417,7 +471,7 @@ test("login with missing email", async ({ page }) => {
   });
 });
 
-test.skip("login with lost private key", async ({ page }) => {
+test("login with lost private key", async ({ page }) => {
   // Given
   provider
     .given("default")
@@ -434,30 +488,7 @@ test.skip("login with lost private key", async ({ page }) => {
       contentType: "application/json",
       body: marysPublicMainKey,
     });
-  provider
-    .given("default")
-    .uponReceiving("a request of mary to store public key for device")
-    .withRequest({
-      method: "PUT",
-      path: MatchersV3.regex(
-        "/users/mary@imagey\\.cloud/public-keys/.+",
-        "/users/mary@imagey.cloud/public-keys/123e4567-e89b-12d3-a456-426655440000",
-      ),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: {
-        crv: "P-256",
-        ext: true,
-        key_ops: [],
-        kty: "EC",
-        x: MatchersV3.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-        y: MatchersV3.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-      },
-    })
-    .willRespondWith({
-      status: 200,
-    });
+
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
@@ -472,15 +503,8 @@ test.skip("login with lost private key", async ({ page }) => {
     await page.goto("/");
 
     // Then
-    const passwordInput = page.getByLabel("password");
-    await expect(passwordInput).toBeVisible();
-    passwordInput.fill("MarysPassword123");
-    page.getByText("Confirm").click();
-
-    const newPasswordInput = page.getByLabel(/Private key missing/);
-    await expect(newPasswordInput).toBeVisible();
-    newPasswordInput.fill("MarysPassword123");
-    page.getByText("Confirm").click();
-    await expect(page.getByText(/No images found/)).toBeVisible();
+    await expect(
+      page.getByText("Device key missing, please reregister device"),
+    ).toBeVisible();
   });
 });

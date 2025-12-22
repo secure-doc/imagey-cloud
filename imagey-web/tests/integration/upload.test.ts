@@ -3,12 +3,15 @@ import path from "path";
 import {
   clearLocalStorage,
   loginAsMary,
+  marysSmallImageId,
   marysSmallImageName,
+  marysUploadedDocumentId,
   marysUploadedDocumentName,
   prepareDocumentUpload,
   prepareMarysDocuments,
   prepareMarysLogin,
   provider,
+  runningPactRequests,
   setupMockServer,
 } from "./setup";
 
@@ -20,13 +23,17 @@ test("upload image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  await prepareDocumentUpload(marysUploadedDocumentName);
+  await prepareDocumentUpload(
+    marysUploadedDocumentName,
+    marysUploadedDocumentId,
+  );
 
   // When
   await provider.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
 
+    expect(await page.getByText("No images found.").isVisible());
     expect(await page.getByAltText("beach-1836467_1920.jpg").isVisible());
     expect(await page.getByAltText("beach-4524911_1920.jpg").isVisible());
 
@@ -40,9 +47,8 @@ test("upload image", async ({ page }) => {
     );
 
     // Then
-    await expect(page.getByAltText(marysUploadedDocumentName)).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByAltText(marysUploadedDocumentName)).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -50,7 +56,7 @@ test("upload small image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  await prepareDocumentUpload(marysSmallImageName);
+  await prepareDocumentUpload(marysSmallImageName, marysSmallImageId);
 
   // When
   await provider.executeTest(async (mockServer) => {
@@ -70,8 +76,7 @@ test("upload small image", async ({ page }) => {
     );
 
     // Then
-    await expect(page.getByAltText(marysSmallImageName)).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByAltText(marysSmallImageName)).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

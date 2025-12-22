@@ -21,7 +21,7 @@ export const documentService = {
       documentId: documentId,
     };
     const documentKey = await cryptoService.generateSymmetricKey();
-    const publicKey = await authenticationRepository.loadPublicKey(email);
+    const publicKey = await authenticationRepository.loadPublicMainKey(email);
     const encryptedDocumentKey = await cryptoService.encryptKey(
       documentKey,
       publicKey,
@@ -70,17 +70,18 @@ export const documentService = {
     metadata: DocumentMetadata,
     privateKey: JsonWebKey,
   ): Promise<Document> => {
-    const encryptedContent = await documentRepository.loadContent(
-      user,
-      metadata.documentId,
-      metadata.previewImageId ?? metadata.documentId,
-    );
-    const encryptedDocumentKey = await documentRepository.loadKey(
-      user,
-      metadata.documentId,
-    );
-    const publicKey = await authenticationRepository.loadPublicKey(user);
     try {
+      const encryptedContent: ArrayBuffer =
+        await documentRepository.loadContent(
+          user,
+          metadata.documentId,
+          metadata.previewImageId ?? metadata.documentId,
+        );
+      const encryptedDocumentKey = await documentRepository.loadKey(
+        user,
+        metadata.documentId,
+      );
+      const publicKey = await authenticationRepository.loadPublicMainKey(user);
       const decryptedDocumentKey = await cryptoService.decryptKey(
         encryptedDocumentKey,
         publicKey,

@@ -21,6 +21,7 @@ import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.valueOf;
 import static javax.ws.rs.client.ClientBuilder.newClient;
 import static javax.ws.rs.client.Entity.json;
+import static javax.ws.rs.core.MediaType.APPLICATION_JSON_TYPE;
 import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import static javax.ws.rs.core.Response.Status.FOUND;
 import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
@@ -35,7 +36,6 @@ import java.util.Map;
 
 import javax.inject.Inject;
 import javax.ws.rs.core.GenericType;
-import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
@@ -150,9 +150,9 @@ public class RegistrationTest {
             .path("users/joe@imagey.cloud/devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/private-keys/0")
             .request()
             .header("Cookie", "token=" + token.token())
-            .accept(MediaType.TEXT_PLAIN)
+            .accept(APPLICATION_JSON_TYPE)
             .get(String.class);
-        assertThat(encryptedPrivateKey).isEqualTo("<<encrypted private key>>");
+        assertThat(encryptedPrivateKey).contains("<<encrypted private key>>");
     }
 
     @Test

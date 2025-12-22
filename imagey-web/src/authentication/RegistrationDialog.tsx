@@ -1,15 +1,16 @@
 import PasswordDialog from "./PasswordDialog";
 import { authenticationService } from "./AuthenticationService";
 import { useTranslation } from "react-i18next";
+import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 
 interface RegistrationDialogProperties {
   email: string;
-  onKeyDecrypted: (publicKey: JsonWebKey, privateKey: JsonWebKey) => void;
+  onKeysDecrypted: (keyPairs: JsonWebKeyPairs) => void;
 }
 
 export default function RegistrationDialog({
   email,
-  onKeyDecrypted,
+  onKeysDecrypted,
 }: RegistrationDialogProperties) {
   const { t } = useTranslation();
   return (
@@ -19,9 +20,7 @@ export default function RegistrationDialog({
       onPasswordValid={(password) => {
         authenticationService
           .register(email, password)
-          .then((keyPair) =>
-            onKeyDecrypted(keyPair.publicKey, keyPair.privateKey),
-          );
+          .then((keyPairs) => onKeysDecrypted(keyPairs));
       }}
     />
   );

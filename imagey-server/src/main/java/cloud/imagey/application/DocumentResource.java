@@ -116,12 +116,12 @@ public class DocumentResource {
     @GET
     @Path("{documentId}/encrypted-shared-keys/{share-email}")
     @Produces(TEXT_PLAIN)
-    public EncryptedSharedKey getSharedKey(
+    public String getSharedKey(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
 
-        return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
+        return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith).map(EncryptedSharedKey::key)
             .orElseThrow(NotFoundException::new);
     }
 

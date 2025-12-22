@@ -16,9 +16,6 @@ export const deviceRepository = {
   storeDeviceId: (email: string, deviceId: string) => {
     localStorage.setItem("imagey.deviceIds[" + email + "]", deviceId);
   },
-  clearDeviceId: (email?: string) => {
-    localStorage.removeItem("imagey.deviceIds[" + email + "]");
-  },
   loadKey: (deviceId: string) => {
     const key = localStorage.getItem("imagey.devices[" + deviceId + "].key");
     return key ? key : undefined;

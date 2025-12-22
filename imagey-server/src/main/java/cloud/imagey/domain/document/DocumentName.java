@@ -16,6 +16,12 @@
  */
 package cloud.imagey.domain.document;
 
-public record DocumentName(String name) {
+import javax.json.bind.annotation.JsonbTypeAdapter;
 
+import cloud.imagey.domain.document.DocumentName.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+@JsonbTypeAdapter(Adapter.class)
+public record DocumentName(String name) {
+    public static class Adapter extends AbstractSimpleRecordAdapter<DocumentName, String> { }
 }

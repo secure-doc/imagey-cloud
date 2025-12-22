@@ -4,14 +4,15 @@ import { useEffect, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
+import {
+  useCurrentUser,
+  usePrivateMainKey,
+} from "../contexts/AuthenticationContext";
 
-interface ImagesProperties {
-  user: string;
-  privateKey: JsonWebKey;
-}
-
-export default function Images({ user, privateKey }: ImagesProperties) {
+export default function Images() {
   const { t } = useTranslation();
+  const user = useCurrentUser();
+  const privateMainKey = usePrivateMainKey();
   const [selectedFiles, setSelectedFiles] = useState<FileList | undefined>(
     undefined,
   );
@@ -27,18 +28,18 @@ export default function Images({ user, privateKey }: ImagesProperties) {
   useEffect(() => {
     if (user) {
       documentService
-        .loadDocuments(user, privateKey)
+        .loadDocuments(user, privateMainKey)
         .then((documents) => setDocuments(documents));
     }
-  }, [privateKey, user]);
+  }, [privateMainKey, user]);
   useEffect(() => {
     if (user && selectedFiles) {
       for (const file of selectedFiles) {
         documentService
-          .storeDocument(user, file, privateKey)
+          .storeDocument(user, file, privateMainKey)
           .then((metadata) => {
             documentService
-              .loadDocument(user, metadata, privateKey)
+              .loadDocument(user, metadata, privateMainKey)
               .then((document) =>
                 setDocuments((previousDocuments) =>
                   previousDocuments
@@ -50,7 +51,7 @@ export default function Images({ user, privateKey }: ImagesProperties) {
       }
       setSelectedFiles(undefined);
     }
-  }, [user, selectedFiles, privateKey]);
+  }, [user, selectedFiles, privateMainKey]);
   return (
     <main>
       <div className="column scroll">
@@ -74,7 +75,10 @@ export default function Images({ user, privateKey }: ImagesProperties) {
                   );
                 } else {
                   return (
-                    <div className="small-width small-height">
+                    <div
+                      key={document.documentId}
+                      className="small-width small-height"
+                    >
                       {t("Error loading {{name}}", { name: document.name })}
                     </div>
                   );

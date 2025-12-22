@@ -16,11 +16,35 @@
  */
 package cloud.imagey.domain.document;
 
+import javax.json.bind.annotation.JsonbCreator;
+import javax.json.bind.annotation.JsonbProperty;
+import javax.json.bind.annotation.JsonbTypeAdapter;
+
+import cloud.imagey.domain.document.DocumentName.Adapter;
+
 public record DocumentMetadata(
-    DocumentName name,
-    DocumentType type,
-    DocumentSize size,
-    DocumentId documentId,
-    DocumentId smallImageId,
-    DocumentId previewImageId) {
+    @JsonbTypeAdapter(Adapter.class) @JsonbProperty("name") DocumentName name,
+    @JsonbProperty("type") DocumentType type,
+    @JsonbProperty("size") DocumentSize size,
+    @JsonbProperty("documentId") DocumentId documentId,
+    @JsonbProperty("smallImageId") DocumentId smallImageId,
+    @JsonbProperty("previewImageId") DocumentId previewImageId) {
+
+    @JsonbCreator
+    public DocumentMetadata(
+        @JsonbProperty("name") String name,
+        @JsonbProperty("type") String type,
+        @JsonbProperty("size") int size,
+        @JsonbProperty("documentId") String documentId,
+        @JsonbProperty("smallImageId") String smallImageId,
+        @JsonbProperty("previewImageId") String previewImageId) {
+
+        this(
+            new DocumentName(name),
+            new DocumentType(type),
+            new DocumentSize(size),
+            new DocumentId(documentId),
+            new DocumentId(smallImageId),
+            new DocumentId(previewImageId));
+    }
 }

@@ -7,13 +7,16 @@ import { useTranslation } from "react-i18next";
 interface DeviceSetupDialogProperties {
   email: string;
   deviceId: string;
-  onKeyDecrypted: (key: JsonWebKey) => void;
+  onPrivateKeysDecrypted: (
+    privateMainKey: JsonWebKey,
+    privateDeviceKey: JsonWebKey,
+  ) => void;
 }
 
 export default function DeviceSetupDialog({
   email,
   deviceId,
-  onKeyDecrypted,
+  onPrivateKeysDecrypted,
 }: DeviceSetupDialogProperties) {
   const { t } = useTranslation();
   const encryptedPrivateDeviceKey = deviceRepository.loadKey(deviceId);
@@ -35,9 +38,10 @@ export default function DeviceSetupDialog({
       }
       onPasswordValid={(privateDeviceKey) =>
         authenticationService
-          .loadPrivateKey(email, deviceId, privateDeviceKey)
-          .then((privateMainKey) => onKeyDecrypted(privateMainKey))
-          .catch((e) => console.log(e))
+          .loadPrivateMainKey(email, deviceId, privateDeviceKey)
+          .then((privateMainKey) =>
+            onPrivateKeysDecrypted(privateMainKey, privateDeviceKey),
+          )
       }
     />
   );
