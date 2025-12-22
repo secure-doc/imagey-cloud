@@ -1,11 +1,11 @@
 {
   "include": "src/**/*",
-  "exclude": ["node_modules", "src/authentication/ConversionService.ts"],
+  "exclude": ["node_modules"],
   "extension": [".js", ".ts", ".jsx", ".tsx"],
   "all": true,
   "check-coverage": true,
-  "branches": 74,
-  "lines": 93,
+  "branches": 79,
+  "lines": 94,
   "statements": 94,
   "functions": 91
 }

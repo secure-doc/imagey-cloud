@@ -19,6 +19,7 @@ test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
+  await prepareMarysDocuments(); // do it twice
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -29,6 +30,7 @@ test("navigate to chats", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+    await page.waitForTimeout(10_000);
     const chatsLink = page.getByRole("link", { name: "Chats" });
     await expect(chatsLink).toBeVisible();
     chatsLink.click();
@@ -155,7 +157,7 @@ test("navigate to devices and back on mobile resolution", async ({
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
     devicesLink.click();
-    const deviceEntry = page.getByRole("heading", { name: marysDeviceId });
+    const deviceEntry = page.getByText(marysDeviceId);
     await expect(deviceEntry).toBeVisible();
     const backButton = page.getByRole("button", { name: "back-button" });
     await expect(backButton).toBeVisible();

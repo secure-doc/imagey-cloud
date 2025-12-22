@@ -17,6 +17,8 @@ buildNumber.properties
 .classpath
 .settings
 .metadata
+.checkstyle
+.externalToolBuilders
 
 # Npm
 node

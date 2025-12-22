@@ -12,7 +12,6 @@ export default function BackButton() {
     return segments.join("/") || "/";
   }, [location]);
   useEffect(() => {
-    console.log(location.pathname);
     if (!location.pathname.substring(1).includes("/")) {
       setBackButtonVisible(false);
     }

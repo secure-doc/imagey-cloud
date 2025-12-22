@@ -1,6 +1,33 @@
+import { Email } from "../contexts/AuthenticationContext";
 import { ResponseError } from "./ResponseError";
 
 export const authenticationRepository = {
+  register: async (
+    email: Email,
+    deviceId: string,
+    publicMainKey: JsonWebKey,
+    encryptedPrivateMainKey: string,
+    publicDeviceKey: JsonWebKey,
+  ) => {
+    const response = await fetch("/users/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        email: email,
+        deviceId,
+        mainPublicKey: publicMainKey,
+        devicePublicKey: publicDeviceKey,
+        encryptedPrivateKey: encryptedPrivateMainKey,
+      }),
+    });
+
+    return response.status >= 200 && response.status < 300
+      ? Promise.resolve()
+      : Promise.reject();
+  },
   findDevices: async (email: string): Promise<string[]> => {
     const response = await fetch("/users/" + email + "/devices", {
       method: "GET",
@@ -12,41 +39,47 @@ export const authenticationRepository = {
     const resolvedResponse = await resolve(response);
     return resolvedResponse.json();
   },
-  loadPrivateKey: async (email: string, deviceId: string): Promise<string> => {
+  loadPrivateMainKey: async (
+    email: string,
+    deviceId: string,
+  ): Promise<{ kid: string; encryptingDeviceId: string; key: string }> => {
     const response = await fetch(
       "/users/" + email + "/devices/" + deviceId + "/private-keys/0",
       {
         method: "GET",
         headers: {
-          Accept: "text/plain",
+          Accept: "application/json",
         },
         credentials: "same-origin",
       },
     );
     const resolvedResponse = await resolve(response);
-    return resolvedResponse.text();
+    return resolvedResponse.json();
   },
-  storePrivateKey: async (
+  storePrivateMainKey: async (
     email: string,
-    deviceId: string,
-    key: JsonWebKey,
-    token?: string,
+    encryptingDeviceId: string,
+    receivingDeviceId: string,
+    encryptedKey: string,
   ): Promise<void> => {
     const response = await fetch(
-      "/users/" + email + "/devices/" + deviceId + "/private-keys/0",
+      "/users/" + email + "/devices/" + receivingDeviceId + "/private-keys/",
       {
-        method: "PUT",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
         },
         credentials: "same-origin",
-        body: JSON.stringify(key),
+        body: JSON.stringify({
+          kid: "0",
+          encryptingDeviceId,
+          key: encryptedKey,
+        }),
       },
     );
     await resolve(response);
   },
-  loadPublicKey: async (email: string): Promise<JsonWebKey> => {
+  loadPublicMainKey: async (email: string): Promise<JsonWebKey> => {
     const response = await fetch("/users/" + email + "/public-keys/0", {
       method: "GET",
       headers: {
@@ -72,7 +105,8 @@ export const authenticationRepository = {
       },
     );
     const resolvedResponse = await resolve(response);
-    return resolvedResponse.json();
+    const json = resolvedResponse.json();
+    return json;
   },
   storePublicDeviceKey: async (
     email: string,

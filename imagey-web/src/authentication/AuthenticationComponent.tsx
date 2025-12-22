@@ -9,17 +9,14 @@ import AuthenticationDialog from "./AuthenticationDialog";
 import DeviceSetupDialog from "./DeviceSetupDialog";
 import DeviceRegistrationDialog from "./DeviceRegistrationDialog";
 import { useTranslation } from "react-i18next";
+import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 
 interface AuthenticationComponentProperties {
-  onKeyDecrypted: (
-    user: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-  ) => void;
+  onKeysDecrypted: (user: Email, keyPairs: JsonWebKeyPairs) => void;
 }
 
 export default function AuthenticationComponent({
-  onKeyDecrypted,
+  onKeysDecrypted,
 }: AuthenticationComponentProperties) {
   const { t } = useTranslation();
   const [authenticationStatus, setAuthenticationStatus] = useState(
@@ -30,13 +27,13 @@ export default function AuthenticationComponent({
     params.get("email") ?? deviceRepository.loadUser(),
   );
   const [deviceId, setDeviceId] = useState<string>();
-  const [publicKey, setPublicKey] = useState<JsonWebKey>();
+  const [publicMainKey, setPublicMainKey] = useState<JsonWebKey>();
   useEffect(() => {
     if (email) {
       authenticationRepository
-        .loadPublicKey(email)
-        .then((publicKey) => {
-          setPublicKey(publicKey);
+        .loadPublicMainKey(email)
+        .then((publicMainKey) => {
+          setPublicMainKey(publicMainKey);
           setAuthenticationStatus(AuthenticationStatus.AUTHENTICATED);
           deviceRepository.storeUser(email);
           setDeviceId(deviceRepository.loadDeviceId(email));
@@ -70,25 +67,46 @@ export default function AuthenticationComponent({
       return (
         <RegistrationDialog
           email={email}
-          onKeyDecrypted={(publicKey, privateKey) =>
-            onKeyDecrypted(email, publicKey, privateKey)
-          }
+          onKeysDecrypted={(keyPairs) => onKeysDecrypted(email, keyPairs)}
         />
       );
     case AuthenticationStatus.AUTHENTICATED:
-      if (deviceId && publicKey) {
+      if (deviceId && publicMainKey) {
         return (
           <DeviceSetupDialog
             email={email}
             deviceId={deviceId}
-            onKeyDecrypted={(key) => onKeyDecrypted(email, publicKey, key)}
+            onPrivateKeysDecrypted={(privateMainKey, privateDeviceKey) => {
+              authenticationRepository
+                .loadPublicDeviceKey(email, deviceId)
+                .then((publicDeviceKey) =>
+                  onKeysDecrypted(email, {
+                    mainKeyPair: {
+                      publicKey: publicMainKey,
+                      privateKey: privateMainKey,
+                    },
+                    deviceKeyPair: {
+                      publicKey: publicDeviceKey,
+                      privateKey: privateDeviceKey,
+                    },
+                  }),
+                );
+            }}
           />
         );
-      } else if (publicKey) {
+      } else if (publicMainKey) {
         return (
           <DeviceRegistrationDialog
             email={email}
-            onKeyDecrypted={(key) => onKeyDecrypted(email, publicKey, key)}
+            onKeysDecrypted={(privateMainKey, deviceKeyPair) =>
+              onKeysDecrypted(email, {
+                mainKeyPair: {
+                  publicKey: publicMainKey,
+                  privateKey: privateMainKey,
+                },
+                deviceKeyPair,
+              })
+            }
           />
         );
       } else {

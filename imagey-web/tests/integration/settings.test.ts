@@ -36,8 +36,9 @@ test("navigate to devices", async ({ page }) => {
     await expect(devicesLink).toBeVisible();
 
     // Then
-    const deviceEntry = page.getByRole("heading", { name: marysDeviceId });
+    const deviceEntry = page.getByRole("heading", { name: "This device" });
     await expect(deviceEntry).toBeVisible();
+    await expect(page.getByText(marysDeviceId)).toBeVisible();
   });
 });
 
@@ -68,7 +69,7 @@ test("navigate to devices on mobile resolution", async ({ browser }) => {
     devicesLink.click();
 
     // Then
-    const deviceEntry = page.getByRole("heading", { name: marysDeviceId });
+    const deviceEntry = page.getByText(marysDeviceId);
     await expect(deviceEntry).toBeVisible();
   });
 });

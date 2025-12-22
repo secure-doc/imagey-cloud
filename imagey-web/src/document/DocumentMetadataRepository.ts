@@ -1,24 +1,6 @@
 import DocumentMetadata from "./DocumentMetadata";
 
 export const documentMetadataRepository = {
-  findDocumentMetadata: async (
-    email: string,
-    documentId: string,
-  ): Promise<DocumentMetadata> => {
-    const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/meta-data",
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        credentials: "same-origin",
-      },
-    );
-    return response.status >= 200 && response.status <= 300
-      ? await response.json()
-      : Promise.reject();
-  },
   createDocumentMetadata: async (
     email: string,
     documentMetadata: DocumentMetadata,
