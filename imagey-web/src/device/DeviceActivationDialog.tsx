@@ -1,10 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { deviceService } from "./DeviceService";
-import {
-  useCurrentUser,
-  usePrivateDeviceKey,
-  usePrivateMainKey,
-} from "../contexts/AuthenticationContext";
+import { useAuthentication } from "../contexts/AuthenticationContext";
 
 export default function DeviceActivationDialog({
   deviceId,
@@ -16,9 +12,10 @@ export default function DeviceActivationDialog({
   onError: (e: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const user = useCurrentUser();
-  const decryptedPrivateMainKey = usePrivateMainKey();
-  const privateDeviceKeyOfThisDevice = usePrivateDeviceKey();
+  const authentication = useAuthentication();
+  const keyPairs = authentication.keyPairs;
+  const decryptedPrivateMainKey = keyPairs.mainKeyPair.privateKey;
+  const privateDeviceKeyOfThisDevice = keyPairs.deviceKeyPair.privateKey;
   return (
     <dialog className="surface-bright" open>
       {t("Do you want to activate the device with id {{deviceId}}?", {
@@ -30,7 +27,7 @@ export default function DeviceActivationDialog({
           onClick={() =>
             deviceService
               .activateDevice(
-                user,
+                authentication.user,
                 deviceId,
                 decryptedPrivateMainKey,
                 privateDeviceKeyOfThisDevice,

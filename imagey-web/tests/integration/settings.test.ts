@@ -72,3 +72,45 @@ test("navigate to devices on mobile resolution", async ({ browser }) => {
     await expect(deviceEntry).toBeVisible();
   });
 });
+
+test("navigate to settings index directly", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysDevices();
+  const builder = await prepareMarysDocuments();
+
+  await builder.executeTest(async (mockServer) => {
+    // When
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+
+    // Then
+    const settingsLink = page.getByRole("link", { name: "Settings" }).first();
+    await expect(settingsLink).toBeVisible();
+    await settingsLink.click();
+
+    const devicesHeading = page.getByRole("heading", { name: "Devices" });
+    await expect(devicesHeading).toBeVisible();
+  });
+});
+
+test("navigate to chats", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  const builder = await prepareMarysDocuments();
+
+  await builder.executeTest(async (mockServer) => {
+    // When
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+
+    const chatsLink = page.getByRole("link", { name: "Chats" }).first();
+    await expect(chatsLink).toBeVisible();
+    chatsLink.click();
+
+    // Then
+    await expect(page.getByText("No chats available")).toBeVisible();
+  });
+});

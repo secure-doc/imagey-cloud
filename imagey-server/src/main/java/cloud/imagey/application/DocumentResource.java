@@ -19,6 +19,7 @@ package cloud.imagey.application;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static javax.ws.rs.core.MediaType.TEXT_PLAIN;
+import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
 import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 
 import java.io.IOException;
@@ -29,6 +30,7 @@ import javax.inject.Inject;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
+import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
@@ -36,6 +38,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 
+import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -121,8 +124,9 @@ public class DocumentResource {
         @PathParam("documentId") DocumentId documentId,
         @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
 
-        return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith).map(EncryptedSharedKey::key)
-            .orElseThrow(NotFoundException::new);
+        return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
+                .map(EncryptedSharedKey::key)
+                .orElseThrow(NotFoundException::new);
     }
 
     @PUT
@@ -135,6 +139,54 @@ public class DocumentResource {
         String key) throws IOException {
 
         documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, new EncryptedSharedKey(key));
+        return Response.ok().build();
+    }
+
+    /**
+     * Uploads a document via multipart form data containing metadata, shared key,
+     * and multiple content streams.
+     *
+     * @param user  the user uploading the document
+     * @param input the multipart form data input
+     * @return a successful response if the upload succeeds
+     * @throws IOException if reading the input fails
+     */
+    @POST
+    @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+    public Response uploadDocument(
+        @PathParam("email") User user,
+        @Multipart("metadata") DocumentMetadata metadata,
+        @Multipart("sharedKey") EncryptedSharedKey sharedKey,
+        @Multipart("content") DocumentContent content,
+        @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
+        @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
+            throws IOException {
+        if (metadata.documentId() == null) {
+            return Response.status(BAD_REQUEST).entity("Missing documentId in metadata").build();
+        }
+
+        if (sharedKey != null) {
+            documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
+        }
+
+        documentRepository.persist(user, metadata);
+
+        if (content != null) {
+            documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
+        }
+
+        if (metadata.smallImageId() != null) {
+            if (smallImage != null) {
+                documentRepository.persist(user, metadata.documentId(), metadata.smallImageId(), smallImage);
+            }
+        }
+
+        if (metadata.previewImageId() != null) {
+            if (previewImage != null) {
+                documentRepository.persist(user, metadata.documentId(), metadata.previewImageId(), previewImage);
+            }
+        }
+
         return Response.ok().build();
     }
 }
