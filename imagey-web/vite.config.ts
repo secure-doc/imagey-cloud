@@ -26,7 +26,7 @@ export default defineConfig({
     react(),
     istanbul({
       include: "src/**/*",
-      exclude: ["node_modules", "src/authentication/ConversionService.ts"], // files to NOT track coverage on
+      exclude: ["node_modules"], // files to NOT track coverage on
       extension: [".js", ".ts", ".jsx", ".tsx"],
       requireEnv: false,
     }),

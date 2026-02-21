@@ -3,11 +3,11 @@ import { authenticationRepository } from "../authentication/AuthenticationReposi
 import { deviceRepository } from "./DeviceRepository";
 import { useTranslation } from "react-i18next";
 import DeviceActivationDialog from "./DeviceActivationDialog";
-import { useCurrentUser } from "../contexts/AuthenticationContext";
+import { useAuthentication } from "../contexts/AuthenticationContext";
 
 export default function DeviceList() {
   const { t } = useTranslation();
-  const user = useCurrentUser();
+  const user = useAuthentication().user;
   const [devices, setDevices] = useState<string[]>([]);
   const [deviceIdToActivate, setDeviceIdToActivate] = useState<
     string | undefined

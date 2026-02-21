@@ -20,28 +20,3 @@ export function useAuthentication(): {
 } {
   return useContext(AuthenticationContext);
 }
-
-/* istanbul ignore next */
-export function useCurrentUser(): Email {
-  return useAuthentication().user;
-}
-
-/*
-export function usePublicMainKey(): JsonWebKey {
-  return useAuthentication().keyPairs.mainKeyPair.publicKey;
-}
-*/
-
-export function usePrivateMainKey(): JsonWebKey {
-  return useAuthentication().keyPairs.mainKeyPair.privateKey;
-}
-
-/*
-export function usePublicDeviceKey(): JsonWebKey {
-  return useAuthentication().keyPairs.deviceKeyPair.publicKey;
-}
-*/
-
-export function usePrivateDeviceKey(): JsonWebKey {
-  return useAuthentication().keyPairs.deviceKeyPair.privateKey;
-}

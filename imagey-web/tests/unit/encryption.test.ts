@@ -4,7 +4,6 @@ import { Email } from "../../src/contexts/AuthenticationContext";
 import { deviceRepository } from "../../src/device/DeviceRepository";
 import { deviceService } from "../../src/device/DeviceService";
 import { documentRepository } from "../../src/document/DocumentRepository";
-import { documentMetadataRepository } from "../../src/document/DocumentMetadataRepository";
 import { documentService } from "../../src/document/DocumentService";
 import { imageService } from "../../src/image/ImageService";
 import { readFile, writeFile } from "node:fs/promises";
@@ -68,6 +67,7 @@ test("Store document", async () => {
   const documentMetadata = await documentService.storeDocument(
     marysEmail,
     file,
+    mainKeyPair.publicKey,
     mainKeyPair.privateKey,
   );
 
@@ -75,6 +75,7 @@ test("Store document", async () => {
   const document = await documentService.loadDocument(
     marysEmail,
     documentMetadata,
+    mainKeyPair.publicKey,
     mainKeyPair.privateKey,
   );
 
@@ -108,6 +109,7 @@ test("Store document to disk", async () => {
   const documentMetadata = await documentService.storeDocument(
     marysEmail,
     file,
+    mainKeyPair.publicKey,
     marysPrivateMainKey,
   );
 
@@ -183,21 +185,14 @@ function registerSpiesToStoreDocument() {
   vi.spyOn(authenticationRepository, "loadPublicMainKey").mockImplementation(
     async () => mainKeyPair.publicKey,
   );
-  vi.spyOn(documentRepository, "storeKey").mockImplementation(
-    async (email: string, documentId: string, key: string) => {
-      encryptedDocumentKey = key;
-    },
-  );
-  vi.spyOn(
-    documentMetadataRepository,
-    "createDocumentMetadata",
-  ).mockImplementation(async () => {});
-  vi.spyOn(documentRepository, "createDocument").mockImplementation(
+  vi.spyOn(documentRepository, "uploadDocument").mockImplementation(
     async (
       email: string,
       metadata: DocumentMetadata,
+      sharedKey: string,
       content: ArrayBuffer[],
     ) => {
+      encryptedDocumentKey = sharedKey;
       encryptedDocumentContent = content;
     },
   );
@@ -215,21 +210,14 @@ function registerSpiesToStoreDocumentToDisk() {
   vi.spyOn(authenticationRepository, "loadPublicMainKey").mockImplementation(
     async () => mainKeyPair.publicKey,
   );
-  vi.spyOn(documentRepository, "storeKey").mockImplementation(
-    async (email: string, documentId: string, key: string) => {
-      encryptedDocumentKey = key;
-    },
-  );
-  vi.spyOn(
-    documentMetadataRepository,
-    "createDocumentMetadata",
-  ).mockImplementation(async () => {});
-  vi.spyOn(documentRepository, "createDocument").mockImplementation(
+  vi.spyOn(documentRepository, "uploadDocument").mockImplementation(
     async (
       email: string,
       metadata: DocumentMetadata,
+      sharedKey: string,
       content: ArrayBuffer[],
     ) => {
+      encryptedDocumentKey = sharedKey;
       writeFile(metadata.documentId, Buffer.from(content[0]));
       if (metadata.smallImageId) {
         writeFile(metadata.smallImageId, Buffer.from(content[1]));

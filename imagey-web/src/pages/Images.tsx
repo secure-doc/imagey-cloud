@@ -4,15 +4,15 @@ import { useEffect, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
-import {
-  useCurrentUser,
-  usePrivateMainKey,
-} from "../contexts/AuthenticationContext";
+import { useAuthentication } from "../contexts/AuthenticationContext";
 
 export default function Images() {
   const { t } = useTranslation();
-  const user = useCurrentUser();
-  const privateMainKey = usePrivateMainKey();
+  const authentication = useAuthentication();
+  const user = authentication.user;
+  const mainKeyPair = authentication.keyPairs.mainKeyPair;
+  const publicMainKey = mainKeyPair.publicKey;
+  const privateMainKey = mainKeyPair.privateKey;
   const [selectedFiles, setSelectedFiles] = useState<FileList | undefined>(
     undefined,
   );
@@ -28,18 +28,18 @@ export default function Images() {
   useEffect(() => {
     if (user) {
       documentService
-        .loadDocuments(user, privateMainKey)
+        .loadDocuments(user, publicMainKey, privateMainKey)
         .then((documents) => setDocuments(documents));
     }
-  }, [privateMainKey, user]);
+  }, [publicMainKey, privateMainKey, user]);
   useEffect(() => {
     if (user && selectedFiles) {
       for (const file of selectedFiles) {
         documentService
-          .storeDocument(user, file, privateMainKey)
+          .storeDocument(user, file, publicMainKey, privateMainKey)
           .then((metadata) => {
             documentService
-              .loadDocument(user, metadata, privateMainKey)
+              .loadDocument(user, metadata, publicMainKey, privateMainKey)
               .then((document) =>
                 setDocuments((previousDocuments) =>
                   previousDocuments
@@ -51,7 +51,7 @@ export default function Images() {
       }
       setSelectedFiles(undefined);
     }
-  }, [user, selectedFiles, privateMainKey]);
+  }, [user, selectedFiles, publicMainKey, privateMainKey]);
   return (
     <main>
       <div className="column scroll">

@@ -1,21 +1,9 @@
-export const marysEmail = "mary@imagey.cloud";
 export const marysPassword = "MarysPassword123";
-export const marysToken =
-  "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2ltYWdleS5jbG91ZCIsInN1YiI6Im1hcnlAaW1hZ2V5LmNsb3VkIiwiZXhwIjotOTIyMzM3MDMwODA4OTk4OX0.kj1Q4DV6wnlMQtKQZPVbaTUb0SRSu6XjKHjQmR-KFwU";
 export const marysDeviceId = "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c";
 export const marysPublicDeviceKey: JsonWebKey = {
   crv: "P-256",
   ext: true,
   key_ops: [],
-  kty: "EC",
-  x: "O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4",
-  y: "ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU",
-};
-export const marysPrivateDeviceKey: JsonWebKey = {
-  crv: "P-256",
-  d: "MqydykBULsorDlkHSI8uiydpJ8CBt9dmZcQsWBVPlLo",
-  ext: true,
-  key_ops: ["deriveKey"],
   kty: "EC",
   x: "O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4",
   y: "ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU",
@@ -43,8 +31,6 @@ export const marysPrivateMainKey: JsonWebKey = {
 };
 export const marysUploadedDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 export const marysUploadedDocumentName = "child-355176_1920.jpg";
-export const encryptedSharedDocumentKey =
-  "q5lJyzPrMsilCVjNvSpRv1meqkObK1J68YXHNrCaBPVBtFhWWLKHZeCqrJD/OxKYi+xp/hnzm7g/2s8SPXKWz1iW99puSR66RlCCaOq757tszl1Zszjo2BOlJlwt5nrFG/g5tS7uqU+r3hagWdYpZB5xaukaBEZbuy/gVsUKQjtlk81dJxRanX01JDCHIi2RO/T3EPIb";
 export const marysSmallImageId = "78d1b093-45ec-4a25-9594-615ca2d70ba2";
 export const marysSmallImageName = "beach-4524911_480.jpg";
 export const marysSecondDeviceId = "00b7d225-202c-4ab9-8efc-36e6f3afb169";
@@ -60,5 +46,3 @@ export const marysEncryptedPrivateMainKeyForSecondDevice =
   "aVvCK4w3ylq9a46xj/FERQDs8+gbDF30CVz0Vw+Egd3TuBR32quTnJC/MRtetpZ1a6FpQ/Otu2nlGW07t+N9SAHOCl4CYg9l8jFPqOnyeClBiyIpR2XLRK0QkZv3ugI2JafSUt7h9O1JcqpyF3LyKbzU/Sq6/swe6bVA5KJ+fWlA4cA/oKQJdhS0a8FAqieQuYW7CXZTKOG07gKb0QLsBVLt6v1aW043zfOfQrvEaswEXV3ZtLV+OEZFHxGUAmueoOC5Rse9Y0Z9Z8LmswX3YCrKGheyk1leLo6Nv3HxDYYDYulndoDIzqxdjic6P00=";
 export const marysSecondEncryptedPrivateDeviceKey =
   "oPsFWEcpXVvKXCL0Jx6n98LqmxLNrN+GXCITeDJt93BEXSdshy1HgMtpvCdAzIVd3TDgIV9dSga8zndT0fl38YDG7nFDkGAS1pj+7RZH5eiIjSSSCVdOvxTcMtS1v97s9mg22g+Hk0Ajr2M4xayA0Mkmztu6AzuKVeKmLoCuZrQzS+ZpVBbYKRuhgRuXMJMPFMFhDhTfyDVOrss+qXmmzv+2JWTaX5qS+xMK10/ko1rBH6gD5Lc2E11uhkT7XBF7w32G1vycNwtlTSLbcQ3pdNxwXoROskP+48Ph67ujqPCQ5R+43eKsmHuvnOWZ+Cg0SL1YvJjFXTAoLdBNF2Pe";
-export const joesToken =
-  "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2ltYWdleS5jbG91ZCIsInN1YiI6ImpvZUBpbWFnZXkuY2xvdWQiLCJleHAiOi05MjIzMzcwMzA1NjkxNjk4fQ._O3_-Z5ivyd-gr7FOG459m2OGpooHTVFOv0Q0jWEDoc";

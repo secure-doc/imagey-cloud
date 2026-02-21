@@ -3,63 +3,40 @@ import DocumentMetadata from "./DocumentMetadata";
 const cache: Map<string, ArrayBuffer> = new Map();
 
 export const documentRepository = {
-  createDocument: async (
+  uploadDocument: async (
     email: string,
     metadata: DocumentMetadata,
+    sharedKey: string,
     content: ArrayBuffer[],
   ) => {
-    let response = await fetch(
-      "/users/" +
-        email +
-        "/documents/" +
-        metadata.documentId +
-        "/contents/" +
-        metadata.documentId,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/octet-stream",
-        },
-        credentials: "same-origin",
-        body: content[0],
-      },
+    if (content.length === 0) {
+      throw new Error("content must be provided");
+    }
+    const formData = new FormData();
+    formData.append("metadata", JSON.stringify(metadata));
+    formData.append("sharedKey", sharedKey);
+    formData.append(
+      "content",
+      new Blob([content[0]], { type: "application/octet-stream" }),
     );
-    if (response.status < 400 && metadata.smallImageId) {
-      response = await fetch(
-        "/users/" +
-          email +
-          "/documents/" +
-          metadata.documentId +
-          "/contents/" +
-          metadata.smallImageId,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/octet-stream",
-          },
-          credentials: "same-origin",
-          body: content[1],
-        },
+    if (content.length > 1 && metadata.smallImageId) {
+      formData.append(
+        "smallImage",
+        new Blob([content[1]], { type: "application/octet-stream" }),
       );
     }
-    if (response.status < 400 && metadata.previewImageId) {
-      response = await fetch(
-        "/users/" +
-          email +
-          "/documents/" +
-          metadata.documentId +
-          "/contents/" +
-          metadata.previewImageId,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/octet-stream",
-          },
-          credentials: "same-origin",
-          body: content[2],
-        },
+    if (content.length > 2 && metadata.previewImageId) {
+      formData.append(
+        "previewImage",
+        new Blob([content[2]], { type: "application/octet-stream" }),
       );
     }
+
+    const response = await fetch(`/users/${email}/documents`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: formData,
+    });
     return resolve(response, () => Promise.resolve());
   },
 
