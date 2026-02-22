@@ -1,3 +1,4 @@
+import { Matchers } from "@pact-foundation/pact";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
@@ -13,7 +14,6 @@ import {
   setupMarysDevice,
   setupMockServer,
 } from "./setup";
-import { MatchersV3 } from "@pact-foundation/pact";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
@@ -42,335 +42,290 @@ test("new user enters wrong email", async ({ page }) => {
 test("new user visits page", async ({ page }) => {
   // Given
   provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of joe to verify his email")
-    .withRequest({
-      method: "POST",
-      path: "/users/joe@imagey.cloud/verifications/",
-      headers: { "Content-Type": "application/json" },
-    })
-    .willRespondWith({
-      status: 201,
-    });
-  provider
+    .withRequest("POST", "/users/joe@imagey.cloud/verifications/", (r) =>
+      r.headers({
+        "Content-Type": "application/json",
+      }),
+    )
+    .willRespondWith(201);
+
+  await provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of joe to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/joe@imagey.cloud/public-keys/0",
-      headers: { "Content-Type": "application/json" },
-    })
-    .willRespondWith({
-      status: 401,
+    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        "Content-Type": "application/json",
+      }),
+    )
+    .willRespondWith(401)
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.goto("/");
+      const emailInput = page.getByPlaceholder("email@imagey.cloud");
+      await expect(emailInput).toBeVisible();
+
+      emailInput.fill("joe@imagey.cloud");
+      page.getByText("Confirm").click();
+
+      // Then
+      await expect(page.getByText(/verification link/)).toBeVisible();
     });
-
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.goto("/");
-    const emailInput = page.getByPlaceholder("email@imagey.cloud");
-    await expect(emailInput).toBeVisible();
-
-    emailInput.fill("joe@imagey.cloud");
-    page.getByText("Confirm").click();
-
-    // Then
-    await expect(page.getByText(/verification link/)).toBeVisible();
-  });
 });
 
 test("existing user visits page with new device", async ({ page }) => {
   // Given
   provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: { "Content-Type": "application/json" },
-    })
-    .willRespondWith({
-      status: 401,
-    });
-  provider
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        "Content-Type": "application/json",
+      }),
+    )
+    .willRespondWith(401);
+
+  await provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to login")
-    .withRequest({
-      method: "POST",
-      path: "/users/mary@imagey.cloud/verifications/",
-    })
-    .willRespondWith({
-      status: 202,
+    .withRequest("POST", "/users/mary@imagey.cloud/verifications/")
+    .willRespondWith(202)
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.goto("/");
+      const emailInput = page.getByPlaceholder("email@imagey.cloud");
+      await expect(emailInput).toBeVisible();
+
+      emailInput.fill("mary@imagey.cloud");
+      page.getByText("Confirm").click();
+
+      // Then
+      await expect(page.getByText(/login link/)).toBeVisible();
     });
-
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.goto("/");
-    const emailInput = page.getByPlaceholder("email@imagey.cloud");
-    await expect(emailInput).toBeVisible();
-
-    emailInput.fill("mary@imagey.cloud");
-    page.getByText("Confirm").click();
-
-    // Then
-    await expect(page.getByText(/login link/)).toBeVisible();
-  });
 });
 
 test.skip("existing user visits page with invalid token", async ({ page }) => {
   // Given
   provider
+    .addInteraction()
     .given("Marys token is invalid")
     .uponReceiving("a request of mary to get symmetric key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/symmetric-keys/0",
-      headers: {
+    .withRequest("GET", "/users/mary@imagey.cloud/symmetric-keys/0", (r) =>
+      r.headers({
         Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 403,
-    });
-  provider
+      }),
+    )
+    .willRespondWith(403);
+
+  await provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to register account")
-    .withRequest({
-      method: "POST",
-      path: "/users/",
-      headers: { "Content-Type": "application/json" },
-      body: {
-        email: "mary@imagey.cloud",
-      },
-    })
-    .willRespondWith({
-      status: 409,
+    .withRequest("POST", "/users/", (r) =>
+      r
+        .headers({
+          "Content-Type": "application/json",
+        })
+        .jsonBody({
+          email: "mary@imagey.cloud",
+        }),
+    )
+    .willRespondWith(409)
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.evaluate(() =>
+        localStorage.setItem("imagey.user", "mary@imagey.cloud"),
+      );
+      await page.evaluate(
+        (deviceId) =>
+          localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+        marysDeviceId,
+      );
+      await page.goto("/");
+      const emailInput = page.getByPlaceholder("email@imagey.cloud");
+      await expect(emailInput).toBeVisible();
+
+      emailInput.fill("mary@imagey.cloud");
+      page.getByText("Confirm").click();
+
+      // Then
+      await expect(page.getByText(/login link/)).toBeVisible();
     });
-
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.evaluate(() =>
-      localStorage.setItem("imagey.user", "mary@imagey.cloud"),
-    );
-    await page.evaluate(
-      (deviceId) =>
-        localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-      marysDeviceId,
-    );
-    await page.goto("/");
-    const emailInput = page.getByPlaceholder("email@imagey.cloud");
-    await expect(emailInput).toBeVisible();
-
-    emailInput.fill("mary@imagey.cloud");
-    page.getByText("Confirm").click();
-
-    // Then
-    await expect(page.getByText(/login link/)).toBeVisible();
-  });
 });
 
 test("new user clicks registration link", async ({ page }) => {
   // Given
   provider
+    .addInteraction()
     .given("Joe is registered")
     .uponReceiving("a request of joe to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/joe@imagey.cloud/public-keys/0",
-      headers: {
+    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
         Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 404,
-    });
+      }),
+    )
+    .willRespondWith(404);
+
   provider
+    .addInteraction()
     .given("Joe is registered")
     .uponReceiving("a request to register joe")
-    .withRequest({
-      method: "POST",
-      path: "/users/",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: {
-        email: "joe@imagey.cloud",
-        deviceId: MatchersV3.string("ab85c7ca-8288-4a67-9d7a-15b82e22e75b"),
-        devicePublicKey: {
-          crv: "P-256",
-          ext: true,
-          key_ops: [],
-          kty: "EC",
-          x: MatchersV3.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-          y: MatchersV3.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-        },
-        mainPublicKey: {
-          crv: "P-256",
-          ext: true,
-          key_ops: [],
-          kty: "EC",
-          x: MatchersV3.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-          y: MatchersV3.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-        },
-        encryptedPrivateKey: MatchersV3.string(
-          "ca714722798563b39d9a75bd8d58e79cb81b78b7601d99d1725de64c437a551ffbf3b7dbb03babaeb58bf59305ad6674f91d0eccee6b73210d2d3134165530d0d512c40ae9a2a6c27829b5a5863d10591da8ee7032bbf2490c8f9b194cddc5537f3c2e1c0e0ba6bbce3f692103db085961cfcac38a87ef29b4340c69355f73d7ae527821478eff2e421d8693d50aae5ec253be5675796f9660984945d297500aca8108694b1cf2af4554670f88edb7f8de9c19ce48b254839bc9822456f949ee23718ac369102c70c994826827e36470c237cb",
-        ),
-      },
-    })
-    .willRespondWith({
-      status: 200,
-    });
-  provider
+    .withRequest("POST", "/users/", (r) =>
+      r
+        .headers({
+          "Content-Type": "application/json",
+        })
+        .jsonBody({
+          email: "joe@imagey.cloud",
+          deviceId: Matchers.string("ab85c7ca-8288-4a67-9d7a-15b82e22e75b"),
+          devicePublicKey: {
+            crv: "P-256",
+            ext: true,
+            key_ops: [],
+            kty: "EC",
+            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
+            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
+          },
+          mainPublicKey: {
+            crv: "P-256",
+            ext: true,
+            key_ops: [],
+            kty: "EC",
+            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
+            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
+          },
+          encryptedPrivateKey: Matchers.string(
+            "ca714722798563b39d9a75bd8d58e79cb81b78b7601d99d1725de64c437a551ffbf3b7dbb03babaeb58bf59305ad6674f91d0eccee6b73210d2d3134165530d0d512c40ae9a2a6c27829b5a5863d10591da8ee7032bbf2490c8f9b194cddc5537f3c2e1c0e0ba6bbce3f692103db085961cfcac38a87ef29b4340c69355f73d7ae527821478eff2e421d8693d50aae5ec253be5675796f9660984945d297500aca8108694b1cf2af4554670f88edb7f8de9c19ce48b254839bc9822456f949ee23718ac369102c70c994826827e36470c237cb",
+          ),
+        }),
+    )
+    .willRespondWith(200);
+
+  await provider
+    .addInteraction()
     .given("Joe is registered")
     .uponReceiving("a request of joe to get documents")
-    .withRequest({
-      method: "GET",
-      path: "/users/joe@imagey.cloud/documents",
-      headers: {
+    .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
+      r.headers({
         Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: [],
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]))
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.goto("/?email=joe@imagey.cloud");
+
+      const passwordInput = page.getByLabel("password");
+      await expect(passwordInput).toBeVisible();
+      passwordInput.fill(marysPassword);
+      page.getByText("Confirm").click();
+
+      // Then
+      await expect(page.getByText(/No images found/)).toBeVisible();
     });
-
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.goto("/?email=joe@imagey.cloud");
-
-    const passwordInput = page.getByLabel("password");
-    await expect(passwordInput).toBeVisible();
-    passwordInput.fill(marysPassword);
-    page.getByText("Confirm").click();
-
-    // Then
-    await expect(page.getByText(/No images found/)).toBeVisible();
-  });
 });
 
 test("mary logges in with new device", async ({ page }) => {
   // Given
   provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysPublicMainKey,
-    });
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey));
   provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to store public key for device")
-    .withRequest({
-      method: "POST",
-      path: MatchersV3.regex(
-        "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
-        "/users/mary@imagey.cloud/devices/" +
-          marysSecondDeviceId +
-          "/public-keys/",
-      ),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: {
-        crv: "P-256",
-        ext: true,
-        key_ops: [],
-        kty: "EC",
-        x: MatchersV3.string("arFY-wWlA-rikTjcTc62L5ghQ2DaqOStDEdQ2f0nUJ8"),
-        y: MatchersV3.string("UsYeOva7ipzP218Va5RPJR46L1OXybK2vxISuVUAXyw"),
-      },
-    })
-    .willRespondWith({
-      status: 200,
-    });
+    .withRequest(
+      "POST",
+      Matchers.regex({
+        generate: `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/`,
+        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
+      }),
+      (r) =>
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          crv: "P-256",
+          ext: true,
+          key_ops: [],
+          kty: "EC",
+          x: Matchers.string("arFY-wWlA-rikTjcTc62L5ghQ2DaqOStDEdQ2f0nUJ8"),
+          y: Matchers.string("UsYeOva7ipzP218Va5RPJR46L1OXybK2vxISuVUAXyw"),
+        }),
+    )
+    .willRespondWith(200);
   provider
+    .addInteraction()
     .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get public device key for second device",
     )
-    .withRequest({
-      method: "GET",
-      path: MatchersV3.regex(
-        "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
-        "/users/mary@imagey.cloud/devices/" +
-          marysSecondDeviceId +
-          "/public-keys/0",
-      ),
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysSecondPublicDeviceKey,
-    });
-  provider
+    .withRequest(
+      "GET",
+      Matchers.regex({
+        generate: `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/0`,
+        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
+      }),
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(marysSecondPublicDeviceKey));
+  await provider
+    .addInteraction()
     .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get private main key for second device",
     )
-    .withRequest({
-      method: "GET",
-      path: MatchersV3.regex(
-        "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
-        "/users/mary@imagey.cloud/devices/" +
-          marysSecondDeviceId +
-          "/private-keys/0",
-      ),
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 404,
+    .withRequest(
+      "GET",
+      Matchers.regex({
+        generate: `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/private-keys/0`,
+        matcher: "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
+      }),
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(404)
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.goto("/?email=mary@imagey.cloud");
+
+      const passwordInput = page.getByLabel("password");
+      await expect(passwordInput).toBeVisible();
+      passwordInput.fill(marysPassword);
+      page.getByText("Confirm").click();
+      await expect(
+        page.getByText(
+          /Device registered, you can now activate it with another device/,
+        ),
+      ).toBeVisible();
+
+      page.getByRole("button", { name: "OK" }).click();
+
+      // Then
+      await expect(
+        page.getByText(
+          /Device registered, but still not unlocked. You need to unlock it with another device/,
+        ),
+      ).toBeVisible();
     });
-
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.goto("/?email=mary@imagey.cloud");
-
-    const passwordInput = page.getByLabel("password");
-    await expect(passwordInput).toBeVisible();
-    passwordInput.fill(marysPassword);
-    page.getByText("Confirm").click();
-    await expect(
-      page.getByText(
-        /Device registered, you can now activate it with another device/,
-      ),
-    ).toBeVisible();
-
-    page.getByRole("button", { name: "OK" }).click();
-
-    // Then
-    await expect(
-      page.getByText(
-        /Device registered, but still not unlocked. You need to unlock it with another device/,
-      ),
-    ).toBeVisible();
-  });
 });
 
 test("existing user clicks login link on existing device", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
-
-  await provider.executeTest(async (mockServer) => {
+  const given = await prepareMarysDocuments();
+  await given.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await page.evaluate(() =>
@@ -391,9 +346,9 @@ test("existing user clicks login link on existing device", async ({ page }) => {
 test("visit page on existing device", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  const given = await prepareMarysDocuments();
 
-  await provider.executeTest(async (mockServer) => {
+  await given.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await setupMarysDevice(page);
@@ -414,41 +369,34 @@ test("visit page on existing device", async ({ page }) => {
 
 test("visit page on existing device with wrong password", async ({ page }) => {
   // Given
-  provider
+  await provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: {
-        Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysPublicMainKey,
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey))
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await setupMarysDevice(page);
+      await page.goto("/");
+
+      const passwordInput = page.getByLabel("password");
+      await expect(passwordInput).toBeVisible();
+      passwordInput.fill("wrongPassword");
+      page.getByText("Confirm").click();
+
+      // Then
+      await expect(page.getByText(/Wrong password/)).toBeVisible();
     });
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await setupMarysDevice(page);
-    await page.goto("/");
-
-    const passwordInput = page.getByLabel("password");
-    await expect(passwordInput).toBeVisible();
-    passwordInput.fill("wrongPassword");
-    page.getByText("Confirm").click();
-
-    // Then
-    await expect(page.getByText(/Wrong password/)).toBeVisible();
-  });
 });
 
 test("login with missing email", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -473,38 +421,32 @@ test("login with missing email", async ({ page }) => {
 
 test("login with lost private key", async ({ page }) => {
   // Given
-  provider
+  await provider
+    .addInteraction()
     .given("default")
     .uponReceiving("a request of mary to get public key")
-    .withRequest({
-      method: "GET",
-      path: "/users/mary@imagey.cloud/public-keys/0",
-      headers: {
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
         Accept: "application/json",
-      },
-    })
-    .willRespondWith({
-      status: 200,
-      contentType: "application/json",
-      body: marysPublicMainKey,
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey))
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.evaluate(() =>
+        localStorage.setItem("imagey.user", "mary@imagey.cloud"),
+      );
+      await page.evaluate(
+        (deviceId) =>
+          localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+        marysDeviceId,
+      );
+      await page.goto("/");
+
+      // Then
+      await expect(
+        page.getByText("Device key missing, please reregister device"),
+      ).toBeVisible();
     });
-
-  await provider.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.evaluate(() =>
-      localStorage.setItem("imagey.user", "mary@imagey.cloud"),
-    );
-    await page.evaluate(
-      (deviceId) =>
-        localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-      marysDeviceId,
-    );
-    await page.goto("/");
-
-    // Then
-    await expect(
-      page.getByText("Device key missing, please reregister device"),
-    ).toBeVisible();
-  });
 });

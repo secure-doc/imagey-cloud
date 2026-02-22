@@ -10,7 +10,6 @@ import {
   prepareDocumentUpload,
   prepareMarysDocuments,
   prepareMarysLogin,
-  provider,
   runningPactRequests,
   setupMockServer,
 } from "./setup";
@@ -22,11 +21,11 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 test("upload image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
   await prepareDocumentUpload(
     marysUploadedDocumentName,
     marysUploadedDocumentId,
   );
+  const provider = await prepareMarysDocuments();
 
   // When
   await provider.executeTest(async (mockServer) => {
@@ -55,8 +54,8 @@ test("upload image", async ({ page }) => {
 test("upload small image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
   await prepareDocumentUpload(marysSmallImageName, marysSmallImageId);
+  const provider = await prepareMarysDocuments();
 
   // When
   await provider.executeTest(async (mockServer) => {

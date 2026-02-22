@@ -6,7 +6,6 @@ import {
   prepareMarysDevices,
   prepareMarysDocuments,
   prepareMarysLogin,
-  provider,
   setupMockServer,
 } from "./setup";
 
@@ -17,8 +16,8 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 test("navigate to devices", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
   await prepareMarysDevices();
+  const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -49,8 +48,8 @@ test("navigate to devices on mobile resolution", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/");
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
   await prepareMarysDevices();
+  const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
