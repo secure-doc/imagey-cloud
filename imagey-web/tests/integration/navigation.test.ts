@@ -7,7 +7,6 @@ import {
   prepareMarysDevices,
   prepareMarysDocuments,
   prepareMarysLogin,
-  provider,
   setupMockServer,
 } from "./setup";
 
@@ -19,7 +18,7 @@ test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  await prepareMarysDocuments(); // do it twice
+  const provider = await prepareMarysDocuments(); // do it twice
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -51,7 +50,7 @@ test("open and close navigation drawer on mobile resolution", async ({
   await page.goto("/");
 
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  const provider = await prepareMarysDocuments();
   await provider.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
@@ -82,7 +81,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/");
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -111,7 +110,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
 test("navigate to image details", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  const provider = await prepareMarysDocuments(); // do it twice
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -139,8 +138,8 @@ test("navigate to devices and back on mobile resolution", async ({
   const page = await context.newPage();
   await page.goto("/");
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
   await prepareMarysDevices();
+  const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
     // When
