@@ -3,11 +3,12 @@ import {
   clearLocalStorage,
   inputMarysPassword,
   loginAsMary,
-  marysDeviceId,
+  prepareMarysContacts,
   prepareMarysDevices,
   prepareMarysDocuments,
   prepareMarysLogin,
   setupMockServer,
+  TestData,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -18,6 +19,7 @@ test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
+  await prepareMarysContacts();
   const provider = await prepareMarysDocuments(); // do it twice
 
   await provider.executeTest(async (mockServer) => {
@@ -81,6 +83,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/");
   await prepareMarysLogin(page);
+  await prepareMarysContacts();
   const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
@@ -156,7 +159,7 @@ test("navigate to devices and back on mobile resolution", async ({
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
     devicesLink.click();
-    const deviceEntry = page.getByText(marysDeviceId);
+    const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);
     await expect(deviceEntry).toBeVisible();
     const backButton = page.getByRole("button", { name: "back-button" });
     await expect(backButton).toBeVisible();

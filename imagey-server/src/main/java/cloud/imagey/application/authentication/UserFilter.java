@@ -75,6 +75,9 @@ public class UserFilter implements ContainerRequestFilter {
         if (isCreation(requestContext)) {
             return;
         }
+        if (isPublicKey(requestContext)) {
+            return;
+        }
         User user = extractUser(requestContext.getUriInfo());
         if (!tokenService.verify(decodedToken, user)) {
             LOG.info("Token not verified");
@@ -96,6 +99,14 @@ public class UserFilter implements ContainerRequestFilter {
         return size(pathSegments) == 2
             && "verifications".equals(pathSegments.get(1).getPath())
             && requestContext.getMethod().equalsIgnoreCase("POST");
+    }
+
+    private boolean isPublicKey(ContainerRequestContext requestContext) {
+        // public key request is a GET to /users/{email}/public-keys/{kid}
+        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
+        return size(pathSegments) == 3
+            && "public-keys".equals(pathSegments.get(1).getPath())
+            && requestContext.getMethod().equalsIgnoreCase("GET");
     }
 
     private boolean isAuthentication(ContainerRequestContext requestContext) {

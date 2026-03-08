@@ -19,7 +19,6 @@ package cloud.imagey.domain.token;
 import static java.lang.System.currentTimeMillis;
 import static java.util.Optional.empty;
 
-import java.text.ParseException;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Optional;
@@ -105,7 +104,7 @@ public class TokenService {
                 return empty();
             }
             return Optional.of(new DecodedToken(signedJWT.getJWTClaimsSet()));
-        } catch (JOSEException | ParseException e) {
+        } catch (Exception e) {
             LOG.warn("Token not valid", e);
             return empty();
         }

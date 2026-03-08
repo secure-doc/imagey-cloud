@@ -17,9 +17,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["tests/unit/setup.ts"],
-    include: ["tests/unit/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx"],
     coverage: {
-      reporter: ["text", "html"],
+      provider: "istanbul",
+      reporter: ["json"],
+      reportsDirectory: ".nyc_output",
     },
   },
   plugins: [

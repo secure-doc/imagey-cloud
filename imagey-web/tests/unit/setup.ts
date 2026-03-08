@@ -1,5 +1,6 @@
 import { beforeAll, afterEach } from "vitest";
 import { vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 import { webcrypto } from "node:crypto";
 
 import { authenticationRepository } from "../../src/authentication/AuthenticationRepository";
