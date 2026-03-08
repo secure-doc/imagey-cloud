@@ -8,7 +8,7 @@ import { documentService } from "../../src/document/DocumentService";
 import { imageService } from "../../src/image/ImageService";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { marysPrivateMainKey } from "../integration/setup";
+import { TestData } from "../integration/setup";
 
 import {
   device1KeyPair,
@@ -110,7 +110,7 @@ test("Store document to disk", async () => {
     marysEmail,
     file,
     mainKeyPair.publicKey,
-    marysPrivateMainKey,
+    TestData.mary.privateMainKey,
   );
 
   expect(documentMetadata).toBeDefined();

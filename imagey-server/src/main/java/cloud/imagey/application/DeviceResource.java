@@ -44,7 +44,6 @@ import cloud.imagey.domain.user.DeviceRepository;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
-@RolesAllowed("owner")
 @Path("{email}/devices")
 public class DeviceResource {
 
@@ -54,12 +53,14 @@ public class DeviceResource {
     private DeviceRepository deviceRepository;
 
     @GET
+    @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
     public List<DeviceId> getDevices(@PathParam("email") User user) {
         return deviceRepository.loadDevices(user);
     }
 
     @POST
+    @RolesAllowed("owner")
     @Path("{deviceId}/public-keys")
     @Consumes(APPLICATION_JSON)
     public Response storeDevicePublicKey(
@@ -72,6 +73,7 @@ public class DeviceResource {
     }
 
     @GET
+    @RolesAllowed("owner")
     @Path("{deviceId}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public String getDevicePublicKey(
@@ -80,10 +82,11 @@ public class DeviceResource {
         @PathParam("kid") Kid kid) throws IOException {
 
         LOG.info("Loading public device key");
-        return deviceRepository.loadDevicePublicKey(user, deviceId, kid).orElseThrow(() -> new NotFoundException());
+        return deviceRepository.loadDevicePublicKey(user, deviceId, kid).orElseThrow(NotFoundException::new);
     }
 
     @POST
+    @RolesAllowed("owner")
     @Path("{deviceId}/private-keys")
     @Consumes(APPLICATION_JSON)
     public Response storeEncryptedPrivateKey(
@@ -99,6 +102,7 @@ public class DeviceResource {
     }
 
     @GET
+    @RolesAllowed("owner")
     @Path("{deviceId}/private-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public PrivateKeyMetadata getEncryptedPrivateKey(

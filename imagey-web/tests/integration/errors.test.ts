@@ -2,13 +2,11 @@ import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   loginAsMary,
-  marysDeviceId,
-  marysPassword,
-  marysPublicMainKey,
   prepareMarysLogin,
   provider,
-  setupMarysDevice,
   setupMockServer,
+  setupBillsDevice,
+  TestData,
 } from "./setup";
 import {} from "@pact-foundation/pact";
 
@@ -41,7 +39,7 @@ test("document loading error", async ({ page }) => {
       ]),
     );
 
-  await provider
+  provider
     .addInteraction()
     .given("marys document has error")
     .uponReceiving("a request of mary to get content that fails")
@@ -50,7 +48,15 @@ test("document loading error", async ({ page }) => {
       "/users/mary@imagey.cloud/documents/error-doc-id/contents/error-preview-id",
       (r) => r.headers({ Accept: "application/octet-stream" }),
     )
-    .willRespondWith(500)
+    .willRespondWith(500);
+
+  await provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get contact requests")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(["laura@imagey.cloud"]))
     .executeTest(async (mockServer) => {
       await setupMockServer(page, mockServer);
       await loginAsMary(page);
@@ -62,34 +68,32 @@ test("private key loading error", async ({ page }) => {
   // Given
   provider
     .addInteraction()
-    .given("marys private key is invalid")
     .uponReceiving(
-      "a request of mary to get encrypted private main key for device that fails",
+      "a request of bill to get encrypted private main key for device that fails",
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysDeviceId}/private-keys/0`,
+      `/users/bill@imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/private-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(500);
 
   await provider
     .addInteraction()
-    .given("default")
-    .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+    .uponReceiving("a request of bill to get public key")
+    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) =>
       r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey))
+    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey))
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
-      await setupMarysDevice(page);
-      await page.goto("/?email=mary@imagey.cloud");
+      await setupBillsDevice(page);
+      await page.goto("/?email=bill@imagey.cloud");
 
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
-      await passwordInput.fill(marysPassword);
+      await passwordInput.fill(TestData.bill.password);
 
       // Then
       const confirmButton = page.getByText("Confirm");

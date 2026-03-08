@@ -62,8 +62,14 @@ export default function PasswordDialog<R>({
     const password = data.get("password")?.toString();
     if (password) {
       validatePassword(password)
-        .then((result) => onPasswordValid(result))
-        .catch(() => setPasswordError(true));
+        .then((result) => {
+          setPasswordError(false);
+          onPasswordValid(result);
+        })
+        .catch(() =>
+          // TODO handle forbidden
+          setPasswordError(true),
+        );
     }
   };
 

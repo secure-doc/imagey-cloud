@@ -17,6 +17,7 @@ import {
   JsonWebKeyPairs,
   AuthenticationContext,
 } from "./contexts/AuthenticationContext";
+import Activities from "./pages/Activities";
 
 function App() {
   /*
@@ -65,7 +66,7 @@ function App() {
           <Navigation className="left max l" />
           <Navigation className="left m" />
           <Routes>
-            <Route path="/" element={<Images />} />
+            <Route path="/" element={<Activities />} />
             <Route path="images">
               <Route index element={<Images />} />
               <Route path=":id" element={<Image />} />

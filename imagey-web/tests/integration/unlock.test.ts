@@ -2,19 +2,14 @@ import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   loginAsMary,
-  marysDeviceId,
-  marysEncryptedPrivateMainKeyForSecondDevice,
-  marysPassword,
-  marysPublicDeviceKey,
-  marysPublicMainKey,
-  marysSecondDeviceId,
-  marysSecondPublicDeviceKey,
   prepareMarysDocuments,
   prepareMarysLogin,
   provider,
   runningPactRequests,
   setupMockServer,
   setupMarysSecondDevice,
+  TestData,
+  prepareMarysContactRequests,
 } from "./setup";
 import { Matchers } from "@pact-foundation/pact";
 
@@ -26,21 +21,19 @@ test("mary registers new device", async ({ page }) => {
   // Given
   provider
     .addInteraction()
-    .given("default")
     .uponReceiving("a request of mary to get public key")
     .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
       r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey));
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
   provider
     .addInteraction()
-    .given("default")
     .uponReceiving("a request of mary to store public key for device")
     .withRequest(
       "POST",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/`,
+        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
         matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
       }),
       (r) =>
@@ -64,12 +57,14 @@ test("mary registers new device", async ({ page }) => {
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/0`,
+        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
         matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysSecondPublicDeviceKey));
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
+    );
 
   await provider
     .addInteraction()
@@ -80,7 +75,7 @@ test("mary registers new device", async ({ page }) => {
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/private-keys/0`,
+        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
         matcher: "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
@@ -93,7 +88,7 @@ test("mary registers new device", async ({ page }) => {
 
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill(marysPassword);
+      passwordInput.fill(TestData.mary.password);
       page.getByText("Confirm").click();
       await expect(
         page.getByText(
@@ -115,6 +110,7 @@ test("mary registers new device", async ({ page }) => {
 test("mary unlocks new device", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
   await prepareMarysDocuments();
   provider
     .addInteraction()
@@ -124,7 +120,10 @@ test("mary unlocks new device", async ({ page }) => {
       r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody([marysSecondDeviceId, marysDeviceId]),
+      r.jsonBody([
+        TestData.mary.devices[1].deviceId,
+        TestData.mary.devices[0].deviceId,
+      ]),
     );
 
   provider
@@ -133,10 +132,12 @@ test("mary unlocks new device", async ({ page }) => {
     .uponReceiving("a request of mary to get public key of second device")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysSecondPublicDeviceKey));
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
+    );
 
   await provider
     .addInteraction()
@@ -146,12 +147,14 @@ test("mary unlocks new device", async ({ page }) => {
     )
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/private-keys/`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/`,
       (r) =>
         r.headers({ "Content-Type": "application/json" }).jsonBody({
           kid: "0",
-          encryptingDeviceId: marysDeviceId,
-          key: Matchers.string(marysEncryptedPrivateMainKeyForSecondDevice),
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: Matchers.string(
+            TestData.mary.devices[1].encryptedPrivateMainKey,
+          ),
         }),
     )
     .willRespondWith(200)
@@ -170,7 +173,7 @@ test("mary unlocks new device", async ({ page }) => {
       await expect(devicesLink).toBeVisible();
       devicesLink.click();
       const deviceEntry = page
-        .locator("li", { hasText: marysSecondDeviceId })
+        .locator("li", { hasText: TestData.mary.devices[1].deviceId })
         .locator("div.max");
       await deviceEntry.click({ force: true }); // force is required, because the onClick is on a parent
       await expect(
@@ -189,14 +192,14 @@ test("mary unlocks new device", async ({ page }) => {
 test("mary logs into new device", async ({ page }) => {
   // Given
   await setupMarysSecondDevice(page);
+  await prepareMarysContactRequests();
   provider
     .addInteraction()
-    .given("default")
     .uponReceiving("a request of mary to get public key")
     .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
       r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey));
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
   provider
     .addInteraction()
@@ -206,10 +209,12 @@ test("mary logs into new device", async ({ page }) => {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysSecondPublicDeviceKey));
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
+    );
 
   provider
     .addInteraction()
@@ -219,14 +224,14 @@ test("mary logs into new device", async ({ page }) => {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/private-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
         kid: "0",
-        encryptingDeviceId: marysDeviceId,
-        key: marysEncryptedPrivateMainKeyForSecondDevice,
+        encryptingDeviceId: TestData.mary.devices[0].deviceId,
+        key: TestData.mary.devices[1].encryptedPrivateMainKey,
       }),
     );
 
@@ -236,10 +241,12 @@ test("mary logs into new device", async ({ page }) => {
     .uponReceiving("a request of mary to get public key of second device")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysSecondDeviceId}/public-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysSecondPublicDeviceKey));
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
+    );
 
   provider
     .addInteraction()
@@ -256,10 +263,12 @@ test("mary logs into new device", async ({ page }) => {
     .uponReceiving("a request of mary to get public key of first device")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysDeviceId}/public-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicDeviceKey))
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[0].publicDeviceKey),
+    )
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
@@ -267,12 +276,12 @@ test("mary logs into new device", async ({ page }) => {
 
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill(marysPassword);
+      passwordInput.fill(TestData.mary.password);
       page.getByText("Confirm").click();
       await expect(page.getByText("Confirm")).not.toBeVisible();
 
       // Then
-      await expect(page.getByText("No images found")).toBeVisible();
+      await expect(page.getByText("Contact Request")).toBeVisible();
       await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
       await expect.poll(() => runningPactRequests).toBe(0);
     });

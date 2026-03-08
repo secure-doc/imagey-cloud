@@ -1,17 +1,7 @@
 import { expect, Page } from "@playwright/test";
 import { PactV4, Matchers } from "@pact-foundation/pact";
 import * as fs from "fs";
-import {
-  marysPassword,
-  marysDeviceId,
-  marysPublicDeviceKey,
-  marysEncryptedPrivateDeviceKey,
-  marysEncryptedPrivateMainKey,
-  marysPublicMainKey,
-  marysUploadedDocumentId,
-  marysSecondDeviceId,
-  marysSecondEncryptedPrivateDeviceKey,
-} from "./keys";
+import { TestData } from "./testdata";
 
 type ConfiguredInteraction = ReturnType<
   ReturnType<
@@ -25,7 +15,7 @@ type MockServer = Parameters<
   Parameters<ConfiguredInteraction["executeTest"]>[0]
 >[0];
 
-export * from "./keys";
+export * from "./testdata";
 
 export const provider = new PactV4({
   dir: process.env.PWD + "/target/test-classes", // prepare for maven packaging
@@ -136,37 +126,36 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
 export async function prepareMarysLogin(page: Page) {
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving("a request of mary to get public key")
     .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
       r.headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey));
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving("a request of mary to get public device key")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysDeviceId}/public-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
         }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicDeviceKey));
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[0].publicDeviceKey),
+    );
 
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get encrypted private main key for device",
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${marysDeviceId}/private-keys/0`,
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -175,8 +164,8 @@ export async function prepareMarysLogin(page: Page) {
     .willRespondWith(200, (r) =>
       r.jsonBody({
         kid: "0",
-        encryptingDeviceId: marysDeviceId,
-        key: marysEncryptedPrivateMainKey,
+        encryptingDeviceId: TestData.mary.devices[0].deviceId,
+        key: TestData.mary.devices[0].encryptedPrivateMainKey,
       }),
     );
   await setupMarysDevice(page);
@@ -185,7 +174,6 @@ export async function prepareMarysLogin(page: Page) {
 export async function prepareMarysDocuments() {
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving("a request of mary to get documents")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r.headers({
@@ -215,7 +203,6 @@ export async function prepareMarysDocuments() {
 
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get content with id 6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
     )
@@ -236,7 +223,6 @@ export async function prepareMarysDocuments() {
 
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get shared key for document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
     )
@@ -257,7 +243,6 @@ export async function prepareMarysDocuments() {
 
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
     )
@@ -278,7 +263,6 @@ export async function prepareMarysDocuments() {
 
   return provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get shared key for document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
     )
@@ -303,29 +287,27 @@ export async function prepareDocumentUpload(
   documentId: string,
 ) {
   const previewImageId =
-    documentId === marysUploadedDocumentId
+    documentId === TestData.mary.documents[0].documentId
       ? "9e4742c8-b3b8-44b9-ab83-8e4912271dee"
       : "2211b759-744c-40f3-aec2-10c8d549a49e";
   /*
 const smallImageId =
-documentId === marysUploadedDocumentId
+documentId === TestData.mary.documents[0].documentId
   ? "d09630e2-437e-40ff-8da1-753a0e05caad"
   : "01e9b15b-655c-4baf-8fd3-78c23df70a67";
   */
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving("a request of mary to get public key")
     .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
       r.headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(marysPublicMainKey));
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
   provider
     .addInteraction()
-    .given("marys second device registered")
     .uponReceiving("a request of mary to upload a document")
     .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
       const payload = createMultipartPayload(documentId);
@@ -396,7 +378,10 @@ export async function prepareMarysDevices() {
       }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody([marysSecondDeviceId, marysDeviceId]),
+      r.jsonBody([
+        TestData.mary.devices[1].deviceId,
+        TestData.mary.devices[0].deviceId,
+      ]),
     );
 }
 
@@ -408,12 +393,15 @@ export async function setupMarysDevice(page: Page) {
   await page.evaluate(
     (deviceId) =>
       localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-    marysDeviceId,
+    TestData.mary.devices[0].deviceId,
   );
   await page.evaluate(
     ({ deviceId, key }) =>
       localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
-    { deviceId: marysDeviceId, key: marysEncryptedPrivateDeviceKey },
+    {
+      deviceId: TestData.mary.devices[0].deviceId,
+      key: TestData.mary.devices[0].encryptedPrivateDeviceKey,
+    },
   );
 }
 
@@ -425,14 +413,34 @@ export async function setupMarysSecondDevice(page: Page) {
   await page.evaluate(
     (deviceId) =>
       localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
-    marysSecondDeviceId,
+    TestData.mary.devices[1].deviceId,
   );
   await page.evaluate(
     ({ deviceId, key }) =>
       localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
     {
-      deviceId: marysSecondDeviceId,
-      key: marysSecondEncryptedPrivateDeviceKey,
+      deviceId: TestData.mary.devices[1].deviceId,
+      key: TestData.mary.devices[1].encryptedPrivateDeviceKey,
+    },
+  );
+}
+
+export async function setupBillsDevice(page: Page) {
+  await page.evaluate(() => {
+    localStorage.setItem("i18nextLng", "en");
+    localStorage.setItem("imagey.user", "bill@imagey.cloud");
+  });
+  await page.evaluate(
+    (deviceId) =>
+      localStorage.setItem("imagey.deviceIds[bill@imagey.cloud]", deviceId),
+    TestData.bill.devices[0].deviceId,
+  );
+  await page.evaluate(
+    ({ deviceId, key }) =>
+      localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
+    {
+      deviceId: TestData.bill.devices[0].deviceId,
+      key: TestData.bill.devices[0].encryptedPrivateDeviceKey,
     },
   );
 }
@@ -440,9 +448,33 @@ export async function setupMarysSecondDevice(page: Page) {
 export async function inputMarysPassword(page: Page) {
   const passwordInput = page.getByLabel("password");
   await expect(passwordInput).toBeVisible();
-  passwordInput.fill(marysPassword);
+  passwordInput.fill(TestData.mary.password);
   const confirmButton = page.getByText("Confirm");
   await expect(confirmButton).toBeVisible();
   confirmButton.click();
   await expect(confirmButton).not.toBeVisible();
+}
+
+export async function prepareMarysContactRequests() {
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get contact requests")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(["laura@imagey.cloud"]));
+}
+
+export async function prepareMarysContacts() {
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
 }

@@ -1,3 +1,4 @@
+import { contactRepository } from "../contact/ContactRepository";
 import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { deviceService } from "../device/DeviceService";
 import { authenticationRepository } from "./AuthenticationRepository";
@@ -12,6 +13,7 @@ export const authenticationService = {
   register: async (
     email: string,
     password: string,
+    inviter?: string,
   ): Promise<JsonWebKeyPairs> => {
     const device = await deviceService.initializeDevice(email, password);
 
@@ -28,6 +30,13 @@ export const authenticationService = {
       encryptedPrivateMainKey,
       device.deviceKeyPair.publicKey,
     );
+    if (inviter) {
+      await contactRepository.acceptContactRequest(
+        email,
+        inviter,
+        mainKeyPair.privateKey,
+      );
+    }
     return {
       mainKeyPair,
       deviceKeyPair: device.deviceKeyPair,

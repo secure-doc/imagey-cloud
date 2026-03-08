@@ -76,7 +76,7 @@ export default function AuthenticationComponent({
           <DeviceSetupDialog
             email={email}
             deviceId={deviceId}
-            onPrivateKeysDecrypted={(privateMainKey, privateDeviceKey) => {
+            onPrivateKeysDecrypted={(privateMainKey, privateDeviceKey) =>
               authenticationRepository
                 .loadPublicDeviceKey(email, deviceId)
                 .then((publicDeviceKey) =>
@@ -90,8 +90,8 @@ export default function AuthenticationComponent({
                       privateKey: privateDeviceKey,
                     },
                   }),
-                );
-            }}
+                )
+            }
           />
         );
       } else if (publicMainKey) {

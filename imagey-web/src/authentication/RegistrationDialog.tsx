@@ -13,13 +13,15 @@ export default function RegistrationDialog({
   onKeysDecrypted,
 }: RegistrationDialogProperties) {
   const { t } = useTranslation();
+  const params = new URLSearchParams(window.location.search);
+  const inviter = params.get("inviter") ?? undefined;
   return (
     <PasswordDialog<string>
       message={t("Select a password for this device")}
       validatePassword={(password) => Promise.resolve(password)}
       onPasswordValid={(password) => {
         authenticationService
-          .register(email, password)
+          .register(email, password, inviter)
           .then((keyPairs) => onKeysDecrypted(keyPairs));
       }}
     />

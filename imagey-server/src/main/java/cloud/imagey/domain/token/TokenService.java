@@ -19,7 +19,6 @@ package cloud.imagey.domain.token;
 import static java.lang.System.currentTimeMillis;
 import static java.util.Optional.empty;
 
-import java.text.ParseException;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Optional;
@@ -46,8 +45,9 @@ import cloud.imagey.domain.user.User;
 @ApplicationScoped
 public class TokenService {
 
-    public static final long ONE_HOUR = 24 * 60 * 60 * 1000;
-    public static final long ONE_DAY = 24 * 60 * 60 * 1000;
+    public static final long ONE_HOUR = 60 * 60 * 1000;
+    public static final long ONE_DAY = 24 * ONE_HOUR;
+    public static final long ONE_WEEK = 7 * ONE_DAY;
     private static final Logger LOG = LogManager.getLogger(TokenService.class);
     private static final String ISSUER = "https://imagey.cloud";
 
@@ -89,7 +89,7 @@ public class TokenService {
                 return empty();
             }
             return Optional.of(new DecodedToken(signedJWT.getJWTClaimsSet()));
-        } catch (JOSEException | ParseException e) {
+        } catch (Exception e) {
             LOG.warn("Token not valid", e);
             return empty();
         }

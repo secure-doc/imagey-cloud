@@ -3,11 +3,14 @@ import {
   clearLocalStorage,
   inputMarysPassword,
   loginAsMary,
-  marysDeviceId,
+  prepareMarysContactRequests,
+  prepareMarysContacts,
   prepareMarysDevices,
   prepareMarysDocuments,
   prepareMarysLogin,
+  provider,
   setupMockServer,
+  TestData,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -18,9 +21,19 @@ test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  const provider = await prepareMarysDocuments(); // do it twice
+  await prepareMarysContacts();
+  const given = provider
+    .addInteraction()
+    .given("Mary has declined lauras invitation")
+    .uponReceiving("a request of mary to get contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
 
-  await provider.executeTest(async (mockServer) => {
+  await given.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
@@ -50,6 +63,7 @@ test("open and close navigation drawer on mobile resolution", async ({
   await page.goto("/");
 
   await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
   const provider = await prepareMarysDocuments();
   await provider.executeTest(async (mockServer) => {
     // When
@@ -81,9 +95,20 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/");
   await prepareMarysLogin(page);
-  const provider = await prepareMarysDocuments();
+  await prepareMarysContacts();
+  await prepareMarysDocuments();
+  const given = provider
+    .addInteraction()
+    .given("Mary has declined lauras invitation")
+    .uponReceiving("a request of mary to get contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
 
-  await provider.executeTest(async (mockServer) => {
+  await given.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
@@ -110,6 +135,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
 test("navigate to image details", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
   const provider = await prepareMarysDocuments(); // do it twice
 
   await provider.executeTest(async (mockServer) => {
@@ -139,6 +165,7 @@ test("navigate to devices and back on mobile resolution", async ({
   await page.goto("/");
   await prepareMarysLogin(page);
   await prepareMarysDevices();
+  await prepareMarysContactRequests();
   const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
@@ -156,7 +183,7 @@ test("navigate to devices and back on mobile resolution", async ({
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
     devicesLink.click();
-    const deviceEntry = page.getByText(marysDeviceId);
+    const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);
     await expect(deviceEntry).toBeVisible();
     const backButton = page.getByRole("button", { name: "back-button" });
     await expect(backButton).toBeVisible();

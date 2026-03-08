@@ -16,7 +16,18 @@
  */
 package cloud.imagey;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+
+import javax.annotation.security.PermitAll;
+import javax.annotation.security.RolesAllowed;
+import javax.ws.rs.DELETE;
+import javax.ws.rs.GET;
+import javax.ws.rs.HEAD;
+import javax.ws.rs.OPTIONS;
+import javax.ws.rs.PATCH;
+import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
 
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -25,5 +36,18 @@ import com.tngtech.archunit.lang.ArchRule;
 @AnalyzeClasses(packages = "cloud.imagey")
 public class ArchitectureTest {
     @ArchTest
-    public static final ArchRule NO_CYCLES = slices().matching("cloud.imagey.(*)..").should().beFreeOfCycles();
+    private static ArchRule noCycles = slices().matching("cloud.imagey.(*)..").should().beFreeOfCycles();
+    @ArchTest
+    private static ArchRule secured = methods()
+        .that()
+        .areAnnotatedWith(GET.class)
+        .or().areAnnotatedWith(POST.class)
+        .or().areAnnotatedWith(PUT.class)
+        .or().areAnnotatedWith(DELETE.class)
+        .or().areAnnotatedWith(PATCH.class)
+        .or().areAnnotatedWith(HEAD.class)
+        .or().areAnnotatedWith(OPTIONS.class)
+        .should()
+        .beAnnotatedWith(RolesAllowed.class)
+        .orShould().beAnnotatedWith(PermitAll.class);
 }

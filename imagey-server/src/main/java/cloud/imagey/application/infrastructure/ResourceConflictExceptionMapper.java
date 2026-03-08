@@ -23,14 +23,20 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.ExceptionMapper;
 import javax.ws.rs.ext.Provider;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import cloud.imagey.infrastructure.ResourceConflictException;
 
 @Provider
 @ApplicationScoped
 public class ResourceConflictExceptionMapper implements ExceptionMapper<ResourceConflictException> {
 
+    private static final Logger LOG = LogManager.getLogger(ResourceConflictExceptionMapper.class);
+
     @Override
     public Response toResponse(ResourceConflictException exception) {
+        LOG.info(exception.getMessage(), exception);
         return Response.status(CONFLICT).build();
     }
 }
