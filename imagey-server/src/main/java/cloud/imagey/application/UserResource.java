@@ -40,6 +40,8 @@ import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.chat.ContactService;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserRegistration;
@@ -57,6 +59,8 @@ public class UserResource {
     private UserService userService;
     @Inject
     private UserRepository userRepository;
+    @Inject
+    private ContactService contactService;
     @Inject
     private Provider<Principal> currentPrincipal;
 
@@ -86,5 +90,21 @@ public class UserResource {
 
         AuthenticationStatus status = userService.startAuthenticationProcess(user);
         return status == REGISTRATION_STARTED ? Response.status(CREATED).build() : Response.status(ACCEPTED).build();
+    }
+
+    @POST
+    @Path("{email}/contact-requests")
+    @Consumes(APPLICATION_JSON)
+    public void requestContact(@PathParam("email") User sender, User recipient) throws IOException {
+        contactService.invite(sender, recipient);
+    }
+
+    @POST
+    @Path("{email}/contacts/{contact}")
+    @Consumes(APPLICATION_JSON)
+    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, EncryptedSharedKey key)
+            throws IOException {
+
+        contactService.acceptInvitation(user, contact, key);
     }
 }
