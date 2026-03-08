@@ -9,12 +9,6 @@ vi.mock("../../src/authentication/AuthenticationRepository", () => ({
     loadPublicMainKey: vi.fn(),
   },
 }));
-vi.mock("../../src/authentication/CryptoService", () => ({
-  cryptoService: {
-    generateSymmetricKey: vi.fn(),
-    encryptKey: vi.fn(),
-  },
-}));
 
 describe("ContactRepository", () => {
   beforeEach(() => {
@@ -82,10 +76,10 @@ describe("ContactRepository", () => {
       vi.mocked(authenticationRepository.loadPublicMainKey).mockResolvedValue(
         "public-key",
       );
-      vi.mocked(cryptoService.generateSymmetricKey).mockResolvedValue({
+      vi.spyOn(cryptoService, "generateSymmetricKey").mockResolvedValue({
         kty: "oct",
       } as JsonWebKey);
-      vi.mocked(cryptoService.encryptKey).mockResolvedValue(
+      vi.spyOn(cryptoService, "encryptKey").mockResolvedValue(
         "encrypted-shared-key",
       );
 
@@ -106,8 +100,14 @@ describe("ContactRepository", () => {
 
     it("throws error when response is not ok", async () => {
       vi.mocked(global.fetch).mockResolvedValue({ ok: false } as Response);
-      vi.mocked(authenticationRepository.loadPublicMainKey).mockResolvedValue(
-        "public-key",
+      vi.mocked(authenticationRepository.loadPublicMainKey).mockResolvedValue({
+        kty: "oct",
+      } as JsonWebKey);
+      vi.spyOn(cryptoService, "generateSymmetricKey").mockResolvedValue({
+        kty: "oct",
+      } as JsonWebKey);
+      vi.spyOn(cryptoService, "encryptKey").mockResolvedValue(
+        "encrypted-shared-key",
       );
 
       await expect(
@@ -132,8 +132,7 @@ describe("ContactRepository", () => {
       expect(global.fetch).toHaveBeenCalledWith(
         "/users/user@example.com/contact-requests/contact@example.com",
         expect.objectContaining({
-          method: "PUT",
-          body: JSON.stringify({ status: "DECLINED_BY_USER" }),
+          method: "DELETE",
         }),
       );
     });

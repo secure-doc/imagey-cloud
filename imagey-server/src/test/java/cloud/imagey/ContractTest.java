@@ -96,22 +96,7 @@ public class ContractTest {
         tokenState = NO_TOKEN;
     }
 
-    @State("marys document has error")
-    void marysDocumentHasError() throws URISyntaxException, IOException {
-        initializeDefaultState();
-        user = new User(new Email("mary@imagey.cloud"));
-        File marysData = new File(rootPath, "mary@imagey.cloud");
-        File marysDocuments = new File(marysData, "documents");
-        if (marysDocuments.exists()) {
-            for (File file : marysDocuments.listFiles()) {
-                forceDelete(file);
-            }
-        }
-        File errorDoc = new File(marysDocuments, "error-doc-id/contents/error-preview-id");
-        errorDoc.mkdirs(); // cause IOException on read for 500 status
-        File errorMeta = new File(marysDocuments, "error-doc-id/meta-data");
-        copyURLToFile(ContractTest.class.getResource("/error-doc-id-meta-data.json"), errorMeta);
-    }
+
 
     @State("marys second device registered")
     void marysSecondDeviceRegistered() throws URISyntaxException, IOException {
