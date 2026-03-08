@@ -1,103 +1,144 @@
+import fs from "fs";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   loginAsMary,
-  prepareMarysLogin,
-  provider,
-  setupMockServer,
+  setupMarysDevice,
   setupBillsDevice,
   TestData,
 } from "./setup";
-import {} from "@pact-foundation/pact";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
 });
 
 test("document loading error", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
+  page.on("console", (msg) => console.log("BROWSER CONSOLE:", msg.text()));
+  page.on("pageerror", (err) => console.log("PAGE ERROR:", err.message));
+  page.on("requestfailed", (req) =>
+    console.log("REQUEST FAILED:", req.url(), req.failure()?.errorText),
+  );
+  page.on("response", (res) =>
+    console.log("RESPONSE:", res.url(), res.status()),
+  );
 
-  // Manually setup ONE document that fails to load content
-  provider
-    .addInteraction()
-    .given("marys document has error")
-    .uponReceiving("a request of mary to get documents for error test")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody([
-        {
-          documentId: "error-doc-id",
-          name: "error.jpg",
-          previewImageId: "error-preview-id",
-          size: 100,
-          type: "image/jpeg",
-          smallImageId: "small-id",
+  // Mock login endpoints
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
         },
-      ]),
-    );
+      });
+    },
+  );
 
-  provider
-    .addInteraction()
-    .given("marys document has error")
-    .uponReceiving("a request of mary to get content that fails")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/error-doc-id/contents/error-preview-id",
-      (r) => r.headers({ Accept: "application/octet-stream" }),
-    )
-    .willRespondWith(500);
+  // Mock contact requests
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: ["laura@imagey.cloud"],
+      });
+    },
+  );
 
-  await provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get contact requests")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(["laura@imagey.cloud"]))
-    .executeTest(async (mockServer) => {
-      await setupMockServer(page, mockServer);
-      await loginAsMary(page);
-      await expect(page.getByText(/Error loading error.jpg/)).toBeVisible();
+  // Mock documents
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [
+        {
+          documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+          encryptedData:
+            "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
+          sharedKey: fs.readFileSync(
+            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+            "utf8",
+          ),
+        },
+      ],
     });
+  });
+
+  // Mock document content failure
+  await page.route(
+    "**/users/mary*imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/contents/*",
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  await expect(
+    page.getByText(/Error loading Encrypted Document/),
+  ).toBeVisible();
 });
 
 test("private key loading error", async ({ page }) => {
-  // Given
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of bill to get encrypted private main key for device that fails",
-    )
-    .withRequest(
-      "GET",
-      `/users/bill@imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/private-keys/0`,
-      (r) => r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(500);
+  await page.route(
+    "**/users/bill*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.bill.publicMainKey,
+      });
+    },
+  );
 
-  await provider
-    .addInteraction()
-    .uponReceiving("a request of bill to get public key")
-    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey))
-    .executeTest(async (mockServer) => {
-      // When
-      await setupMockServer(page, mockServer);
-      await setupBillsDevice(page);
-      await page.goto("/?email=bill@imagey.cloud");
+  await page.route(
+    `**/users/bill*imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
 
-      const passwordInput = page.getByLabel("password");
-      await expect(passwordInput).toBeVisible();
-      await passwordInput.fill(TestData.bill.password);
+  await setupBillsDevice(page);
+  await page.goto("/?email=bill@imagey.cloud");
 
-      // Then
-      const confirmButton = page.getByText("Confirm");
-      await confirmButton.click();
-      await expect(page.getByText("Wrong password")).toBeVisible();
-    });
+  const passwordInput = page.getByLabel("password");
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill(TestData.bill.password);
+
+  const confirmButton = page.getByText("Confirm");
+  await confirmButton.click();
+  await expect(page.getByText("Wrong password")).toBeVisible();
 });

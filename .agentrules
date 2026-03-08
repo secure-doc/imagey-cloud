@@ -1,0 +1,23 @@
+# Imagey Cloud - Agent Rules
+
+This file contains important project-related instructions for AI agents. Please read these rules carefully before starting your work and always adhere to them.
+
+## Frontend (imagey-web)
+
+1. **Code Style & Quality Assurance:**
+   After any change to the frontend code (`imagey-web`), you **MUST** verify that the code complies with the linter and typing rules.
+   To do this, run the following commands in the `imagey-web` directory:
+   - `npm run lint` (Checks Prettier formatting and runs ESLint)
+   - `npx tsc --noEmit` (Checks TypeScript typings)
+   
+2. **Fixing Errors:**
+   If these commands output any errors or warnings, they **must be fixed immediately** before marking the task as completed. You can use `npm run prettier` and `npx eslint src tests --fix` to automatically fix many formatting errors.
+
+## Backend (imagey-server)
+
+1. **Tests:**
+   After changes in the backend, you **MUST** ensure that the project builds without errors and the tests pass.
+   To do this, run the following command in the `imagey-server` directory:
+   - `mvn test`
+   
+2. All Checkstyle errors or failing unit tests / Pact tests must be fixed before delivering a finished feature to the user.

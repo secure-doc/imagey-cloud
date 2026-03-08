@@ -49,10 +49,13 @@ export async function loginAsMary(page: Page) {
 }
 
 export let runningPactRequests = 0;
+export let expectedUploadDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 
 function createMultipartPayload(documentId: string): Buffer {
   const boundary = "----WebKitFormBoundary";
-  const metadata = fs.readFileSync("./tests/images/metadata.json");
+  const metadata = fs.readFileSync(
+    `./tests/images/encrypted/${documentId}/meta-data`,
+  );
   const sharedKey = fs.readFileSync(
     `./tests/images/encrypted/${documentId}/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
   );
@@ -95,12 +98,7 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
         request.method() === "POST" &&
         headers["content-type"]?.includes("multipart/form-data")
       ) {
-        const originalPostDataSize = postData ? postData.length : 0;
-        let documentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb"; // Default to large image
-        // The original small image payload is ~714KB, the large is ~4.5MB.
-        if (originalPostDataSize < 2000000) {
-          documentId = "78d1b093-45ec-4a25-9594-615ca2d70ba2"; // Small image
-        }
+        const documentId = expectedUploadDocumentId;
 
         // To bypass strict body matching of dynamically encrypted files, we send the mock payload expected by pact instead.
         const boundary = "----WebKitFormBoundary";
@@ -184,19 +182,21 @@ export async function prepareMarysDocuments() {
       r.jsonBody([
         {
           documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-          name: "beach-1836467_1920.jpg",
-          previewImageId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-          size: 478098,
-          smallImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
-          type: "image/jpeg",
+          encryptedData:
+            "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
+          sharedKey: fs.readFileSync(
+            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+            "utf8",
+          ),
         },
         {
           documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-          name: "beach-4524911_1920.jpg",
-          previewImageId: "f232a44d-6396-42bb-9196-f0013d46ded5",
-          size: 655269,
-          smallImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
-          type: "image/jpeg",
+          encryptedData:
+            "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
+          sharedKey: fs.readFileSync(
+            "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+            "utf8",
+          ),
         },
       ]),
     );
@@ -221,27 +221,7 @@ export async function prepareMarysDocuments() {
       ),
     );
 
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of mary to get shared key for document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/encrypted-shared-keys/mary@imagey.cloud",
-      (r) =>
-        r.headers({
-          Accept: "text/plain",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "text/plain",
-        "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/shared-keys/mary@imagey.cloud/encrypted-shared.key",
-      ),
-    );
-
-  provider
+  return provider
     .addInteraction()
     .uponReceiving(
       "a request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
@@ -260,32 +240,13 @@ export async function prepareMarysDocuments() {
         "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/contents/f232a44d-6396-42bb-9196-f0013d46ded5",
       ),
     );
-
-  return provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of mary to get shared key for document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/encrypted-shared-keys/mary@imagey.cloud",
-      (r) =>
-        r.headers({
-          Accept: "text/plain",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "text/plain",
-        "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/shared-keys/mary@imagey.cloud/encrypted-shared.key",
-      ),
-    );
 }
 
 export async function prepareDocumentUpload(
   documentName: string,
   documentId: string,
 ) {
+  expectedUploadDocumentId = documentId;
   const previewImageId =
     documentId === TestData.mary.documents[0].documentId
       ? "9e4742c8-b3b8-44b9-ab83-8e4912271dee"
@@ -341,7 +302,7 @@ documentId === TestData.mary.documents[0].documentId
       ),
     );
 
-  provider
+  return provider
     .addInteraction()
     .given("Mary has uploaded document")
     .uponReceiving(

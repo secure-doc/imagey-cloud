@@ -18,33 +18,27 @@ package cloud.imagey.domain.document;
 
 import javax.json.bind.annotation.JsonbCreator;
 import javax.json.bind.annotation.JsonbProperty;
-import javax.json.bind.annotation.JsonbTypeAdapter;
-
-import cloud.imagey.domain.document.DocumentName.Adapter;
 
 public record DocumentMetadata(
-    @JsonbTypeAdapter(Adapter.class) @JsonbProperty("name") DocumentName name,
-    @JsonbProperty("type") DocumentType type,
-    @JsonbProperty("size") DocumentSize size,
     @JsonbProperty("documentId") DocumentId documentId,
     @JsonbProperty("smallImageId") DocumentId smallImageId,
-    @JsonbProperty("previewImageId") DocumentId previewImageId) {
+    @JsonbProperty("previewImageId") DocumentId previewImageId,
+    @JsonbProperty("encryptedData") String encryptedData,
+    @JsonbProperty("sharedKey") String sharedKey) {
 
     @JsonbCreator
     public DocumentMetadata(
-        @JsonbProperty("name") String name,
-        @JsonbProperty("type") String type,
-        @JsonbProperty("size") int size,
         @JsonbProperty("documentId") String documentId,
         @JsonbProperty("smallImageId") String smallImageId,
-        @JsonbProperty("previewImageId") String previewImageId) {
+        @JsonbProperty("previewImageId") String previewImageId,
+        @JsonbProperty("encryptedData") String encryptedData,
+        @JsonbProperty("sharedKey") String sharedKey) {
 
         this(
-            new DocumentName(name),
-            new DocumentType(type),
-            new DocumentSize(size),
-            new DocumentId(documentId),
-            new DocumentId(smallImageId),
-            new DocumentId(previewImageId));
+            documentId != null ? new DocumentId(documentId) : null,
+            smallImageId != null ? new DocumentId(smallImageId) : null,
+            previewImageId != null ? new DocumentId(previewImageId) : null,
+            encryptedData,
+            sharedKey);
     }
 }

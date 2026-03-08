@@ -23,17 +23,20 @@ import java.util.Map;
 
 public abstract class AbstractRecordMessageBodyWriter {
 
-    protected Object write(Record r) throws IOException {
+    protected Object write(Object r) throws IOException {
         if (r == null) {
             return null;
         }
+        if (!(r instanceof Record)) {
+            return r;
+        }
         RecordComponent[] recordComponents = r.getClass().getRecordComponents();
         if (recordComponents.length == 1) {
-            return read(r, recordComponents[0]);
+            return read((Record)r, recordComponents[0]);
         }
         Map<String, Object> values = new HashMap<>();
         for (RecordComponent component: recordComponents) {
-            values.put(component.getName(), write(read(r, component)));
+            values.put(component.getName(), write(read((Record)r, component)));
         }
         return values;
     }

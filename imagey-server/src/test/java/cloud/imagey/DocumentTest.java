@@ -17,13 +17,13 @@
 package cloud.imagey;
 
 import static java.lang.Integer.MAX_VALUE;
-import static java.math.BigDecimal.valueOf;
 import static java.util.Arrays.stream;
 import static java.util.Set.of;
 import static javax.ws.rs.client.ClientBuilder.newClient;
 import static javax.ws.rs.client.Entity.entity;
 import static javax.ws.rs.client.Entity.json;
 import static javax.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM_TYPE;
+import static javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
 import static javax.ws.rs.core.MediaType.TEXT_PLAIN_TYPE;
 import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static org.apache.commons.io.FileUtils.forceDelete;
@@ -40,6 +40,8 @@ import javax.inject.Inject;
 import javax.ws.rs.core.GenericType;
 import javax.ws.rs.core.Response;
 
+import org.apache.cxf.jaxrs.ext.multipart.Attachment;
+import org.apache.cxf.jaxrs.ext.multipart.MultipartBody;
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
@@ -87,13 +89,10 @@ public class DocumentTest {
             .header("Cookie", "token=" + token.token())
             .put(json("""
                 {
-                    "name": "file.png",
-                    "type": "image/png",
-                    "size": %d,
                     "documentId": "%s",
-                    "smallImageId": "%s",
-                    "previewImageId": "%s"                }
-            """.formatted(documentContent.length, documentId, smallImageId, previewImageId)));
+                    "encryptedData": "dummy-encrypted-data"
+                }
+            """.formatted(documentId)));
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
         response = newClient()
                 .target("http://localhost:" + config.getHttpPort())
@@ -152,12 +151,9 @@ public class DocumentTest {
             .get(new GenericType<Map<String, Object>>() { });
         assertThat(metadatas).contains(metadata);
         assertThat(metadata).contains(
-            entry("name", "file.png"),
-            entry("type", "image/png"),
-            entry("size", valueOf(6)),
             entry("documentId", documentId),
-            entry("smallImageId", smallImageId),
-            entry("previewImageId", previewImageId));
+            entry("encryptedData", "dummy-encrypted-data"),
+            entry("sharedKey", sharedKey));
         byte[] actualDocumentContent = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/")
@@ -189,6 +185,35 @@ public class DocumentTest {
         assertThat(actualSmallImageContent).isEqualTo(smallContent);
         assertThat(actualPreviewImageContent).isEqualTo(previewContent);
     }
+
+    @Test
+    @DisplayName("Upload document without optional parts")
+    public void uploadDocumentWithoutOptionals() throws IOException {
+        Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
+        String documentId = "new-doc-id";
+
+        List<Attachment> attachments = List.of(
+            new Attachment("metadata", "application/json", """
+                {
+                    "documentId": "%s",
+                    "encryptedData": "dummy-encrypted-data"
+                }
+            """.formatted(documentId)),
+            new Attachment("sharedKey", "text/plain", "dummy-shared-key"),
+            new Attachment("content", "application/octet-stream", new byte[] {1, 2, 3})
+        );
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
+
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+    }
+
+
 
     @BeforeEach
     void initializeDefaultState() throws URISyntaxException, IOException {

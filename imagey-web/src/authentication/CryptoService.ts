@@ -128,6 +128,9 @@ export const cryptoService = {
     const cryptoKey = await importSymmetricKey(key);
     return decryptAESGCM(content, cryptoKey);
   },
+
+  arrayBufferToBase64,
+  base64ToArrayBuffer,
 };
 
 async function deriveKey(
@@ -264,7 +267,7 @@ async function decryptWithPassword(
   return new TextDecoder().decode(decrypted);
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer) {
+export function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -273,7 +276,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   return btoa(binary);
 }
 
-function base64ToArrayBuffer(base64: string) {
+export function base64ToArrayBuffer(base64: string) {
   const binary = atob(base64);
   const buffer = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);

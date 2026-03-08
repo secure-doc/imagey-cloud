@@ -114,7 +114,16 @@ public class DocumentRepository extends AbstractFileRepository {
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         File metadataFile = new File(documentFolder, "meta-data");
-        return create().fromJson(readFileToString(metadataFile), DocumentMetadata.class);
+        DocumentMetadata metadata = create().fromJson(readFileToString(metadataFile), DocumentMetadata.class);
+
+        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, user.email()).orElseThrow();
+        return new DocumentMetadata(
+            documentId,
+            metadata.smallImageId(),
+            metadata.previewImageId(),
+            metadata.encryptedData(),
+            sharedKey.key()
+        );
     }
 
     public Optional<EncryptedSharedKey> findDocumentKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {

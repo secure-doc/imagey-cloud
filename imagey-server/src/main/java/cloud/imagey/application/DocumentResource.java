@@ -166,15 +166,9 @@ public class DocumentResource {
         @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
             throws IOException {
 
-        if (sharedKey != null) {
-            documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
-        }
-
+        documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
         documentRepository.persist(user, metadata);
-
-        if (content != null) {
-            documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
-        }
+        documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
 
         if (smallImage != null) {
             documentRepository.persist(user, metadata.documentId(), metadata.smallImageId(), smallImage);
