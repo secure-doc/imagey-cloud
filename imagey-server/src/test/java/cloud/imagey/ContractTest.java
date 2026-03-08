@@ -17,6 +17,7 @@
 package cloud.imagey;
 
 import static au.com.dius.pact.provider.junit5.HttpTestTarget.fromUrl;
+import static au.com.dius.pact.provider.junitsupport.StateChangeAction.TEARDOWN;
 import static cloud.imagey.ContractTest.TokenState.INVALID_TOKEN;
 import static cloud.imagey.ContractTest.TokenState.NO_TOKEN;
 import static cloud.imagey.ContractTest.TokenState.VALID_TOKEN;
@@ -24,12 +25,11 @@ import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 import static java.net.URI.create;
 import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.copyDirectory;
-import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.apache.commons.io.FileUtils.copyURLToFile;
+import static org.apache.commons.io.FileUtils.forceDelete;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.util.Optional;
 
@@ -61,6 +61,7 @@ import cloud.imagey.junit.GreenMail;
 @PactFolder("target/pacts")
 public class ContractTest {
 
+    private static final File TEST_DATA_DIRECTORY = new File("src/test/resources/data");
     @ConfigurationInject
     private static Meecrowave.Builder config;
     @Inject
@@ -73,8 +74,13 @@ public class ContractTest {
     private User user;
 
     @BeforeEach
-    void before(PactVerificationContext context) throws MalformedURLException {
+    void before(PactVerificationContext context) throws IOException {
         context.setTarget(fromUrl(create("http://localhost:" + config.getHttpPort()).toURL()));
+        File data = new File(rootPath);
+        if (data.exists()) {
+            forceDelete(data);
+        }
+        copyDirectory(TEST_DATA_DIRECTORY, data);
     }
 
     @TestTemplate
@@ -85,72 +91,9 @@ public class ContractTest {
         context.verifyInteraction();
     }
 
-    @State("default")
     void initializeDefaultState() throws URISyntaxException, IOException {
-        cleanJoesData();
-        File marysData = new File(rootPath, "mary@imagey.cloud");
-        backupAndRestoreDevices(marysData);
-        backupAndRestoreDocuments(marysData);
+        user = null;
         tokenState = NO_TOKEN;
-    }
-
-    private void cleanJoesData() throws IOException {
-        File joesData = new File("./" + rootPath, "joe@imagey.cloud");
-        if (joesData.exists()) {
-            forceDelete(joesData);
-        }
-    }
-
-    private void backupAndRestoreDevices(File marysData) throws IOException {
-        File marysDevices = new File(marysData, "devices");
-        File marysDevicesBackup = new File(marysData, "devices-backup");
-        if (marysDevices.exists() && !marysDevicesBackup.exists()) {
-            copyDirectory(marysDevices, marysDevicesBackup);
-        } else if (marysDevicesBackup.exists()) {
-            if (marysDevices.exists()) {
-                forceDelete(marysDevices);
-            }
-            copyDirectory(marysDevicesBackup, marysDevices);
-        }
-    }
-
-    private void backupAndRestoreDocuments(File marysData) throws IOException {
-        File marysDocuments = new File(marysData, "documents");
-        File marysDocumentsBackup = new File(marysData, "documents-backup");
-        if (marysDocuments.exists() && !marysDocumentsBackup.exists()) {
-            copyDirectory(marysDocuments, marysDocumentsBackup);
-        } else if (marysDocumentsBackup.exists()) {
-            if (marysDocuments.exists()) {
-                forceDelete(marysDocuments);
-            }
-            copyDirectory(marysDocumentsBackup, marysDocuments);
-        }
-
-        if (marysDocuments.exists()) {
-            for (File file : marysDocuments.listFiles()) {
-                cleanDocumentFile(file);
-            }
-        }
-    }
-
-    private void cleanDocumentFile(File file) throws IOException {
-        boolean isDoc1 = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3".equals(file.getName());
-        boolean isDoc2 = "f9910aa7-4db6-4b02-b596-c3ccf872ae98".equals(file.getName());
-        boolean isJson = file.getName().endsWith(".json");
-        boolean isDoc1Json = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3.json".equals(file.getName());
-        boolean isDoc2Json = "f9910aa7-4db6-4b02-b596-c3ccf872ae98.json".equals(file.getName());
-
-        if (!isDoc1 && !isDoc2 && !isJson) {
-            forceDelete(file);
-        }
-        if (isJson && !isDoc1Json && !isDoc2Json) {
-            forceDelete(file);
-        }
-        // Fix 409 conflict
-        File keys = new File(file, "encrypted-shared-keys");
-        if (keys.exists()) {
-            forceDelete(keys);
-        }
     }
 
     @State("marys document has error")
@@ -177,6 +120,9 @@ public class ContractTest {
         user = new User(new Email("mary@imagey.cloud"));
 
         File marysData = new File(rootPath, "mary@imagey.cloud");
+
+
+
         File marysDevices = new File(marysData, "devices");
         File secondDevice = new File(marysDevices, "00b7d225-202c-4ab9-8efc-36e6f3afb169");
         if (!secondDevice.exists()) {
@@ -188,6 +134,7 @@ public class ContractTest {
         }
         File secondPublicKey = new File(secondPublicKeyDir, "0.json");
         copyURLToFile(ContractTest.class.getResource("/second-device-public-key.json"), secondPublicKey);
+
     }
 
     @State("marys second device unlocked")
@@ -211,44 +158,28 @@ public class ContractTest {
         copyURLToFile(ContractTest.class.getResource("/second-device-private-key.json"), privateKey);
     }
 
-    @State("marys private key is invalid")
-    void marysPrivateKeyIsInvalid() throws URISyntaxException, IOException {
-        initializeDefaultState();
-        user = new User(new Email("mary@imagey.cloud"));
-        File marysData = new File(rootPath, "mary@imagey.cloud");
-        File marysDevices = new File(marysData, "devices");
-        File device = new File(marysDevices, "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c");
-        File privateKeysFolder = new File(device, "private-keys");
-        if (privateKeysFolder.exists()) {
-            forceDelete(privateKeysFolder);
-        }
-        File keyFile = new File(privateKeysFolder, "0.json");
-        keyFile.mkdirs(); // cause IOException
-    }
-
-    @State("Joe is registered")
-    void setJoesToken() throws URISyntaxException, IOException {
-        initializeDefaultState();
-        tokenState = VALID_TOKEN;
-        user = new User(new Email("joe@imagey.cloud"));
-        new File(rootPath, user.email().address()).mkdir();
-    }
-
-    @State("Marys token is invalid")
+    @State("User has invalid token")
     void invalidateMarysToken() throws URISyntaxException, IOException {
-        initializeDefaultState();
         tokenState = INVALID_TOKEN;
-        user = new User(new Email("mary@imagey.cloud"));
     }
 
     @State("Mary has uploaded document")
     void maryHasUploadedDocument() throws URISyntaxException, IOException {
-        initializeDefaultState();
-        user = new User(new Email("mary@imagey.cloud"));
+        copyDirectory(new File(TEST_DATA_DIRECTORY, "uploaded-data"), getMarysDocuments());
+    }
 
-        File marysData = new File(rootPath, "mary@imagey.cloud");
-        File marysDocuments = new File(marysData, "documents");
-        copyDirectory(new File(marysData.getParentFile().getParentFile(), "uploaded-data"), marysDocuments);
+    @State(value = "Mary has uploaded document", action = TEARDOWN)
+    void removeMarysUpload() throws URISyntaxException, IOException {
+        File data = new File(rootPath);
+        if (data.exists()) {
+            forceDelete(data);
+        }
+        copyDirectory(TEST_DATA_DIRECTORY, data);
+    }
+
+    @State("Mary has declined lauras invitation")
+    void maryHasDeclinedLaurasInvitation() throws URISyntaxException, IOException {
+        forceDelete(getMarysContactRequestOfLaura());
     }
 
     private Optional<Token> generateToken(HttpRequest request) {
@@ -272,13 +203,33 @@ public class ContractTest {
         int startIndex = "/users/".length();
         int endIndex = path.indexOf('/', startIndex + 1);
         if (endIndex < 0) {
-            return Optional.empty();
+            return Optional.of(new User(new Email("joe@imagey.cloud")));
         }
         return Optional.of(new User(new Email(path.substring(startIndex, endIndex).replace("%40", "@"))));
     }
 
     private boolean userExists(User userToCheck) {
         return new File("./" + rootPath, userToCheck.email().address()).exists();
+    }
+
+    private User getMary() {
+        return new User(new Email("mary@imagey.cloud"));
+    }
+
+    private File getMarysData() {
+        return new File(rootPath, getMary().email().address());
+    }
+
+    private File getMarysDocuments() {
+        return new File(getMarysData(), "documents");
+    }
+
+    private File getMarysContactRequestOfLaura() {
+        return new File(getMarysContactRequests(), "laura@imagey.cloud");
+    }
+
+    private File getMarysContactRequests() {
+        return new File(getMarysData(), "contact-requests");
     }
 
     public enum TokenState {

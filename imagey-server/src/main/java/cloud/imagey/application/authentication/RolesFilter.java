@@ -16,11 +16,17 @@
  */
 package cloud.imagey.application.authentication;
 
+import static cloud.imagey.application.authentication.DefaultSecurityContext.forPrincipal;
+import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
+import static cloud.imagey.domain.chat.ContactStatus.INVITATION_SENT;
+import static java.util.Optional.empty;
+import static java.util.Optional.of;
 import static java.util.Optional.ofNullable;
 import static javax.ws.rs.Priorities.AUTHENTICATION;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.util.EnumSet;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -31,13 +37,13 @@ import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerRequestFilter;
 import javax.ws.rs.core.Cookie;
-import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.Provider;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.chat.ContactRepository;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
@@ -54,6 +60,8 @@ public class RolesFilter implements ContainerRequestFilter {
     @Inject
     private TokenService tokenService;
     @Inject
+    private ContactRepository contactRepository;
+    @Inject
     private HttpServletRequest request;
 
     @Override
@@ -69,54 +77,29 @@ public class RolesFilter implements ContainerRequestFilter {
 
     private void setupPrincipal(ContainerRequestContext requestContext, Optional<DecodedToken> decodedToken) {
         if (decodedToken.isEmpty()) {
-            requestContext.setSecurityContext(new SecurityContext() {
-
-                @Override
-                public Principal getUserPrincipal() {
-                    return () -> "anonymous";
-                }
-
-                @Override
-                public boolean isUserInRole(String role) {
-                    return false;
-                }
-
-                @Override
-                public boolean isSecure() {
-                    return true;
-                }
-
-                @Override
-                public String getAuthenticationScheme() {
-                    return DIGEST_AUTH;
-                }
-            });
+            DefaultSecurityContext context = "anonymous"::toString;
+            requestContext.setSecurityContext(context);
             return;
         }
         User user = extractUser(requestContext.getUriInfo());
-        requestContext.setSecurityContext(new SecurityContext() {
-
-            @Override
-            public Principal getUserPrincipal() {
-                return decodedToken.get().jwt()::getSubject;
-            }
-
-            @Override
-            public boolean isUserInRole(String role) {
-                return user.email().address().equals(getUserPrincipal().getName()) && "owner".equals(role);
-            }
-
-            @Override
-            public boolean isSecure() {
-                return true;
-            }
-
-            @Override
-            public String getAuthenticationScheme() {
-                return DIGEST_AUTH;
-            }
-        });
+        String principalName = decodedToken.get().jwt().getSubject();
+        requestContext.setSecurityContext(forPrincipal(principalName,
+            (role) -> getRole(new User(new Email(principalName)), user).map(role::equals).isPresent()));
         Supplier<Principal> principalSupplier = requestContext.getSecurityContext()::getUserPrincipal;
         request.setAttribute(Principal.class.getName() + ".supplier", principalSupplier);
+    }
+
+    private Optional<String> getRole(User currentPrincipal, User contextUser) {
+        if (currentPrincipal.equals(contextUser)) {
+            return of("owner");
+        } else if (contactRepository.isContact(contextUser, currentPrincipal)) {
+            return of("contact");
+        } else if (contactRepository.getContactStatus(contextUser, currentPrincipal)
+            .filter(status -> EnumSet.of(INVITATION_SENT, INVITATION_RECEIVED).contains(status))
+            .isPresent()) {
+            return of("contact-request");
+        } else {
+            return empty();
+        }
     }
 }

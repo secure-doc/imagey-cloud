@@ -21,4 +21,8 @@ public class ResourceConflictException extends RuntimeException {
     public ResourceConflictException(String reason) {
         super(reason);
     }
+
+    public ResourceConflictException(String reason, Exception root) {
+        super(reason, root);
+    }
 }

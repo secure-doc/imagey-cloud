@@ -18,7 +18,6 @@ package cloud.imagey.domain.user;
 
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static org.apache.commons.io.FileUtils.readFileToString;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,10 +35,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
-import cloud.imagey.infrastructure.ResourceConflictException;
+import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
-public class UserRepository {
+public class UserRepository extends AbstractFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(UserRepository.class);
     private static final Charset UTF_8 = Charset.forName("UTF-8");
@@ -54,25 +53,12 @@ public class UserRepository {
     }
 
     public void persist(User user) {
-        File userHome = getUserHome(user);
-        if (userHome.exists()) {
-            throw new ResourceConflictException(userHome + " already exists");
-        }
-        if (!userHome.mkdir()) {
-            throw new ResourceConflictException(userHome + " could not be created");
-        }
+        File userHome = createNewFile(new File(rootPath), user.email().address());
+        mkdir(userHome);
     }
 
     public boolean exists(User user) {
         return getUserHome(user).exists();
-    }
-
-    public String getUser(User user) {
-        return String.format("""
-                {
-                    "email": "%s"
-                }
-                """, user.email());
     }
 
     public Optional<String> loadPublicKey(User user, Kid kid) {
@@ -83,14 +69,9 @@ public class UserRepository {
             LOG.info("Public key does not exist.");
             return empty();
         } else {
-            try {
-                Optional<String> publicKey = of(readFileToString(keyFile, UTF_8));
-                LOG.info("Public key loaded");
-                return publicKey;
-            } catch (IOException e) {
-                LOG.error("Public key could not be loaded", e);
-                throw new IllegalStateException(e);
-            }
+            Optional<String> publicKey = of(readFileToString(keyFile));
+            LOG.info("Public key loaded");
+            return publicKey;
         }
     }
 
@@ -99,10 +80,7 @@ public class UserRepository {
         if (!publicKeysFolder.exists()) {
             publicKeysFolder.mkdirs();
         }
-        File keyFile = new File(publicKeysFolder, kid.id() + ".json");
-        if (keyFile.exists()) {
-            throw new ResourceConflictException(keyFile + " already exists.");
-        }
+        File keyFile = createNewFile(publicKeysFolder, kid.id() + ".json");
         FileUtils.write(keyFile, publicKey.key(), UTF_8, false);
     }
 

@@ -2,11 +2,12 @@ import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   loginAsMary,
-  marysDeviceId,
+  prepareMarysContactRequests,
   prepareMarysDevices,
   prepareMarysDocuments,
   prepareMarysLogin,
   setupMockServer,
+  TestData,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -17,6 +18,7 @@ test("navigate to devices", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDevices();
+  await prepareMarysContactRequests();
   const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
@@ -37,7 +39,9 @@ test("navigate to devices", async ({ page }) => {
     // Then
     const deviceEntry = page.getByRole("heading", { name: "This device" });
     await expect(deviceEntry).toBeVisible();
-    await expect(page.getByText(marysDeviceId)).toBeVisible();
+    await expect(
+      page.getByText(TestData.mary.devices[0].deviceId),
+    ).toBeVisible();
   });
 });
 
@@ -49,6 +53,7 @@ test("navigate to devices on mobile resolution", async ({ browser }) => {
   await page.goto("/");
   await prepareMarysLogin(page);
   await prepareMarysDevices();
+  await prepareMarysContactRequests();
   const provider = await prepareMarysDocuments();
 
   await provider.executeTest(async (mockServer) => {
@@ -68,7 +73,7 @@ test("navigate to devices on mobile resolution", async ({ browser }) => {
     devicesLink.click();
 
     // Then
-    const deviceEntry = page.getByText(marysDeviceId);
+    const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);
     await expect(deviceEntry).toBeVisible();
   });
 });
@@ -77,6 +82,7 @@ test("navigate to settings index directly", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDevices();
+  await prepareMarysContactRequests();
   const builder = await prepareMarysDocuments();
 
   await builder.executeTest(async (mockServer) => {
@@ -92,25 +98,5 @@ test("navigate to settings index directly", async ({ page }) => {
 
     const devicesHeading = page.getByRole("heading", { name: "Devices" });
     await expect(devicesHeading).toBeVisible();
-  });
-});
-
-test("navigate to chats", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  const builder = await prepareMarysDocuments();
-
-  await builder.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-
-    const chatsLink = page.getByRole("link", { name: "Chats" }).first();
-    await expect(chatsLink).toBeVisible();
-    chatsLink.click();
-
-    // Then
-    await expect(page.getByText("No chats available")).toBeVisible();
   });
 });

@@ -27,7 +27,6 @@ import static org.apache.commons.io.FileUtils.writeStringToFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -36,7 +35,6 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -44,14 +42,12 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.infrastructure.IoProblemException;
-import cloud.imagey.infrastructure.ResourceConflictException;
+import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
-public class DocumentRepository {
+public class DocumentRepository extends AbstractFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DocumentRepository.class);
-    private static final Charset UTF_8 = Charset.forName("UTF-8");
 
     @Inject
     @ConfigProperty(name = "root.path")
@@ -140,32 +136,11 @@ public class DocumentRepository {
         File documentFolder = new File(documentHome, documentId.id());
         File sharedKeysFolder = new File(documentFolder, "shared-keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
-        if (sharedKey.exists()) {
-            throw new ResourceConflictException(sharedKey + " already exists");
-        }
+        File sharedKey = createNewFile(sharedKeyFolder, "encrypted-shared.key");
         writeStringToFile(sharedKey, key.key(), UTF_8);
     }
 
     private File getUserHome(User user) {
         return new File(rootPath, user.email().address());
-    }
-
-    private void mkdir(File folder) {
-        if (folder.exists()) {
-            throw new ResourceConflictException(folder + " already exists");
-        }
-        if (!folder.mkdirs()) {
-            LOG.info("Could not create folder " + folder.getName());
-            throw new ResourceConflictException(folder + " could not be created");
-        }
-    }
-
-    private String readFileToString(File file) {
-        try {
-            return FileUtils.readFileToString(file, UTF_8);
-        } catch (IOException e) {
-            throw new IoProblemException(e.getMessage());
-        }
     }
 }

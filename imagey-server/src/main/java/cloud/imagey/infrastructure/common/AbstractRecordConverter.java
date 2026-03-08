@@ -98,6 +98,9 @@ public abstract class AbstractRecordConverter {
     }
 
     protected <T> T instantiate(Class<T> type, String value) {
+        if (type.isEnum()) {
+            return (T) Enum.valueOf((Class<Enum>) type, value.toUpperCase());
+        }
         return instantiate(type, new Class<?>[] {value.getClass()}, new Object[] {value});
     }
 

@@ -20,7 +20,6 @@ import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static javax.json.bind.JsonbBuilder.create;
-import static org.apache.commons.io.FileUtils.readFileToString;
 import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
@@ -41,10 +40,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
-import cloud.imagey.infrastructure.ResourceConflictException;
+import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
-public class DeviceRepository {
+public class DeviceRepository extends AbstractFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DeviceRepository.class);
     private static final Charset UTF_8 = Charset.forName("UTF-8");
@@ -60,20 +59,10 @@ public class DeviceRepository {
 
     public Optional<PrivateKeyMetadata> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
-        File keyFile = new File(keyDirectory, kid.id() + ".json");
-        if (!keyFile.exists()) {
-            LOG.info("Private key does not exist.");
-            return empty();
-        } else {
-            try {
-                Optional<String> privateKey = of(readFileToString(keyFile, UTF_8));
-                LOG.info("Private key loaded");
-                return privateKey.map(this::parse);
-            } catch (IOException e) {
-                LOG.error("Private key could not be loaded", e);
-                throw new IllegalStateException(e);
-            }
-        }
+        return of(new File(keyDirectory, kid.id() + ".json"))
+            .filter(File::exists)
+            .map(keyFile -> readFileToString(keyFile))
+            .map(this::parse);
     }
 
     public void storeDevicePublicKey(User user, DeviceId deviceId, PublicKey key) throws IOException {
@@ -81,10 +70,7 @@ public class DeviceRepository {
         if (!keyDirectory.exists()) {
             keyDirectory.mkdirs();
         }
-        File keyFile = new File(keyDirectory, "0.json");
-        if (keyFile.exists()) {
-            throw new ResourceConflictException(keyFile + " already exists.");
-        }
+        File keyFile = createNewFile(keyDirectory, "0.json");
         FileUtils.write(keyFile, key.key(), UTF_8, false);
     }
 
@@ -95,14 +81,9 @@ public class DeviceRepository {
             LOG.info("Public key does not exist.");
             return empty();
         } else {
-            try {
-                Optional<String> publicKey = of(readFileToString(keyFile, UTF_8));
-                LOG.info("Public key loaded");
-                return publicKey;
-            } catch (IOException e) {
-                LOG.error("Public key could not be loaded", e);
-                throw new IllegalStateException(e);
-            }
+            Optional<String> publicKey = of(readFileToString(keyFile));
+            LOG.info("Public key loaded");
+            return publicKey;
         }
     }
 
@@ -115,10 +96,7 @@ public class DeviceRepository {
         if (!keyDirectory.exists()) {
             keyDirectory.mkdirs();
         }
-        File keyFile = new File(keyDirectory, "0.json");
-        if (keyFile.exists()) {
-            throw new ResourceConflictException(keyFile + " already exists.");
-        }
+        File keyFile = createNewFile(keyDirectory, "0.json");
         write(keyFile, metadata, UTF_8, false);
     }
 

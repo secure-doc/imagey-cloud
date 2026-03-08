@@ -18,9 +18,8 @@ package cloud.imagey.application;
 
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
+import static javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 import static javax.ws.rs.core.MediaType.TEXT_PLAIN;
-import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
-import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 
 import java.io.IOException;
 import java.util.List;
@@ -36,7 +35,6 @@ import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
-import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
@@ -52,7 +50,6 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
-@RolesAllowed("owner")
 @Path("{email}/documents")
 public class DocumentResource {
 
@@ -62,6 +59,7 @@ public class DocumentResource {
     private DocumentRepository documentRepository;
 
     @GET
+    @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
     public List<DocumentMetadata> getDocumentMetadata(
         @PathParam("email") User user) throws IOException {
@@ -70,6 +68,7 @@ public class DocumentResource {
     }
 
     @GET
+    @RolesAllowed("owner")
     @Path("{documentId}/meta-data")
     @Produces(APPLICATION_JSON)
     public DocumentMetadata getDocumentMetadata(
@@ -80,6 +79,7 @@ public class DocumentResource {
     }
 
     @PUT
+    @RolesAllowed("owner")
     @Path("{documentId}/meta-data")
     @Consumes(APPLICATION_JSON)
     public Response storeDocumentMetadata(
@@ -87,14 +87,12 @@ public class DocumentResource {
         @PathParam("documentId") DocumentId documentId,
         DocumentMetadata metadata) throws IOException {
 
-        if (!documentId.equals(metadata.documentId())) {
-            throw new WebApplicationException(FORBIDDEN);
-        }
         documentRepository.persist(user, metadata);
         return Response.ok().build();
     }
 
     @GET
+    @RolesAllowed("owner")
     @Path("{documentId}/contents/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public DocumentContent getDocumentContent(
@@ -106,6 +104,7 @@ public class DocumentResource {
     }
 
     @PUT
+    @RolesAllowed("owner")
     @Path("{documentId}/contents/{contentId}")
     @Consumes(APPLICATION_OCTET_STREAM)
     public Response storeDocumentContent(
@@ -119,6 +118,7 @@ public class DocumentResource {
     }
 
     @GET
+    @RolesAllowed("owner")
     @Path("{documentId}/encrypted-shared-keys/{share-email}")
     @Produces(TEXT_PLAIN)
     public String getSharedKey(
@@ -132,6 +132,7 @@ public class DocumentResource {
     }
 
     @PUT
+    @RolesAllowed("owner")
     @Path("{documentId}/encrypted-shared-keys/{share-email}")
     @Consumes(TEXT_PLAIN)
     public Response storeSharedKey(
@@ -154,7 +155,8 @@ public class DocumentResource {
      * @throws IOException if reading the input fails
      */
     @POST
-    @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+    @RolesAllowed("owner")
+    @Consumes(MULTIPART_FORM_DATA)
     public Response uploadDocument(
         @PathParam("email") User user,
         @Multipart("metadata") DocumentMetadata metadata,
@@ -163,9 +165,6 @@ public class DocumentResource {
         @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
         @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
             throws IOException {
-        if (metadata.documentId() == null) {
-            return Response.status(BAD_REQUEST).entity("Missing documentId in metadata").build();
-        }
 
         if (sharedKey != null) {
             documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
@@ -177,16 +176,12 @@ public class DocumentResource {
             documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
         }
 
-        if (metadata.smallImageId() != null) {
-            if (smallImage != null) {
-                documentRepository.persist(user, metadata.documentId(), metadata.smallImageId(), smallImage);
-            }
+        if (smallImage != null) {
+            documentRepository.persist(user, metadata.documentId(), metadata.smallImageId(), smallImage);
         }
 
-        if (metadata.previewImageId() != null) {
-            if (previewImage != null) {
-                documentRepository.persist(user, metadata.documentId(), metadata.previewImageId(), previewImage);
-            }
+        if (previewImage != null) {
+            documentRepository.persist(user, metadata.documentId(), metadata.previewImageId(), previewImage);
         }
 
         return Response.ok().build();

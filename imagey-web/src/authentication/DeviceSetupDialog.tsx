@@ -28,20 +28,22 @@ export default function DeviceSetupDialog({
     );
   }
   return (
-    <PasswordDialog<JsonWebKey>
+    <PasswordDialog<{
+      privateMainKey: JsonWebKey;
+      privateDeviceKey: JsonWebKey;
+    }>
       message={t("Input the password for this device")}
       validatePassword={(password) =>
-        cryptoService.decryptPrivatePasswordKey(
-          encryptedPrivateDeviceKey,
-          password,
-        )
-      }
-      onPasswordValid={(privateDeviceKey) =>
-        authenticationService
-          .loadPrivateMainKey(email, deviceId, privateDeviceKey)
-          .then((privateMainKey) =>
-            onPrivateKeysDecrypted(privateMainKey, privateDeviceKey),
+        cryptoService
+          .decryptPrivatePasswordKey(encryptedPrivateDeviceKey, password)
+          .then((privateDeviceKey) =>
+            authenticationService
+              .loadPrivateMainKey(email, deviceId, privateDeviceKey)
+              .then((privateMainKey) => ({ privateMainKey, privateDeviceKey })),
           )
+      }
+      onPasswordValid={({ privateMainKey, privateDeviceKey }) =>
+        onPrivateKeysDecrypted(privateMainKey, privateDeviceKey)
       }
     />
   );

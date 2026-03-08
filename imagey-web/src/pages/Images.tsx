@@ -5,6 +5,7 @@ import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
+import ImageComponent from "../components/ImageComponent";
 
 export default function Images() {
   const { t } = useTranslation();
@@ -59,31 +60,7 @@ export default function Images() {
           ? t("Loading images")
           : documents.length === 0
             ? t("No images found")
-            : documents.map((document) => {
-                const content = document.content;
-                if (content) {
-                  const blob = new Blob([content]);
-                  const url = URL.createObjectURL(blob);
-                  return (
-                    <img
-                      key={document.documentId}
-                      src={url}
-                      alt={document.name}
-                      loading="lazy"
-                      className="small-width small-height"
-                    />
-                  );
-                } else {
-                  return (
-                    <div
-                      key={document.documentId}
-                      className="small-width small-height"
-                    >
-                      {t("Error loading {{name}}", { name: document.name })}
-                    </div>
-                  );
-                }
-              })}
+            : documents.map((document) => <ImageComponent image={document} />)}
       </div>
     </main>
   );

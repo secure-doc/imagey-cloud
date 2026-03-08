@@ -1,8 +1,10 @@
 {
+  "{{user}} whants to connect with you.": "{{user}} whants to connect with you.",
   "Authentication in progress": "Authentication in progress",
   "Cancel": "Cancel",
   "Chats": "Chats",
   "Confirm": "Confirm",
+  "Contact request": "Contact request",
   "Device key missing, please reregister device": "Device key missing, please reregister device",
   "Device registered": "Device registered",
   "Device registered, but still not unlocked. You need to unlock it with another device": "Device registered, but still not unlocked. You need to unlock it with another device",
@@ -17,6 +19,7 @@
   "Loading images": "Loading images",
   "Loading public key": "Loading public key",
   "Mail with login link was sent": "Mail with login link was sent",
+  "New image": "New Image",
   "No chats available": "No chats available",
   "No image found": "No image found",
   "No images found": "No images found",
