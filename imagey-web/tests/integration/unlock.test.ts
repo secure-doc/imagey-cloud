@@ -250,6 +250,17 @@ test("mary logs into new device", async ({ page }) => {
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
+  provider
+    .addInteraction()
+    .given("marys second device unlocked")
+    .uponReceiving(
+      "a request of mary to get contact requests for unlocked device test",
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
   await provider
     .addInteraction()
     .given("marys second device unlocked")

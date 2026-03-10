@@ -41,6 +41,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cloud.imagey.domain.document.DocumentContent;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;

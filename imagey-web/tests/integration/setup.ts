@@ -237,6 +237,17 @@ export async function prepareMarysDocuments() {
   provider
     .addInteraction()
     .given("marys second device registered")
+    .uponReceiving("a request of mary to get contact requests")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  provider
+    .addInteraction()
+    .given("marys second device registered")
     .uponReceiving(
       "a request of mary to get shared key for document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
     )

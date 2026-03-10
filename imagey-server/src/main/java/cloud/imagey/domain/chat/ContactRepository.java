@@ -21,6 +21,7 @@ import static org.apache.commons.io.FileUtils.write;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.List;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
@@ -73,6 +74,10 @@ public class ContactRepository {
         }
         File keyFile = new File(contactFolder, "key.enc");
         write(keyFile, key.key(), UTF_8, false);
+    }
+
+    public List<User> findContactRequests(User user) {
+        return null;
     }
 
     private File getUserHome(User user) {

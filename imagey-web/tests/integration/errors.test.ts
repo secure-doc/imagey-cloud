@@ -41,7 +41,7 @@ test("document loading error", async ({ page }) => {
       ]),
     );
 
-  await provider
+  provider
     .addInteraction()
     .given("marys document has error")
     .uponReceiving("a request of mary to get content that fails")
@@ -50,7 +50,16 @@ test("document loading error", async ({ page }) => {
       "/users/mary@imagey.cloud/documents/error-doc-id/contents/error-preview-id",
       (r) => r.headers({ Accept: "application/octet-stream" }),
     )
-    .willRespondWith(500)
+    .willRespondWith(500);
+
+  await provider
+    .addInteraction()
+    .given("marys document has error")
+    .uponReceiving("a request of mary to get contact requests in error test")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]))
     .executeTest(async (mockServer) => {
       await setupMockServer(page, mockServer);
       await loginAsMary(page);

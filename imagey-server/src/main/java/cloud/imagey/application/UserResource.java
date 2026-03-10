@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+import static cloud.imagey.domain.chat.ContactStatus.DECLINED_BY_USER;
 import static cloud.imagey.domain.user.UserService.AuthenticationStatus.REGISTRATION_STARTED;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static javax.ws.rs.core.Response.Status.ACCEPTED;
@@ -23,6 +24,7 @@ import static javax.ws.rs.core.Response.Status.CREATED;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.util.List;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
@@ -32,6 +34,7 @@ import javax.ws.rs.ForbiddenException;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
@@ -40,7 +43,9 @@ import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.chat.ContactRepository;
 import cloud.imagey.domain.chat.ContactService;
+import cloud.imagey.domain.chat.ContactStatusUpdate;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
@@ -61,6 +66,8 @@ public class UserResource {
     private UserRepository userRepository;
     @Inject
     private ContactService contactService;
+    @Inject
+    private ContactRepository contactRepository;
     @Inject
     private Provider<Principal> currentPrincipal;
 
@@ -99,7 +106,24 @@ public class UserResource {
         contactService.invite(sender, recipient);
     }
 
-    @POST
+    @GET
+    @Path("{email}/contact-requests")
+    public List<User> getContactRequests(@PathParam("email") User user) {
+        return contactRepository.findContactRequests(user);
+    }
+
+    @PUT
+    @Path("{email}/contact-requests/{contact}")
+    @Consumes(APPLICATION_JSON)
+    public void declineInvitation(@PathParam("email") User user, @PathParam("contact") User contact, ContactStatusUpdate statusUpdate)
+            throws IOException {
+
+        if (statusUpdate.status() == DECLINED_BY_USER) {
+            contactService.rejectInvitation(user, contact);
+        }
+    }
+
+    @PUT
     @Path("{email}/contacts/{contact}")
     @Consumes(APPLICATION_JSON)
     public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, EncryptedSharedKey key)

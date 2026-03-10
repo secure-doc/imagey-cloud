@@ -209,11 +209,22 @@ test("new user clicks registration link", async ({ page }) => {
     )
     .willRespondWith(200);
 
-  await provider
+  provider
     .addInteraction()
     .given("Joe is registered")
     .uponReceiving("a request of joe to get documents")
     .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await provider
+    .addInteraction()
+    .given("Joe is registered")
+    .uponReceiving("a request of joe to get contact requests")
+    .withRequest("GET", "/users/joe@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
       }),

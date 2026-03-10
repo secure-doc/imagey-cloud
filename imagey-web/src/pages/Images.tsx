@@ -5,6 +5,7 @@ import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
+import { contactService } from "../contact/ContactService";
 
 export default function Images() {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ export default function Images() {
     undefined,
   );
   const [documents, setDocuments] = useState<Document[]>();
+  const [invitations, setInvitations] = useState<string[]>([]);
   const actionIcons = [
     <FileChooser
       key="add-image"
@@ -30,6 +32,12 @@ export default function Images() {
       documentService
         .loadDocuments(user, publicMainKey, privateMainKey)
         .then((documents) => setDocuments(documents));
+      contactService
+        .getContactRequests(user)
+        .then((requests) => setInvitations(requests))
+        .catch((error) =>
+          console.error("Failed to load contact requests:", error),
+        );
     }
   }, [publicMainKey, privateMainKey, user]);
   useEffect(() => {
@@ -55,6 +63,52 @@ export default function Images() {
   return (
     <main>
       <div className="column scroll">
+        {invitations.length > 0 && (
+          <article className="border primary-container">
+            <h5 className="primary-text">{t("Open Invitations")}</h5>
+            <ul>
+              {invitations.map((email) => (
+                <li key={email} className="row v-center">
+                  <span className="max">{email}</span>
+                  <button
+                    className="circle transparent"
+                    onClick={() => {
+                      contactService
+                        .acceptContactRequest(user, email, privateMainKey)
+                        .then(() => {
+                          setInvitations((prev) =>
+                            prev.filter((e) => e !== email),
+                          );
+                        })
+                        .catch((err) =>
+                          console.error("Failed to accept invitation", err),
+                        );
+                    }}
+                  >
+                    <i>check</i>
+                  </button>
+                  <button
+                    className="circle transparent"
+                    onClick={() => {
+                      contactService
+                        .declineContactRequest(user, email)
+                        .then(() => {
+                          setInvitations((prev) =>
+                            prev.filter((e) => e !== email),
+                          );
+                        })
+                        .catch((err) =>
+                          console.error("Failed to decline invitation", err),
+                        );
+                    }}
+                  >
+                    <i>close</i>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </article>
+        )}
         {!documents
           ? t("Loading images")
           : documents.length === 0
