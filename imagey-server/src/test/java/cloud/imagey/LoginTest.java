@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Optional;
 
 import javax.inject.Inject;
 import javax.ws.rs.core.Response;
@@ -41,10 +42,9 @@ import org.junit.jupiter.api.Test;
 
 import com.icegreen.greenmail.base.GreenMailOperations;
 
-import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
-import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -90,7 +90,8 @@ public class LoginTest {
         String tokenKey = token.substring(0, token.indexOf('='));
         String tokenValue = token.substring(tokenKey.length() + 1);
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
-        assertThat(tokenService.verify(new Token(tokenValue), new User(new Email("mary@imagey.cloud")))).isTrue();
+        Optional<DecodedToken> decodedToken = tokenService.decode(new Token(tokenValue));
+        assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).isEqualTo("mary@imagey.cloud");
     }
 
     @Test

@@ -25,6 +25,7 @@ import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import java.io.IOException;
 import java.util.List;
 
+import javax.annotation.security.RolesAllowed;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.ws.rs.Consumes;
@@ -51,6 +52,7 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
+@RolesAllowed("owner")
 @Path("{email}/documents")
 public class DocumentResource {
 

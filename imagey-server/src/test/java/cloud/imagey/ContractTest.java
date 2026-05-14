@@ -231,6 +231,7 @@ public class ContractTest {
         initializeDefaultState();
         tokenState = VALID_TOKEN;
         user = new User(new Email("joe@imagey.cloud"));
+        new File(rootPath, user.email().address()).mkdir();
     }
 
     @State("Marys token is invalid")
