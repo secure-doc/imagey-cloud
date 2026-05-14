@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.inject.Inject;
 import javax.ws.rs.core.GenericType;
@@ -49,6 +50,7 @@ import org.junit.jupiter.api.Test;
 import com.icegreen.greenmail.base.GreenMailOperations;
 
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -98,7 +100,9 @@ public class RegistrationTest {
         String tokenKey = token.substring(0, token.indexOf('='));
         String tokenValue = token.substring(tokenKey.length() + 1);
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
-        assertThat(tokenService.verify(new Token(tokenValue), new User(new Email("joe@imagey.cloud")))).isTrue();
+        assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
+        Optional<DecodedToken> decodedToken = tokenService.decode(new Token(tokenValue));
+        assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).isEqualTo("joe@imagey.cloud");
     }
 
     @Test

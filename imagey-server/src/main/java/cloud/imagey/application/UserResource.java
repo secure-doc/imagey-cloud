@@ -24,6 +24,8 @@ import static javax.ws.rs.core.Response.Status.CREATED;
 import java.io.IOException;
 import java.security.Principal;
 
+import javax.annotation.security.PermitAll;
+import javax.annotation.security.RolesAllowed;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -61,6 +63,7 @@ public class UserResource {
     private Provider<Principal> currentPrincipal;
 
     @POST
+    @PermitAll
     @Consumes(APPLICATION_JSON)
     public Response registerUser(UserRegistration registration) throws IOException {
         if (!registration.email().address().equals(currentPrincipal.get().getName())) {
@@ -72,6 +75,7 @@ public class UserResource {
     }
 
     @GET
+    @RolesAllowed("owner")
     @Path("{email}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {
@@ -80,6 +84,7 @@ public class UserResource {
     }
 
     @POST
+    @PermitAll
     @Path("{email}/verifications")
     @Consumes(APPLICATION_JSON)
     public Response verfiyUser(@PathParam("email") User user) throws IOException {

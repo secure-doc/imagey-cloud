@@ -71,22 +71,6 @@ public class TokenService {
         }
     }
 
-    public boolean verify(Token token, User user) {
-        Optional<DecodedToken> decoded = decode(token);
-        return verify(decoded, user);
-    }
-
-    public boolean verify(Optional<DecodedToken> decoded, User user) {
-        if (decoded.isEmpty()) {
-            return false;
-        }
-        if (!user.email().address().equals(decoded.get().jwt().getSubject())) {
-            LOG.info("Wrong user");
-            return false;
-        }
-        return true;
-    }
-
     public Optional<DecodedToken> decode(Token token) {
         try {
             SignedJWT signedJWT = SignedJWT.parse(token.token());

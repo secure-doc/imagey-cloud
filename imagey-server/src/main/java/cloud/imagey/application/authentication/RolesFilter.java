@@ -16,24 +16,21 @@
  */
 package cloud.imagey.application.authentication;
 
-import static java.util.function.Predicate.not;
-import static javax.ws.rs.core.Response.Status.FORBIDDEN;
-import static javax.ws.rs.core.Response.Status.UNAUTHORIZED;
+import static java.util.Optional.ofNullable;
+import static javax.ws.rs.Priorities.AUTHENTICATION;
 
 import java.io.IOException;
 import java.security.Principal;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import javax.annotation.Priority;
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerRequestFilter;
 import javax.ws.rs.core.Cookie;
-import javax.ws.rs.core.PathSegment;
-import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.Provider;
@@ -49,9 +46,10 @@ import cloud.imagey.domain.user.User;
 
 @Provider
 @ApplicationScoped
-public class UserFilter implements ContainerRequestFilter {
+@Priority(AUTHENTICATION)
+public class RolesFilter implements ContainerRequestFilter {
 
-    private static final Logger LOG = LogManager.getLogger(UserFilter.class);
+    private static final Logger LOG = LogManager.getLogger(RolesFilter.class);
 
     @Inject
     private TokenService tokenService;
@@ -60,64 +58,42 @@ public class UserFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
-        if (isVerification(requestContext) || isAuthentication(requestContext)) {
-            return;
-        }
-        Cookie cookie = requestContext.getCookies().get("token");
-        if (cookie == null) {
-            LOG.info("No authentication cookie found");
-            requestContext.abortWith(Response.status(UNAUTHORIZED).build());
-            return;
-        }
-        Optional<DecodedToken> decodedToken = tokenService.decode(new Token(cookie.getValue()));
+        Optional<Cookie> cookie = ofNullable(requestContext.getCookies().get("token"));
+        Optional<DecodedToken> decodedToken = cookie.flatMap(c -> tokenService.decode(new Token(c.getValue())));
         setupPrincipal(requestContext, decodedToken);
-
-        if (isCreation(requestContext)) {
-            return;
-        }
-        User user = extractUser(requestContext.getUriInfo());
-        if (!tokenService.verify(decodedToken, user)) {
-            LOG.info("Token not verified");
-            requestContext.abortWith(Response.status(FORBIDDEN).build());
-            return;
-        }
-    }
-
-    private boolean isCreation(ContainerRequestContext requestContext) {
-        // creation request is a POST to /users
-        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
-        return size(pathSegments) == 0
-            && requestContext.getMethod().equalsIgnoreCase("POST");
-    }
-
-    private boolean isVerification(ContainerRequestContext requestContext) {
-        // verification request is a POST to /users/{email}/verifications
-        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
-        return size(pathSegments) == 2
-            && "verifications".equals(pathSegments.get(1).getPath())
-            && requestContext.getMethod().equalsIgnoreCase("POST");
-    }
-
-    private boolean isAuthentication(ContainerRequestContext requestContext) {
-        // authentication request is a POST to /users/{email}/authentications
-        List<PathSegment> pathSegments = requestContext.getUriInfo().getPathSegments();
-        return size(pathSegments) == 2
-            && "authentications".equals(pathSegments.get(1).getPath())
-            && requestContext.getMethod().equalsIgnoreCase("POST");
     }
 
     private User extractUser(UriInfo uriInfo) {
         return new User(new Email(uriInfo.getPathSegments().get(0).getPath()));
     }
 
-    private long size(List<PathSegment> pathSegments) {
-        return pathSegments.stream().map(PathSegment::getPath).filter(not(String::isEmpty)).count();
-    }
-
     private void setupPrincipal(ContainerRequestContext requestContext, Optional<DecodedToken> decodedToken) {
         if (decodedToken.isEmpty()) {
+            requestContext.setSecurityContext(new SecurityContext() {
+
+                @Override
+                public Principal getUserPrincipal() {
+                    return () -> "anonymous";
+                }
+
+                @Override
+                public boolean isUserInRole(String role) {
+                    return false;
+                }
+
+                @Override
+                public boolean isSecure() {
+                    return true;
+                }
+
+                @Override
+                public String getAuthenticationScheme() {
+                    return DIGEST_AUTH;
+                }
+            });
             return;
         }
+        User user = extractUser(requestContext.getUriInfo());
         requestContext.setSecurityContext(new SecurityContext() {
 
             @Override
@@ -127,7 +103,7 @@ public class UserFilter implements ContainerRequestFilter {
 
             @Override
             public boolean isUserInRole(String role) {
-                return false;
+                return user.email().address().equals(getUserPrincipal().getName()) && "owner".equals(role);
             }
 
             @Override
