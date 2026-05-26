@@ -19,6 +19,12 @@ export function SettingsList({ className }: { className?: string }) {
       }
     >
       <ul className="list border">
+        <li className="ripple" onClick={() => navigate("/settings/profile")}>
+          <i>person</i>
+          <div className="max">
+            <h6 className="small">{t("Profile")}</h6>
+          </div>
+        </li>
         <li className="ripple" onClick={() => navigate("/settings/devices")}>
           <i>devices</i>
           <div className="max">

@@ -20,7 +20,7 @@ export default function Navigation({ className }: { className?: string }) {
       <NavLink
         className="m l"
         aria-label={t("Settings")}
-        to="/settings/devices"
+        to="/settings/profile"
       >
         <i>settings</i>
         <div>{t("Settings")}</div>

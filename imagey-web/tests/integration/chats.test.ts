@@ -10,6 +10,7 @@ import {
   provider,
   TestData,
   prepareMarysContactRequests,
+  runningPactRequests,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -39,6 +40,7 @@ test("navigate to chats", async ({ page }) => {
         name: "laura@imagey.cloud",
       }),
     ).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -110,6 +112,7 @@ test("accept open invitations", async ({ page }) => {
     await expect(acceptLauraBtn).not.toBeVisible();
     const contactPanel = invitationPanel;
     await expect(contactPanel).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -160,5 +163,6 @@ test("decline open invitations", async ({ page }) => {
     });
     await declineAliceBtn.click();
     await expect(invitationPanel).not.toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

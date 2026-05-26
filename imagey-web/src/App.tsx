@@ -3,7 +3,7 @@ import "./translation/i18n";
 import "beercss";
 import "material-dynamic-colors";
 import AuthenticationComponent from "./authentication/AuthenticationComponent";
-import { ActionBarContextProvider } from "./contexts/ActionBarContext";
+import { ActionBarContextProvider } from "./contexts/ActionBarContextProvider";
 import { BrowserRouter, Route, Routes } from "react-router";
 import Navigation from "./components/Navigation";
 import Images from "./pages/Images";
@@ -11,6 +11,7 @@ import Image from "./pages/Image";
 import Chats from "./pages/Chats";
 import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 import Devices from "./pages/Devices";
 import {
   Email,
@@ -74,6 +75,7 @@ function App() {
             <Route path="chats" element={<Chats />} />
             <Route path="settings">
               <Route index element={<Settings />} />
+              <Route path="profile" element={user && <Profile />} />
               <Route path="devices" element={user && <Devices />} />
             </Route>
           </Routes>

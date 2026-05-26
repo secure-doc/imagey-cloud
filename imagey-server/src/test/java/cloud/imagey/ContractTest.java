@@ -91,6 +91,8 @@ public class ContractTest {
         context.verifyInteraction();
     }
 
+
+
     void initializeDefaultState() throws URISyntaxException, IOException {
         user = null;
         tokenState = NO_TOKEN;

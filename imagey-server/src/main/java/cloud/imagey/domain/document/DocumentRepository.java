@@ -152,4 +152,13 @@ public class DocumentRepository extends AbstractFileRepository {
     private File getUserHome(User user) {
         return new File(rootPath, user.email().address());
     }
+
+    public void deleteDocument(User user, DocumentId documentId) throws IOException {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        if (documentFolder.exists()) {
+            deleteDirectory(documentFolder);
+        }
+    }
 }

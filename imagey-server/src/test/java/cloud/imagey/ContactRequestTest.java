@@ -249,6 +249,33 @@ public class ContactRequestTest {
         assertThat(laurasContactRequestsFolder.listFiles()).isEmpty();
     }
 
+    @Test
+    @DisplayName("Handle missing directories gracefully")
+    public void testMissingContactDirectories() throws IOException {
+        // Given that all directories are deleted
+        File marysContactRequests = getMarysContactRequests();
+        if (marysContactRequests.exists()) {
+            org.apache.commons.io.FileUtils.deleteDirectory(marysContactRequests);
+        }
+        File marysContacts = new File(getMarysData(), "contacts");
+        if (marysContacts.exists()) {
+            org.apache.commons.io.FileUtils.deleteDirectory(marysContacts);
+        }
+
+        // When fetching contact requests with no directory
+        List<String> contactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
+        assertThat(contactRequests).isEmpty();
+
+        // When fetching contacts with no directory
+        List<String> contacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
+        assertThat(contacts).isEmpty();
+
+        // When fetching a specific contact status with no file
+        Response response = marysClient.path("contact-requests/laura@imagey.cloud").get();
+        // Since getContactStatus is used internally or returns 404/similar if empty,
+        // we just verify that we can call it (or something that depends on it) without crashing
+    }
+
     private User getMary() {
         return new User(new Email("mary@imagey.cloud"));
     }

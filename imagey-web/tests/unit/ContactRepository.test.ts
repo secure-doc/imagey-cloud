@@ -3,12 +3,7 @@ import { contactRepository } from "../../src/contact/ContactRepository";
 import { authenticationRepository } from "../../src/authentication/AuthenticationRepository";
 import { cryptoService } from "../../src/authentication/CryptoService";
 
-// Mock dependencies
-vi.mock("../../src/authentication/AuthenticationRepository", () => ({
-  authenticationRepository: {
-    loadPublicMainKey: vi.fn(),
-  },
-}));
+// Dependencies are mocked using vi.spyOn in beforeEach
 
 describe("ContactRepository", () => {
   beforeEach(() => {
@@ -73,8 +68,8 @@ describe("ContactRepository", () => {
   describe("acceptContactRequest", () => {
     it("calculates shared key and sends PUT request", async () => {
       vi.mocked(global.fetch).mockResolvedValue({ ok: true } as Response);
-      vi.mocked(authenticationRepository.loadPublicMainKey).mockResolvedValue(
-        "public-key",
+      vi.spyOn(authenticationRepository, "loadPublicMainKey").mockResolvedValue(
+        "public-key" as unknown as JsonWebKey,
       );
       vi.spyOn(cryptoService, "generateSymmetricKey").mockResolvedValue({
         kty: "oct",
@@ -100,9 +95,11 @@ describe("ContactRepository", () => {
 
     it("throws error when response is not ok", async () => {
       vi.mocked(global.fetch).mockResolvedValue({ ok: false } as Response);
-      vi.mocked(authenticationRepository.loadPublicMainKey).mockResolvedValue({
-        kty: "oct",
-      } as JsonWebKey);
+      vi.spyOn(authenticationRepository, "loadPublicMainKey").mockResolvedValue(
+        {
+          kty: "oct",
+        } as JsonWebKey,
+      );
       vi.spyOn(cryptoService, "generateSymmetricKey").mockResolvedValue({
         kty: "oct",
       } as JsonWebKey);

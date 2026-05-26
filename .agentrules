@@ -2,22 +2,31 @@
 
 This file contains important project-related instructions for AI agents. Please read these rules carefully before starting your work and always adhere to them.
 
-## Frontend (imagey-web)
+## Mandatory Development Workflow
 
-1. **Code Style & Quality Assurance:**
-   After any change to the frontend code (`imagey-web`), you **MUST** verify that the code complies with the linter and typing rules.
-   To do this, run the following commands in the `imagey-web` directory:
-   - `npm run lint` (Checks Prettier formatting and runs ESLint)
-   - `npx tsc --noEmit` (Checks TypeScript typings)
-   
-2. **Fixing Errors:**
-   If these commands output any errors or warnings, they **must be fixed immediately** before marking the task as completed. You can use `npm run prettier` and `npx eslint src tests --fix` to automatically fix many formatting errors.
+Whenever developing a new feature or making significant changes, you **MUST** strictly follow this order of execution:
 
-## Backend (imagey-server)
+1. **Frontend Development & E2E Tests**: 
+   - Write your frontend code.
+   - Write and run the E2E tests (including Pact tests).
+2. **Frontend Linting Check**: 
+   - Verify code quality using `npm run lint` and `npx tsc --noEmit`. 
+3. **Frontend Coverage & Build**: 
+   - Run the frontend Maven build (e.g. `mvn clean verify` in `imagey-web`) to enforce coverage and verify the build.
+4. **Backend Development & Tests**:
+   - Write your backend code and the corresponding unit/integration tests to satisfy the Pact contracts generated in step 1.
+5. **Backend Coverage & Build**: 
+   - Run the backend Maven build (e.g. `mvn clean verify` in `imagey-server`) to verify tests, coverage, and Checkstyle.
 
-1. **Tests:**
-   After changes in the backend, you **MUST** ensure that the project builds without errors and the tests pass.
-   To do this, run the following command in the `imagey-server` directory:
-   - `mvn test`
-   
-2. All Checkstyle errors or failing unit tests / Pact tests must be fixed before delivering a finished feature to the user.
+### Pact & Playwright Guidelines
+- **HTTP 500 Errors in Frontend Tests**: 500 errors (Internal Server Error) represent unhandled backend exceptions and should **NOT** end up in the Pact contracts. Do not use the Pact Mock Server (`provider.addInteraction()`) to mock 500 errors. Instead, use Playwright routing (`page.route(...)`) directly in your frontend tests (e.g. `errors.test.ts`) to intercept and mock the 500 responses.
+
+## Manual Testing & Docker Environment
+
+If you (the AI agent) or a human developer need to verify complex features or E2E flows manually (e.g. testing registration via emails, executing curl requests, or running Playwright tests against a live backend):
+- The entire project, including the backend and a **Mock Mail Server**, can be started using Docker Compose.
+- Run `docker compose up -d` in the project root to spin up the isolated backend environment.
+- Use this environment to safely execute manual tests without relying solely on mocked interactions.
+- Always clean up the environment after testing with `docker compose down`.
+
+- For detailed instructions on how to manually test the user registration and access the local application (including reading registration emails from the local Greenmail instance), please refer to the [Local Testing section in the README](README.md#local-testing-and-registration).

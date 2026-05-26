@@ -160,6 +160,39 @@ public class RegistrationTest {
     }
 
     @Test
+    @DisplayName("Registration with different email fails")
+    public void registrationWithDifferentEmailFails() throws IOException {
+        // Given
+        Token token = tokenService.generateToken(new User(new Email("joe@imagey.cloud")), MAX_VALUE);
+
+        // When
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .post(json("""
+                {
+                    "deviceId": "2d9e9f58-2f39-408a-b3d7-e66e6a431b45",
+                    "email": "different@imagey.cloud",
+                    "encryptedPrivateKey": "<<encrypted private key>>",
+                    "mainPublicKey": {
+                        "main": "public",
+                        "key": 1
+                    },
+                    "devicePublicKey": {
+                        "device": "public",
+                        "key": 2
+                    }
+                }
+            """));
+
+        // Then
+        assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+    }
+
+
+    @Test
     @DisplayName("Registration with invalid token fails")
     public void loginInvalid() throws IOException, MessagingException {
         // Given
