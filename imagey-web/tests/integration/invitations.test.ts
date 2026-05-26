@@ -9,6 +9,7 @@ import {
   TestData,
   prepareMarysContactRequests,
   prepareMarysDocuments,
+  runningPactRequests,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -70,6 +71,7 @@ test("accept open invitations", async ({ page }) => {
     });
     await acceptAliceBtn.click();
     await expect(invitationPanel).not.toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -109,5 +111,6 @@ test("decline open invitations", async ({ page }) => {
     });
     await declineAliceBtn.click();
     await expect(invitationPanel).not.toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

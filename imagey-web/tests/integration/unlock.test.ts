@@ -104,6 +104,7 @@ test("mary registers new device", async ({ page }) => {
           /Device registered, but still not unlocked. You need to unlock it with another device/,
         ),
       ).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 

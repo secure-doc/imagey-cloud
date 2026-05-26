@@ -1,6 +1,6 @@
 import { useActionIcons } from "../contexts/ActionBarContext";
 import FileChooser from "../components/FileChooser";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
@@ -18,13 +18,16 @@ export default function Images() {
     undefined,
   );
   const [documents, setDocuments] = useState<Document[]>();
-  const actionIcons = [
-    <FileChooser
-      key="add-image"
-      multiple
-      onFilesSelected={(files) => setSelectedFiles(files)}
-    />,
-  ];
+  const actionIcons = useMemo(
+    () => [
+      <FileChooser
+        key="add-image"
+        multiple
+        onFilesSelected={(files) => setSelectedFiles(files)}
+      />,
+    ],
+    [],
+  );
   useActionIcons(actionIcons);
   useEffect(() => {
     if (user) {

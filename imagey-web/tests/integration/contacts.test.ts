@@ -8,6 +8,7 @@ import {
   setupMockServer,
   provider,
   prepareMarysContactRequests,
+  runningPactRequests,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -57,6 +58,7 @@ test("wrong contact email", async ({ page }) => {
     await expect(
       page.getByText("Please enter a valid email address."),
     ).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -108,5 +110,6 @@ test("send contact request", async ({ page }) => {
 
     // Then the dialog should close
     await expect(dialogHeading).not.toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

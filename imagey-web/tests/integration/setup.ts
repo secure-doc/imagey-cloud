@@ -95,16 +95,30 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
       const headers = request.headers();
 
       if (
-        request.method() === "POST" &&
+        request.method() === "GET" &&
+        requestUrl.pathname === "/users/mary@imagey.cloud/profile"
+      ) {
+        await route.fulfill({ status: 404 });
+        return;
+      }
+
+      if (
+        (request.method() === "POST" || request.method() === "PUT") &&
         headers["content-type"]?.includes("multipart/form-data")
       ) {
-        const documentId = expectedUploadDocumentId;
-
         // To bypass strict body matching of dynamically encrypted files, we send the mock payload expected by pact instead.
         const boundary = "----WebKitFormBoundary";
         headers["content-type"] = `multipart/form-data; boundary=${boundary}`;
 
-        postData = createMultipartPayload(documentId);
+        if (request.method() === "POST") {
+          const documentId = expectedUploadDocumentId;
+          postData = createMultipartPayload(documentId);
+        } else {
+          // For PUT (profile update), we just use a static mock payload because the actual payload is dynamically encrypted
+          postData = Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{ "documentId": "profile" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"\r\n\r\nencrypted-key\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="profile.json"\r\nContent-Type: application/octet-stream\r\n\r\ncontent\r\n--${boundary}--\r\n`,
+          );
+        }
       }
 
       const response = await route.fetch({

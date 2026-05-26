@@ -10,6 +10,7 @@ import {
   setupMarysDevice,
   setupMockServer,
   TestData,
+  runningPactRequests,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -31,7 +32,7 @@ test("new user enters wrong email", async ({ page }) => {
   await expect(
     page.getByText("Please enter a valid email address."),
   ).toBeVisible();
-  page.getByText("Confirm").click();
+  await page.getByText("Confirm").click();
 
   // Then
   await expect(
@@ -68,10 +69,11 @@ test("new user visits page", async ({ page }) => {
       await expect(emailInput).toBeVisible();
 
       emailInput.fill("joe@imagey.cloud");
-      page.getByText("Confirm").click();
+      await page.getByText("Confirm").click();
 
       // Then
       await expect(page.getByText(/verification link/)).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 
@@ -100,10 +102,11 @@ test("existing user visits page with new device", async ({ page }) => {
       await expect(emailInput).toBeVisible();
 
       emailInput.fill("mary@imagey.cloud");
-      page.getByText("Confirm").click();
+      await page.getByText("Confirm").click();
 
       // Then
       await expect(page.getByText(/login link/)).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 
@@ -149,10 +152,11 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
       await expect(emailInput).toBeVisible();
 
       emailInput.fill("mary@imagey.cloud");
-      page.getByText("Confirm").click();
+      await page.getByText("Confirm").click();
 
       // Then
       await expect(page.getByText(/login link/)).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 
@@ -229,10 +233,11 @@ test("new user clicks registration link", async ({ page }) => {
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
       passwordInput.fill(TestData.mary.password);
-      page.getByText("Confirm").click();
+      await page.getByText("Confirm").click();
 
       // Then
       await expect(page.getByText(/Upload Images/)).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 
@@ -305,14 +310,14 @@ test("mary logges in with new device", async ({ page }) => {
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
       passwordInput.fill(TestData.mary.password);
-      page.getByText("Confirm").click();
+      await page.getByText("Confirm").click();
       await expect(
         page.getByText(
           /Device registered, you can now activate it with another device/,
         ),
       ).toBeVisible();
 
-      page.getByRole("button", { name: "OK" }).click();
+      await page.getByRole("button", { name: "OK" }).click();
 
       // Then
       await expect(
@@ -320,6 +325,7 @@ test("mary logges in with new device", async ({ page }) => {
           /Device registered, but still not unlocked. You need to unlock it with another device/,
         ),
       ).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 
@@ -344,6 +350,7 @@ test("existing user clicks login link on existing device", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -362,13 +369,14 @@ test("visit page on existing device", async ({ page }) => {
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
     passwordInput.fill("MarysPassword123");
-    page.getByText("Confirm").click();
+    await page.getByText("Confirm").click();
 
     // Then
     await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -390,10 +398,11 @@ test("visit page on existing device with wrong password", async ({ page }) => {
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
       passwordInput.fill("wrongPassword");
-      page.getByText("Confirm").click();
+      await page.getByText("Confirm").click();
 
       // Then
       await expect(page.getByText(/Wrong password/)).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
 
@@ -412,7 +421,7 @@ test("login with missing email", async ({ page }) => {
     await expect(emailInput).toBeVisible();
 
     emailInput.fill("mary@imagey.cloud");
-    page.getByText("Confirm").click();
+    await page.getByText("Confirm").click();
 
     await inputMarysPassword(page);
 
@@ -421,6 +430,7 @@ test("login with missing email", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -452,5 +462,6 @@ test("login with lost private key", async ({ page }) => {
       await expect(
         page.getByText("Device key missing, please reregister device"),
       ).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
     });
 });

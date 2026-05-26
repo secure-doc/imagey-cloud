@@ -213,7 +213,99 @@ public class DocumentTest {
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
     }
 
+    @Test
+    @DisplayName("Upload document with optional parts")
+    public void uploadDocumentWithOptionals() throws IOException {
+        Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
+        String documentId = "new-doc-with-optionals-id";
 
+        List<Attachment> attachments = List.of(
+            new Attachment("metadata", "application/json", """
+                {
+                    "documentId": "%s",
+                    "smallImageId": "small-img",
+                    "previewImageId": "preview-img",
+                    "encryptedData": "dummy-encrypted-data"
+                }
+            """.formatted(documentId)),
+            new Attachment("sharedKey", "application/json", """
+                {
+                    "key": "dummy-shared-key"
+                }
+            """),
+            new Attachment("content", "application/octet-stream", new byte[] {1, 2, 3}),
+            new Attachment("smallImage", "application/octet-stream", new byte[] {4, 5, 6}),
+            new Attachment("previewImage", "application/octet-stream", new byte[] {7, 8, 9})
+        );
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
+
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+    }
+
+    @Test
+    @DisplayName("Load non-existent content returns 404")
+    public void testGetNonExistentContent() throws IOException {
+        Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/contents/non-existent-content")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .get();
+        assertThat(response.getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("Load non-existent shared key returns 404")
+    public void testGetNonExistentKey() throws IOException {
+        Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/encrypted-shared-keys/unknown@imagey.cloud")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .get();
+        assertThat(response.getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("Upload document when document home does not exist")
+    public void testUploadWithoutDocumentHome() throws IOException {
+        Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
+        String documentId = "doc-home-creation-test-id";
+
+        // Delete documents home directory to trigger creation
+        File marysDocuments = new File(new File(rootPath, "mary@imagey.cloud"), "documents");
+        if (marysDocuments.exists()) {
+            org.apache.commons.io.FileUtils.deleteDirectory(marysDocuments);
+        }
+
+        List<Attachment> attachments = List.of(
+            new Attachment("metadata", "application/json", """
+                {
+                    "documentId": "%s",
+                    "encryptedData": "dummy-encrypted-data"
+                }
+            """.formatted(documentId)),
+            new Attachment("sharedKey", "text/plain", "dummy-shared-key"),
+            new Attachment("content", "application/octet-stream", new byte[] {1, 2, 3})
+        );
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents")
+            .request()
+            .header("Cookie", "token=" + token.token())
+            .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
+
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+    }
 
     @BeforeEach
     void initializeDefaultState() throws URISyntaxException, IOException {

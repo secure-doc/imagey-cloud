@@ -120,6 +120,23 @@ public class InvitationTest {
         assertThat(query.split("&")).contains("inviter=mary@imagey.cloud");
     }
 
+    @Test
+    @DisplayName("Invitation with invalid token fails")
+    public void invalidInvitationTokenFails() throws IOException {
+        // Given
+        String invalidToken = "invalid.token.value";
+
+        // When
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/invitations/" + invalidToken)
+            .request()
+            .get();
+
+        // Then
+        assertThat(response.getStatus()).isEqualTo(javax.ws.rs.core.Response.Status.FORBIDDEN.getStatusCode());
+    }
+
+
     private String extractLink(MimeMessage message) throws IOException, MessagingException {
         String registrationMail = ((MimeMultipart)message.getContent()).getBodyPart(0).getContent().toString();
         int startIndex = registrationMail.indexOf("href=\"") + "href=\"".length();

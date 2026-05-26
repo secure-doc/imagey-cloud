@@ -42,27 +42,40 @@ export const contactRepository = {
     contactEmail: string,
     myPrivateKey: JsonWebKey,
   ): Promise<void> => {
-    const contactPublicKey =
-      await authenticationRepository.loadPublicMainKey(contactEmail);
-    const sharedKey = await cryptoService.generateSymmetricKey();
-    const encryptedSharedKey = await cryptoService.encryptKey(
-      sharedKey,
-      contactPublicKey,
-      myPrivateKey,
-    );
-    const response = await fetch(
-      "/users/" + userEmail + "/contacts/" + contactEmail,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
+    try {
+      const contactPublicKey =
+        await authenticationRepository.loadPublicMainKey(contactEmail);
+      console.log("Loaded public key", contactPublicKey);
+      const sharedKey = await cryptoService.generateSymmetricKey();
+      console.log("Generated shared key", sharedKey);
+      const encryptedSharedKey = await cryptoService.encryptKey(
+        sharedKey,
+        contactPublicKey,
+        myPrivateKey,
+      );
+      console.log("Encrypted shared key", encryptedSharedKey);
+      const response = await fetch(
+        "/users/" + userEmail + "/contacts/" + contactEmail,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({ key: encryptedSharedKey }),
         },
-        credentials: "same-origin",
-        body: JSON.stringify({ key: encryptedSharedKey }),
-      },
-    );
-    if (!response.ok) {
-      throw new Error("Failed to accept contact request");
+      );
+      if (!response.ok) {
+        throw new Error("Failed to accept contact request");
+      }
+    } catch (e) {
+      console.error(
+        "Error in acceptContactRequest",
+        typeof e,
+        e,
+        e instanceof Error ? e.stack : "",
+      );
+      throw e;
     }
   },
   declineContactRequest: async (

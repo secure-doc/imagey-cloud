@@ -52,15 +52,21 @@ public class EmailTest {
         // Given
         String verificationPath = "users/joe@imagey.cloud/verifications";
 
-        // When
-        Response response = newClient()
-            .target("http://localhost:" + config.getHttpPort())
-            .path(verificationPath)
-            .request()
-            .post(json(""));
+        // Force an invalid port so MailService fails even if Docker Greenmail is running on 3025
+        System.setProperty("smtp.port", "12345");
+        try {
+            // When
+            Response response = newClient()
+                .target("http://localhost:" + config.getHttpPort())
+                .path(verificationPath)
+                .request()
+                .post(json(""));
 
-        // Then
-        assertThat(response.getStatus()).isEqualTo(SERVICE_UNAVAILABLE.getStatusCode());
+            // Then
+            assertThat(response.getStatus()).isEqualTo(SERVICE_UNAVAILABLE.getStatusCode());
+        } finally {
+            System.clearProperty("smtp.port");
+        }
     }
 
     @BeforeEach

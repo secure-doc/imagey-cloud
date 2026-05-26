@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect } from "react";
 
 interface ActionIconsState {
   actionIcons: JSX.Element[];
@@ -13,33 +13,12 @@ export const ActionBarContext = createContext<ActionIconsState>({
   setBackButtonVisible: () => {},
 });
 
-export function ActionBarContextProvider({
-  children,
-}: {
-  children: JSX.Element;
-}) {
-  const [actionIcons, setActionIcons] = useState<JSX.Element[]>([]);
-  const [backButtonVisible, setBackButtonVisible] = useState<boolean>(false);
-  return (
-    <ActionBarContext.Provider
-      value={{
-        actionIcons,
-        setActionIcons,
-        backButtonVisible,
-        setBackButtonVisible,
-      }}
-    >
-      {children}
-    </ActionBarContext.Provider>
-  );
-}
-
 export function useActionIcons(icons: JSX.Element[]) {
   const { setActionIcons } = useContext(ActionBarContext);
-  useEffect(() => setActionIcons(icons), [setActionIcons]);
+  useEffect(() => setActionIcons(icons), [setActionIcons, icons]);
 }
 
 export function useBackButton() {
   const { setBackButtonVisible } = useContext(ActionBarContext);
-  setBackButtonVisible(true);
+  useEffect(() => setBackButtonVisible(true), [setBackButtonVisible]);
 }

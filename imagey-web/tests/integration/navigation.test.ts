@@ -11,6 +11,7 @@ import {
   provider,
   setupMockServer,
   TestData,
+  runningPactRequests,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -50,16 +51,14 @@ test("navigate to chats", async ({ page }) => {
     // Then
     await expect(page.getByText("No chats available")).toBeVisible();
     await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
 test("open and close navigation drawer on mobile resolution", async ({
-  browser,
+  page,
 }) => {
-  const context = await browser.newContext({
-    viewport: { width: 412, height: 915 },
-  });
-  const page = await context.newPage();
+  await page.setViewportSize({ width: 412, height: 915 });
   await page.goto("/");
 
   await prepareMarysLogin(page);
@@ -85,14 +84,12 @@ test("open and close navigation drawer on mobile resolution", async ({
 
     // Then
     await expect(chatsLink).toHaveCount(1);
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
-test("navigate to chats on mobile resolution", async ({ browser }) => {
-  const context = await browser.newContext({
-    viewport: { width: 412, height: 915 },
-  });
-  const page = await context.newPage();
+test("navigate to chats on mobile resolution", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
   await page.goto("/");
   await prepareMarysLogin(page);
   await prepareMarysContacts();
@@ -129,6 +126,7 @@ test("navigate to chats on mobile resolution", async ({ browser }) => {
     const chatsLinks = page.getByRole("link", { name: "Chats" });
 
     await expect(chatsLinks).toHaveCount(1);
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -152,16 +150,12 @@ test("navigate to image details", async ({ page }) => {
 
     // Then
     await expect(page.getByText(/No image found/)).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
-test("navigate to devices and back on mobile resolution", async ({
-  browser,
-}) => {
-  const context = await browser.newContext({
-    viewport: { width: 412, height: 915 },
-  });
-  const page = await context.newPage();
+test("navigate to devices and back on mobile resolution", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
   await page.goto("/");
   await prepareMarysLogin(page);
   await prepareMarysDevices();
@@ -195,5 +189,6 @@ test("navigate to devices and back on mobile resolution", async ({
     await expect(devicesLink).toBeVisible();
     const mainMenu = page.getByRole("button", { name: "main-menu" });
     await expect(mainMenu).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

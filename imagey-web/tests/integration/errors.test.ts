@@ -142,3 +142,204 @@ test("private key loading error", async ({ page }) => {
   await confirmButton.click();
   await expect(page.getByText("Wrong password")).toBeVisible();
 });
+
+test("contact repository error handling", async ({ page }) => {
+  // Mock login endpoints
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+
+  // Mock 500 errors for contacts
+  await page.route("**/users/mary*imagey.cloud/contacts", async (route) => {
+    await route.fulfill({
+      status: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  });
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 500,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        });
+      } else {
+        await route.fulfill({
+          status: 500,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        });
+      }
+    },
+  );
+
+  page.on("pageerror", (err) => console.log("Expected error:", err));
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  // Navigate to Chats
+  const chatsLink = page.getByRole("link", { name: "Chats" }).first();
+  await expect(chatsLink).toBeVisible();
+  await chatsLink.click();
+
+  // Trigger POST /contact-requests failure
+  const addContactButton = page.getByRole("button", { name: "add" });
+  await expect(addContactButton).toBeVisible();
+  await addContactButton.click();
+  const emailInput = page.getByPlaceholder("email@imagey.cloud");
+  await expect(emailInput).toBeVisible();
+  await emailInput.fill("alice@imagey.cloud");
+  const confirmButtonContact = page.getByRole("button", { name: "Confirm" });
+  await expect(confirmButtonContact).toBeVisible();
+
+  const responsePromise = page.waitForResponse(
+    "**/users/mary@imagey.cloud/contact-requests",
+  );
+  await confirmButtonContact.click();
+  await responsePromise;
+});
+
+test("load existing profile error handling", async ({ page }) => {
+  // Mock login endpoints
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: [],
+      });
+    },
+  );
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+
+  // Mock profile meta-data to exist
+  await page.route("**/users/mary*imagey.cloud/profile", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documentId: "profile", name: "profile.json" }),
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  });
+
+  // Mock profile shared-key 500 error
+  await page.route(
+    "**/users/mary*imagey.cloud/documents/profile/encrypted-shared-keys/mary*imagey.cloud",
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  // Go to settings
+  const settingsLink = page.getByRole("link", { name: "Settings" });
+  await expect(settingsLink).toBeVisible();
+  await settingsLink.click();
+
+  const responsePromise = page.waitForResponse(
+    "**/users/mary@imagey.cloud/documents/profile/encrypted-shared-keys/mary*",
+  );
+  const profileLink = page
+    .getByRole("heading", { name: "Profile", exact: true })
+    .first();
+  await expect(profileLink).toBeVisible();
+
+  page.on("console", (msg) => {
+    if (msg.text().includes("Failed to load profile")) {
+      console.log("Caught expected profile load error");
+    }
+  });
+
+  await profileLink.click();
+  await responsePromise;
+
+  // The page should still render the empty profile form, displaying the fallback user email
+  await expect(page.getByText("mary@imagey.cloud")).toBeVisible();
+});

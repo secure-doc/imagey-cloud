@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useActionIcons } from "../contexts/ActionBarContext";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
 import { useAuthentication } from "../contexts/AuthenticationContext";
@@ -16,15 +16,18 @@ export default function Chats() {
   const [contactRequests, setContactRequests] = useState<Contact[]>();
   const [contacts, setContacts] = useState<Contact[]>();
 
-  const actionIcons = [
-    <button
-      key="add-contact"
-      className="circle transparent"
-      onClick={() => setIsDialogOpen(true)}
-    >
-      <i>add</i>
-    </button>,
-  ];
+  const actionIcons = useMemo(
+    () => [
+      <button
+        key="add-contact"
+        className="circle transparent"
+        onClick={() => setIsDialogOpen(true)}
+      >
+        <i>add</i>
+      </button>,
+    ],
+    [],
+  );
   useActionIcons(actionIcons);
 
   useEffect(() => {
