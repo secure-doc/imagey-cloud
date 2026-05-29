@@ -86,6 +86,7 @@ export const documentService = {
 
       let name = metadata.name;
       let previewImageId = metadata.previewImageId;
+      let type = metadata.type;
 
       if (metadata.encryptedData) {
         const encryptedPayloadBuffer = cryptoService.base64ToArrayBuffer(
@@ -99,6 +100,7 @@ export const documentService = {
         const payload = JSON.parse(payloadText);
         name = payload.name;
         previewImageId = payload.previewImageId;
+        type = payload.type;
       }
 
       const encryptedContent: ArrayBuffer =
@@ -116,6 +118,7 @@ export const documentService = {
         content: decryptedContent,
         documentId: metadata.documentId,
         name: name!,
+        type: type,
       };
     } catch (e) {
       console.error(e);

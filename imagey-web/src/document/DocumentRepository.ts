@@ -13,8 +13,16 @@ export const documentRepository = {
       throw new Error("content must be provided");
     }
     const formData = new FormData();
-    formData.append("metadata", JSON.stringify(metadata));
-    formData.append("sharedKey", sharedKey);
+    formData.append(
+      "metadata",
+      new Blob([JSON.stringify(metadata)], { type: "application/json" }),
+      "metadata.json",
+    );
+    formData.append(
+      "sharedKey",
+      new Blob([sharedKey], { type: "text/plain" }),
+      "sharedKey.txt",
+    );
     formData.append(
       "content",
       new Blob([content[0]], { type: "application/octet-stream" }),

@@ -30,3 +30,15 @@ If you (the AI agent) or a human developer need to verify complex features or E2
 - Always clean up the environment after testing with `docker compose down`.
 
 - For detailed instructions on how to manually test the user registration and access the local application (including reading registration emails from the local Greenmail instance), please refer to the [Local Testing section in the README](README.md#local-testing-and-registration).
+
+## Backend Development Rules
+
+1. **Tests:**
+   After changes in the backend, you **MUST** ensure that the project builds without errors and the tests pass.
+   To do this, run the following command in the `imagey-server` directory:
+   - `mvn test`
+   
+2. All Checkstyle errors or failing unit tests / Pact tests must be fixed before delivering a finished feature to the user.
+
+3. **Java Imports:**
+   Do not use fully qualified class names in Java code (e.g., `java.util.List<String>`). Always import the classes at the top of the file and use their simple names (e.g., `List<String>`).

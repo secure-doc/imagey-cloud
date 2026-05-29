@@ -42,6 +42,7 @@ import javax.ws.rs.core.Response;
 
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.MultipartBody;
+import org.apache.cxf.jaxrs.impl.MetadataMap;
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
@@ -54,7 +55,6 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
-
 @MonoMeecrowaveConfig
 public class DocumentTest {
 
@@ -192,15 +192,25 @@ public class DocumentTest {
         Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
         String documentId = "new-doc-id";
 
+        MetadataMap<String, String> metadataHeaders = new MetadataMap<>();
+        metadataHeaders.putSingle("Content-Disposition", "form-data; name=\"metadata\"; filename=\"metadata.json\"");
+        metadataHeaders.putSingle("Content-Type", "application/json");
+        MetadataMap<String, String> sharedKeyHeaders = new MetadataMap<>();
+        sharedKeyHeaders.putSingle("Content-Disposition", "form-data; name=\"sharedKey\"; filename=\"sharedKey.txt\"");
+        sharedKeyHeaders.putSingle("Content-Type", "text/plain");
+        MetadataMap<String, String> contentHeaders = new MetadataMap<>();
+        contentHeaders.putSingle("Content-Disposition", "form-data; name=\"content\"; filename=\"content.bin\"");
+        contentHeaders.putSingle("Content-Type", "application/octet-stream");
+
         List<Attachment> attachments = List.of(
-            new Attachment("metadata", "application/json", """
+            new Attachment(metadataHeaders, """
                 {
                     "documentId": "%s",
                     "encryptedData": "dummy-encrypted-data"
                 }
             """.formatted(documentId)),
-            new Attachment("sharedKey", "text/plain", "dummy-shared-key"),
-            new Attachment("content", "application/octet-stream", new byte[] {1, 2, 3})
+            new Attachment(sharedKeyHeaders, "dummy-shared-key"),
+            new Attachment(contentHeaders, new byte[] {1, 2, 3})
         );
 
         Response response = newClient()

@@ -5,7 +5,12 @@ export default function ImageComponent({ image }: { image: Document }) {
   const { t } = useTranslation();
   const content = image.content;
   if (content) {
-    const blob = new Blob([content]);
+    const blob = new Blob([content], {
+      type:
+        image.type && image.type.startsWith("image/")
+          ? "image/png"
+          : image.type,
+    });
     const url = URL.createObjectURL(blob);
     return (
       <img
