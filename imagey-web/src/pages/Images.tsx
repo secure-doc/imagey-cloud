@@ -1,5 +1,5 @@
 import { useActionIcons } from "../contexts/ActionBarContext";
-import FileChooser from "../components/FileChooser";
+import UploadButton from "../components/UploadButton";
 import { useEffect, useState, useMemo } from "react";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
@@ -14,19 +14,21 @@ export default function Images() {
   const mainKeyPair = authentication.keyPairs.mainKeyPair;
   const publicMainKey = mainKeyPair.publicKey;
   const privateMainKey = mainKeyPair.privateKey;
-  const [selectedFiles, setSelectedFiles] = useState<FileList | undefined>(
-    undefined,
-  );
   const [documents, setDocuments] = useState<Document[]>();
   const actionIcons = useMemo(
     () => [
-      <FileChooser
+      <UploadButton
         key="add-image"
+        aria-label="add-image"
         multiple
-        onFilesSelected={(files) => setSelectedFiles(files)}
+        onUploadComplete={(document) =>
+          setDocuments((previousDocuments) =>
+            previousDocuments ? [...previousDocuments, document] : [document],
+          )
+        }
       />,
     ],
-    [],
+    [setDocuments],
   );
   useActionIcons(actionIcons);
   useEffect(() => {
@@ -36,26 +38,6 @@ export default function Images() {
         .then((documents) => setDocuments(documents));
     }
   }, [publicMainKey, privateMainKey, user]);
-  useEffect(() => {
-    if (user && selectedFiles) {
-      for (const file of selectedFiles) {
-        documentService
-          .storeDocument(user, file, publicMainKey, privateMainKey)
-          .then((metadata) => {
-            documentService
-              .loadDocument(user, metadata, publicMainKey, privateMainKey)
-              .then((document) =>
-                setDocuments((previousDocuments) =>
-                  previousDocuments
-                    ? [...previousDocuments, document]
-                    : [document],
-                ),
-              );
-          });
-      }
-      setSelectedFiles(undefined);
-    }
-  }, [user, selectedFiles, publicMainKey, privateMainKey]);
   return (
     <main>
       <div className="column scroll">

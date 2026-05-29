@@ -1,14 +1,25 @@
 import { useTranslation } from "react-i18next";
+import Panel from "../components/Panel";
+import UploadButton from "../components/UploadButton";
 
 export default function UploadPanel({ className }: { className?: string }) {
   const { t } = useTranslation();
+
   return (
-    <article className={className}>
-      <div className="padding center-align">
-        <i className="extra">upload</i>
-        <h5 className="max truncate center-align">{t("Upload Images")}</h5>
-        <p>{t("Click the + button below to upload your first image.")}</p>
-      </div>
-    </article>
+    <Panel
+      className={className}
+      title={t("Upload Images")}
+      image={
+        <div className="row center-align padding">
+          <UploadButton className="circle extra" multiple>
+            <i>upload</i>
+          </UploadButton>
+        </div>
+      }
+    >
+      <p className="center-align">
+        {t("Click the upload button above to upload your first image.")}
+      </p>
+    </Panel>
   );
 }

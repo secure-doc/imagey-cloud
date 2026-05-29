@@ -1,6 +1,7 @@
 import { expect, Page } from "@playwright/test";
 import { PactV4, Matchers } from "@pact-foundation/pact";
 import * as fs from "fs";
+import * as path from "path";
 import { TestData } from "./testdata";
 
 type ConfiguredInteraction = ReturnType<
@@ -54,18 +55,27 @@ export let expectedUploadDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 function createMultipartPayload(documentId: string): Buffer {
   const boundary = "----WebKitFormBoundary";
   const metadata = fs.readFileSync(
-    `./tests/images/encrypted/${documentId}/meta-data`,
+    path.resolve(
+      process.cwd(),
+      `tests/images/encrypted/${documentId}/meta-data`,
+    ),
   );
   const sharedKey = fs.readFileSync(
-    `./tests/images/encrypted/${documentId}/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
+    path.resolve(
+      process.cwd(),
+      `tests/images/encrypted/${documentId}/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
+    ),
   );
   const content = fs.readFileSync(
-    `./tests/images/encrypted/${documentId}/contents/${documentId}`,
+    path.resolve(
+      process.cwd(),
+      `tests/images/encrypted/${documentId}/contents/${documentId}`,
+    ),
   );
 
   return Buffer.concat([
     Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="metadata"; filename="metadata.json"\r\nContent-Type: application/json\r\n\r\n`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="metadata"; filename="meta-data"\r\nContent-Type: application/json\r\n\r\n`,
     ),
     metadata,
     Buffer.from(
@@ -285,10 +295,16 @@ documentId === TestData.mary.documents[0].documentId
     .addInteraction()
     .uponReceiving("a request of mary to upload a document")
     .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
-      const payload = createMultipartPayload(documentId);
       r.headers({
-        "Content-Type": "multipart/form-data; boundary=----WebKitFormBoundary",
-      }).body("multipart/form-data; boundary=----WebKitFormBoundary", payload);
+        "Content-Type": Matchers.regex({
+          matcher: "multipart/form-data; boundary=.*",
+          generate: "multipart/form-data; boundary=----WebKitFormBoundary",
+        }),
+      });
+      r.body(
+        "multipart/form-data; boundary=----WebKitFormBoundary",
+        createMultipartPayload(documentId),
+      );
     })
     .willRespondWith(200);
   provider
