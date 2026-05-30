@@ -5,6 +5,12 @@ export interface TestDevice {
   encryptedPrivateMainKey?: string;
 }
 
+export interface TestChat {
+  contactEmail: string;
+  encryptedSharedKey: string;
+  messages: { id: string; content: string }[];
+}
+
 export interface TestDocument {
   documentId: string;
   name: string;
@@ -19,6 +25,7 @@ export interface TestUser<
   privateMainKey?: JsonWebKey;
   devices: TDevices;
   documents: TDocs;
+  chats?: TestChat[];
 }
 
 export interface TestDataStructure {
@@ -102,6 +109,26 @@ export const TestData: TestDataStructure = {
         name: "profile.jpg",
       },
     ],
+    chats: [
+      {
+        contactEmail: "laura@imagey.cloud",
+        encryptedSharedKey:
+          "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc",
+        messages: [
+          {
+            id: "msg-123",
+            content:
+              "++AmhrmQQ1GaNCE8bxyBg4BhWrVxvqCGm39T28ifjyrnkCpXwUZ8wofnX4pqnOvn958u9BTm",
+          },
+        ],
+      },
+      {
+        contactEmail: "alice@imagey.cloud",
+        encryptedSharedKey:
+          "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc",
+        messages: [],
+      },
+    ],
   },
   alice: {
     password: "alicesPassword",
@@ -110,8 +137,8 @@ export const TestData: TestDataStructure = {
       ext: true,
       key_ops: [],
       kty: "EC",
-      x: "qifwej_FmWyOknQBQIKvyGyX_nxYJsdkVTe2XrfVdPI",
-      y: "_87In1aaujLDD79RPFfSAuZ0nxzXGlelhETdkl7eRO4",
+      x: "RpnasTbuiPTVHSCw-79Z7jppIH_B1FfDOaqvdZxuV3c",
+      y: "oVAa5j5PW79dq_yKsgKfzU480CANZUDbWRqwwovXo3o",
     },
     devices: [
       {

@@ -38,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.InvitationKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
@@ -78,6 +79,26 @@ public class ContactRepository extends AbstractFileRepository {
         }
     }
 
+    public void persist(User user, User contact, InvitationKey invitationKey) throws IOException {
+        File userHome = getUserHome(user);
+        File contactHome = new File(userHome, "contacts");
+        if (!contactHome.exists()) {
+            contactHome.mkdirs();
+        }
+        File contactFolder = new File(contactHome, contact.email().address());
+        if (!contactFolder.exists()) {
+            mkdir(contactFolder);
+        }
+        File keyFile = new File(contactFolder, "invitation-key.enc");
+        write(keyFile, invitationKey.key(), UTF_8, false);
+
+        // Delete any pending invitations since they are now a contact
+        File requestDirectory = new File(new File(userHome, "contact-requests"), contact.email().address());
+        if (requestDirectory.exists()) {
+            deleteDirectory(requestDirectory);
+        }
+    }
+
     public List<User> findContactRequests(User user) {
         File userHome = getUserHome(user);
         File contactRequests = new File(userHome, "contact-requests");
@@ -101,6 +122,30 @@ public class ContactRepository extends AbstractFileRepository {
             return empty();
         }
         return of(readStatus(statusFile));
+    }
+
+    public Optional<ContactKeys> getContactKeys(User user, User contact) {
+        File userHome = getUserHome(user);
+        File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
+        File keyFile = new File(contactFolder, "key.enc");
+        LOG.info("key file found");
+        if (keyFile.exists()) {
+            return of(new ContactKeys(new EncryptedSharedKey(readFileToString(keyFile))));
+        }
+        File invitationKeyFile = new File(contactFolder, "invitation-key.enc");
+        LOG.info("invitation key file found: " + invitationKeyFile.exists());
+        return of(invitationKeyFile).filter(File::exists).map(file -> new ContactKeys(new InvitationKey(readFileToString(file))));
+    }
+
+    public void updateContactKey(User user, User contact, EncryptedSharedKey key) throws IOException {
+        File userHome = getUserHome(user);
+        File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
+        File contactKey = new File(contactFolder, "key.enc");
+        write(contactKey, key.key(), UTF_8);
+        File invitationKey = new File(contactFolder, "invitation-key.enc");
+        if (invitationKey.exists()) {
+            invitationKey.delete();
+        }
     }
 
     public boolean isContact(User user, User contact) {

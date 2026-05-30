@@ -9,6 +9,7 @@ import Navigation from "./components/Navigation";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
+import Chat from "./pages/Chat";
 import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
@@ -19,6 +20,13 @@ import {
   AuthenticationContext,
 } from "./contexts/AuthenticationContext";
 import Activities from "./pages/Activities";
+
+import { useParams } from "react-router";
+
+function ChatRoute() {
+  const { contactEmail } = useParams();
+  return contactEmail ? <Chat contactEmail={contactEmail} /> : null;
+}
 
 function App() {
   /*
@@ -73,6 +81,7 @@ function App() {
               <Route path=":id" element={<Image />} />
             </Route>
             <Route path="chats" element={<Chats />} />
+            <Route path="chats/:contactEmail" element={<ChatRoute />} />
             <Route path="settings">
               <Route index element={<Settings />} />
               <Route path="profile" element={user && <Profile />} />

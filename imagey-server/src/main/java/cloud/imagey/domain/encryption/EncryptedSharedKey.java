@@ -17,5 +17,4 @@
 package cloud.imagey.domain.encryption;
 
 public record EncryptedSharedKey(String key) {
-
 }

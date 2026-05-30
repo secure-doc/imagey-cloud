@@ -34,7 +34,7 @@ test("navigate to chats", async ({ page }) => {
     // Then
     await expect(
       page.getByRole("heading", {
-        name: "laura@imagey.cloud",
+        name: "bill@imagey.cloud",
       }),
     ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -49,20 +49,22 @@ test("accept open invitations", async ({ page }) => {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get lauras public key")
-    .withRequest("GET", "/users/laura@imagey.cloud/public-keys/0", (r) => {
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request of mary to get bills public key")
+    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) => {
       r.headers({
         Accept: "application/json",
       });
     })
-    .willRespondWith(200, (r) => r.jsonBody(TestData.laura.publicMainKey));
+    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
 
   const builder = provider
     .addInteraction()
-    .uponReceiving("a request of mary to accept lauras invitation")
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request of mary to accept bills invitation")
     .withRequest(
       "PUT",
-      "/users/mary@imagey.cloud/contacts/laura@imagey.cloud",
+      "/users/mary@imagey.cloud/contacts/bill@imagey.cloud",
       (r) => {
         r.headers({
           "Content-Type": "application/json",
@@ -70,6 +72,7 @@ test("accept open invitations", async ({ page }) => {
         // We don't exact-match the encrypted key because it changes dynamically
         r.jsonBody({
           key: MatchersV3.like("dummy-encrypted-key"),
+          invitationKey: MatchersV3.like("dummy-encrypted-key"),
         });
       },
     )
@@ -94,11 +97,11 @@ test("accept open invitations", async ({ page }) => {
     // Then Invitation Visible
     const invitationPanel = page
       .getByRole("heading", {
-        name: "laura@imagey.cloud",
+        name: "bill@imagey.cloud",
       })
       .locator("../..");
     await expect(invitationPanel).toBeVisible();
-    await expect(invitationPanel).toContainText("laura@imagey.cloud");
+    await expect(invitationPanel).toContainText("bill@imagey.cloud");
 
     // Act: Accept Laura
     const acceptLauraBtn = invitationPanel.getByRole("button", {
@@ -120,10 +123,10 @@ test("decline open invitations", async ({ page }) => {
 
   const builder = provider
     .addInteraction()
-    .uponReceiving("a request of mary to decline lauras invitation")
+    .uponReceiving("a request of mary to decline bills invitation")
     .withRequest(
       "DELETE",
-      "/users/mary@imagey.cloud/contact-requests/laura@imagey.cloud",
+      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
     )
     .willRespondWith(204);
 
@@ -146,11 +149,11 @@ test("decline open invitations", async ({ page }) => {
     // Then Invitation Visible
     const invitationPanel = page
       .getByRole("heading", {
-        name: "laura@imagey.cloud",
+        name: "bill@imagey.cloud",
       })
       .locator("../..");
     await expect(invitationPanel).toBeVisible();
-    await expect(invitationPanel).toContainText("laura@imagey.cloud");
+    await expect(invitationPanel).toContainText("bill@imagey.cloud");
 
     // Act: Decline Laura
     const declineAliceBtn = invitationPanel.getByRole("button", {

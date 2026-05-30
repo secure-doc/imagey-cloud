@@ -19,36 +19,58 @@ package cloud.imagey.infrastructure.record;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
+import java.util.ArrayList;
+import java.util.List;
 
 import jakarta.json.bind.adapter.JsonbAdapter;
 
 public class AbstractSimpleRecordAdapter<R extends Record, S> implements JsonbAdapter<R, S> {
 
-    private Constructor<R> recordConstructor;
-    private Method accessor;
+    private List<Constructor<?>> recordConstructors = new ArrayList<>();
+    private List<Method> accessors = new ArrayList<>();
 
     protected AbstractSimpleRecordAdapter() {
         ParameterizedType type = (ParameterizedType)getClass().getGenericSuperclass();
-        Class<R> recordType = (Class<R>)type.getActualTypeArguments()[0];
         Class<S> simpleType = (Class<S>)type.getActualTypeArguments()[1];
         if (simpleType.equals(Integer.class)) {
             simpleType = (Class<S>)Integer.TYPE;
         }
-        try {
-            recordConstructor = recordType.getConstructor(simpleType);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
+        Class<?> recordType = (Class<?>)type.getActualTypeArguments()[0];
+        do {
+            try {
+                RecordComponent[] recordComponents = recordType.getRecordComponents();
+                if (recordComponents.length != 1) {
+                    throw new IllegalStateException("Record " + recordType.getSimpleName() + " must only have one component");
+                }
+                RecordComponent recordComponent = recordComponents[0];
+                recordConstructors.add(0, recordType.getConstructor(recordComponent.getType()));
+                accessors.add(recordComponent.getAccessor());
+                recordType = recordComponent.getType();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        } while (recordType.isRecord());
+        if (recordType != simpleType) {
+            throw new IllegalStateException("Type mismatch: " + recordType.getSimpleName() + " and " + simpleType.getSimpleName());
         }
-        accessor = recordType.getRecordComponents()[0].getAccessor();
     }
 
     @Override
     public S adaptToJson(R object) throws Exception {
-        return (S)accessor.invoke(object);
+        Object result = object;
+        for (Method accessor: accessors) {
+            result = accessor.invoke(result);
+        }
+        return (S)result;
     }
 
     @Override
     public R adaptFromJson(S object) throws Exception {
-        return recordConstructor.newInstance(object);
+        Object result = object;
+        for (Constructor<?> constructor: recordConstructors) {
+            result = constructor.newInstance(result);
+        }
+        return (R)result;
     }
 }

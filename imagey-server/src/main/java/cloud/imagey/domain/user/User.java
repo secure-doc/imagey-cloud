@@ -16,8 +16,14 @@
  */
 package cloud.imagey.domain.user;
 
-import cloud.imagey.domain.mail.Email;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
+import cloud.imagey.domain.mail.Email;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+@JsonbTypeAdapter(User.Adapter.class)
 public record User(Email email) {
 
+    public static class Adapter extends AbstractSimpleRecordAdapter<User, String> {
+    }
 }
