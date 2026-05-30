@@ -16,8 +16,8 @@
  */
 package cloud.imagey.application;
 
-import javax.enterprise.context.ApplicationScoped;
-import javax.ws.rs.ext.Provider;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.ext.Provider;
 
 import org.apache.cxf.jaxrs.provider.MultipartProvider;
 

@@ -16,13 +16,13 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
-import javax.annotation.security.DenyAll;
-import javax.annotation.security.RolesAllowed;
-import javax.enterprise.context.ApplicationScoped;
-import javax.ws.rs.container.DynamicFeature;
-import javax.ws.rs.container.ResourceInfo;
-import javax.ws.rs.core.FeatureContext;
-import javax.ws.rs.ext.Provider;
+import jakarta.annotation.security.DenyAll;
+import jakarta.annotation.security.RolesAllowed;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.container.DynamicFeature;
+import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.core.FeatureContext;
+import jakarta.ws.rs.ext.Provider;
 
 @Provider
 @ApplicationScoped

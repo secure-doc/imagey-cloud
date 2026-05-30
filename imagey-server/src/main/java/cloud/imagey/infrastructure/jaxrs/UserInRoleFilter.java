@@ -16,16 +16,16 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
-import static javax.ws.rs.Priorities.AUTHORIZATION;
-import static javax.ws.rs.core.Response.status;
-import static javax.ws.rs.core.Response.Status.UNAUTHORIZED;
+import static jakarta.ws.rs.Priorities.AUTHORIZATION;
+import static jakarta.ws.rs.core.Response.status;
+import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 
 import java.io.IOException;
 
-import javax.annotation.Priority;
-import javax.ws.rs.container.ContainerRequestContext;
-import javax.ws.rs.container.ContainerRequestFilter;
-import javax.ws.rs.core.SecurityContext;
+import jakarta.annotation.Priority;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.container.ContainerRequestFilter;
+import jakarta.ws.rs.core.SecurityContext;
 
 @Priority(AUTHORIZATION)
 public class UserInRoleFilter implements ContainerRequestFilter {

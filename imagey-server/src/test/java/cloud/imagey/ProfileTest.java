@@ -17,10 +17,10 @@
 package cloud.imagey;
 
 import static java.lang.Integer.MAX_VALUE;
-import static javax.ws.rs.client.ClientBuilder.newClient;
-import static javax.ws.rs.client.Entity.entity;
-import static javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
-import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static jakarta.ws.rs.client.ClientBuilder.newClient;
+import static jakarta.ws.rs.client.Entity.entity;
+import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
+import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,8 +29,8 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
 
-import javax.inject.Inject;
-import javax.ws.rs.core.Response;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.core.Response;
 
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.MultipartBody;

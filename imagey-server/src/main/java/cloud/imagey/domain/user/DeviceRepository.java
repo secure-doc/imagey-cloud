@@ -19,7 +19,7 @@ package cloud.imagey.domain.user;
 import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static javax.json.bind.JsonbBuilder.create;
+import static jakarta.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
@@ -29,8 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Inject;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;

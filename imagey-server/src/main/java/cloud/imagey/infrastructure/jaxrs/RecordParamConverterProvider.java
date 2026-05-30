@@ -19,10 +19,10 @@ package cloud.imagey.infrastructure.jaxrs;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 
-import javax.enterprise.context.ApplicationScoped;
-import javax.ws.rs.ext.ParamConverter;
-import javax.ws.rs.ext.ParamConverterProvider;
-import javax.ws.rs.ext.Provider;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.ext.ParamConverter;
+import jakarta.ws.rs.ext.ParamConverterProvider;
+import jakarta.ws.rs.ext.Provider;
 
 @Provider
 @ApplicationScoped

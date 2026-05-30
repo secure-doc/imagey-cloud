@@ -16,7 +16,7 @@
  */
 package cloud.imagey.domain.encryption;
 
-import javax.json.bind.annotation.JsonbCreator;
+import jakarta.json.bind.annotation.JsonbCreator;
 
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;

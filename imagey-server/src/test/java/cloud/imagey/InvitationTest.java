@@ -17,9 +17,9 @@
 package cloud.imagey;
 
 import static cloud.imagey.domain.token.TokenService.ONE_HOUR;
-import static javax.ws.rs.client.ClientBuilder.newClient;
-import static javax.ws.rs.client.Entity.json;
-import static javax.ws.rs.core.Response.Status.FOUND;
+import static jakarta.ws.rs.client.ClientBuilder.newClient;
+import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.Response.Status.FOUND;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,9 +29,12 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Optional;
 
-import javax.inject.Inject;
-import javax.ws.rs.core.Cookie;
-import javax.ws.rs.core.Response;
+import jakarta.inject.Inject;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
+import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
@@ -49,9 +52,6 @@ import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
-import jakarta.mail.internet.MimeMultipart;
 
 @GreenMail
 @MonoMeecrowaveConfig
@@ -133,7 +133,7 @@ public class InvitationTest {
             .get();
 
         // Then
-        assertThat(response.getStatus()).isEqualTo(javax.ws.rs.core.Response.Status.FORBIDDEN.getStatusCode());
+        assertThat(response.getStatus()).isEqualTo(jakarta.ws.rs.core.Response.Status.FORBIDDEN.getStatusCode());
     }
 
 

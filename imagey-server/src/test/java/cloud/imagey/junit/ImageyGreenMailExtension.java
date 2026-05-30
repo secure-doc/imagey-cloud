@@ -19,9 +19,9 @@ package cloud.imagey.junit;
 import static com.icegreen.greenmail.configuration.GreenMailConfiguration.aConfig;
 import static com.icegreen.greenmail.util.ServerSetup.PROTOCOL_SMTP;
 
-import javax.enterprise.context.Dependent;
-import javax.enterprise.inject.Produces;
-import javax.enterprise.inject.Typed;
+import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.inject.Produces;
+import jakarta.enterprise.inject.Typed;
 
 import org.junit.jupiter.api.extension.ExtensionContext;
 

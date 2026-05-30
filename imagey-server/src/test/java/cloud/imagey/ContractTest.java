@@ -33,7 +33,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.Optional;
 
-import javax.inject.Inject;
+import jakarta.inject.Inject;
 
 import org.apache.hc.core5.http.HttpRequest;
 import org.apache.meecrowave.Meecrowave;
