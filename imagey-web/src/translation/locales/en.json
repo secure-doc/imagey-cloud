@@ -33,5 +33,11 @@
   "This device": "This device",
   "Uknown Authentication Error": "Uknown Authentication Error",
   "unverified": "unverified",
-  "Wrong password": "Wrong password"
+  "Wrong password": "Wrong password",
+  "Profile": "Profile",
+  "Email Addresses": "Email Addresses",
+  "Add Email": "Add Email",
+  "Name": "Name",
+  "Change Picture": "Change Picture",
+  "Save": "Save"
 }
