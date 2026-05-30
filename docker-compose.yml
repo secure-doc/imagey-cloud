@@ -1,22 +1,20 @@
 services:
   greenmail:
     image: greenmail/standalone:2.1.0
-    container_name: greenmail
     ports:
       # SMTP
-      - "3025:3025"
+      - "${SMTP_PORT:-3025}:3025"
       # IMAP
-      - "3143:3143"
+      - "${IMAP_PORT:-3143}:3143"
       # Greenmail API (mapped to 8081 to avoid conflict with Meecrowave)
-      - "8081:8080"
+      - "${GREENMAIL_API_PORT:-8081}:8080"
     environment:
       - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled -Dgreenmail.users=test@imagey.cloud:password
 
   meecrowave:
     build: .
-    container_name: meecrowave
     ports:
-      - "8080:8080"
+      - "${MEECROWAVE_PORT:-8080}:8080"
     environment:
       - MEECROWAVE_OPTS=-Droot.path=target/data -Dacme-challenge.path=target/acme-challenge -Dauthentication.secret=eXkLrmpPYd11aQVgCkCGmKF8XtfpfZv02mUDPNjREcxSjcz/ZtX/u6NZbcaZhWQ3zjEbzb1dUSKVvcfjzNp45Q== -Dsmtp.host=greenmail -Dsmtp.port=3025 -Dsmtp.user=test@imagey.cloud -Dsmtp.password=password
     depends_on:
