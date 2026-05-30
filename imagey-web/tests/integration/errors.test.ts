@@ -223,7 +223,10 @@ test("contact repository error handling", async ({ page }) => {
   await chatsLink.click();
 
   // Trigger POST /contact-requests failure
-  const addContactButton = page.getByRole("button", { name: "add" });
+  const addContactButton = page.getByRole("button", {
+    name: "add",
+    exact: true,
+  });
   await expect(addContactButton).toBeVisible();
   await addContactButton.click();
   const emailInput = page.getByPlaceholder("email@imagey.cloud");

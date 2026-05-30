@@ -4,7 +4,6 @@ import {
   loginAsMary,
   prepareMarysLogin,
   prepareMarysDocuments,
-  prepareMarysContacts,
   setupMockServer,
   provider,
   prepareMarysContactRequests,
@@ -20,7 +19,6 @@ test("wrong contact email", async ({ page }) => {
   await prepareMarysLogin(page);
   const builder = await prepareMarysDocuments();
   await prepareMarysContactRequests();
-  await prepareMarysContacts();
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -67,7 +65,6 @@ test("send contact request", async ({ page }) => {
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
   await prepareMarysContactRequests();
-  await prepareMarysContacts();
 
   const builder = provider
     .addInteraction()
@@ -90,7 +87,10 @@ test("send contact request", async ({ page }) => {
     await chatsLink.click();
 
     // Click the add contact button
-    const addContactButton = page.getByRole("button", { name: "add" });
+    const addContactButton = page.getByRole("button", {
+      name: "add",
+      exact: true,
+    });
     await expect(addContactButton).toBeVisible();
     await addContactButton.click();
 

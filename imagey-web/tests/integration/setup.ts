@@ -447,6 +447,16 @@ export async function inputMarysPassword(page: Page) {
 }
 
 export async function prepareMarysContactRequests() {
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
   return provider
     .addInteraction()
     .uponReceiving("a request of mary to get contact requests")
@@ -456,16 +466,4 @@ export async function prepareMarysContactRequests() {
       }),
     )
     .willRespondWith(200, (r) => r.jsonBody(["laura@imagey.cloud"]));
-}
-
-export async function prepareMarysContacts() {
-  return provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
 }

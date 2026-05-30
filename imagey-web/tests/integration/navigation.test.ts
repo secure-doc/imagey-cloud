@@ -4,7 +4,6 @@ import {
   inputMarysPassword,
   loginAsMary,
   prepareMarysContactRequests,
-  prepareMarysContacts,
   prepareMarysDevices,
   prepareMarysDocuments,
   prepareMarysLogin,
@@ -22,11 +21,21 @@ test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  await prepareMarysContacts();
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
   const given = provider
     .addInteraction()
     .given("Mary has declined lauras invitation")
-    .uponReceiving("a request of mary to get contacts")
+    .uponReceiving("a request of mary to get contact requests")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
@@ -49,7 +58,7 @@ test("navigate to chats", async ({ page }) => {
     chatsLink.click();
 
     // Then
-    await expect(page.getByText("No chats available")).toBeVisible();
+    await expect(page.getByText("No contacts yet?")).toBeVisible();
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -92,12 +101,22 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
   await page.setViewportSize({ width: 412, height: 915 });
   await page.goto("/");
   await prepareMarysLogin(page);
-  await prepareMarysContacts();
+
   await prepareMarysDocuments();
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
   const given = provider
     .addInteraction()
     .given("Mary has declined lauras invitation")
-    .uponReceiving("a request of mary to get contacts")
+    .uponReceiving("a request of mary to get contact requests")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
@@ -122,7 +141,7 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
     chatsLink.first().click();
 
     // Then
-    await expect(page.getByText("No chats available")).toBeVisible();
+    await expect(page.getByText("No contacts yet?")).toBeVisible();
     const chatsLinks = page.getByRole("link", { name: "Chats" });
 
     await expect(chatsLinks).toHaveCount(1);

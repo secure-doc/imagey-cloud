@@ -3,6 +3,7 @@ import { Activity, ActivityType } from "./Activity";
 import ImagePanel from "./ImagePanel";
 import InvitationPanel from "./InvitationPanel";
 import UploadPanel from "./UploadPanel";
+import NoContactsPanel from "./NoContactsPanel";
 
 export default function ActivityPanel({
   className,
@@ -43,6 +44,8 @@ export default function ActivityPanel({
           }
         />
       );
+    case ActivityType.NO_CONTACTS:
+      return <NoContactsPanel className={className} />;
     default:
       return <></>;
   }

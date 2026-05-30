@@ -28,7 +28,7 @@ test("new user enters wrong email", async ({ page }) => {
   // When
   const emailInput = page.getByPlaceholder("email@imagey.cloud");
   await expect(emailInput).toBeVisible();
-  emailInput.fill("joe(at)imagey.cloud");
+  await emailInput.fill("joe(at)imagey.cloud");
   await expect(
     page.getByText("Please enter a valid email address."),
   ).toBeVisible();
@@ -68,7 +68,7 @@ test("new user visits page", async ({ page }) => {
       const emailInput = page.getByPlaceholder("email@imagey.cloud");
       await expect(emailInput).toBeVisible();
 
-      emailInput.fill("joe@imagey.cloud");
+      await emailInput.fill("joe@imagey.cloud");
       await page.getByText("Confirm").click();
 
       // Then
@@ -101,7 +101,7 @@ test("existing user visits page with new device", async ({ page }) => {
       const emailInput = page.getByPlaceholder("email@imagey.cloud");
       await expect(emailInput).toBeVisible();
 
-      emailInput.fill("mary@imagey.cloud");
+      await emailInput.fill("mary@imagey.cloud");
       await page.getByText("Confirm").click();
 
       // Then
@@ -151,7 +151,7 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
       const emailInput = page.getByPlaceholder("email@imagey.cloud");
       await expect(emailInput).toBeVisible();
 
-      emailInput.fill("mary@imagey.cloud");
+      await emailInput.fill("mary@imagey.cloud");
       await page.getByText("Confirm").click();
 
       // Then
@@ -208,6 +208,16 @@ test("new user clicks registration link", async ({ page }) => {
 
   provider
     .addInteraction()
+    .uponReceiving("a request of joe to get contacts")
+    .withRequest("GET", "/users/joe@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  provider
+    .addInteraction()
     .uponReceiving("a request of joe to get documents")
     .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
       r.headers({
@@ -232,8 +242,25 @@ test("new user clicks registration link", async ({ page }) => {
 
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill(TestData.mary.password);
+      await passwordInput.fill(TestData.mary.password);
+
+      const contactsResponse = page.waitForResponse(
+        "**/users/joe@imagey.cloud/contacts",
+      );
+      const documentsResponse = page.waitForResponse(
+        "**/users/joe@imagey.cloud/documents",
+      );
+      const contactRequestsResponse = page.waitForResponse(
+        "**/users/joe@imagey.cloud/contact-requests",
+      );
+
       await page.getByText("Confirm").click();
+
+      await Promise.all([
+        contactsResponse,
+        documentsResponse,
+        contactRequestsResponse,
+      ]);
 
       // Then
       await expect(page.getByText(/Upload Images/)).toBeVisible();
@@ -309,7 +336,7 @@ test("mary logges in with new device", async ({ page }) => {
 
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill(TestData.mary.password);
+      await passwordInput.fill(TestData.mary.password);
       await page.getByText("Confirm").click();
       await expect(
         page.getByText(
@@ -368,7 +395,7 @@ test("visit page on existing device", async ({ page }) => {
 
     const passwordInput = page.getByLabel("password");
     await expect(passwordInput).toBeVisible();
-    passwordInput.fill("MarysPassword123");
+    await passwordInput.fill("MarysPassword123");
     await page.getByText("Confirm").click();
 
     // Then
@@ -397,7 +424,7 @@ test("visit page on existing device with wrong password", async ({ page }) => {
 
       const passwordInput = page.getByLabel("password");
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill("wrongPassword");
+      await passwordInput.fill("wrongPassword");
       await page.getByText("Confirm").click();
 
       // Then
@@ -420,7 +447,7 @@ test("login with missing email", async ({ page }) => {
     const emailInput = page.getByPlaceholder("email@imagey.cloud");
     await expect(emailInput).toBeVisible();
 
-    emailInput.fill("mary@imagey.cloud");
+    await emailInput.fill("mary@imagey.cloud");
     await page.getByText("Confirm").click();
 
     await inputMarysPassword(page);

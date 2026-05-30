@@ -6,6 +6,7 @@ import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import ImageComponent from "../components/ImageComponent";
+import UploadPanel from "../activity/UploadPanel";
 
 export default function Images() {
   const { t } = useTranslation();
@@ -41,11 +42,21 @@ export default function Images() {
   return (
     <main>
       <div className="column scroll">
-        {!documents
-          ? t("Loading images")
-          : documents.length === 0
-            ? t("No images found")
-            : documents.map((document) => <ImageComponent image={document} />)}
+        {!documents ? (
+          t("Loading images")
+        ) : documents.length === 0 ? (
+          <UploadPanel
+            onUploadComplete={(document) =>
+              setDocuments((previousDocuments) =>
+                previousDocuments
+                  ? [...previousDocuments, document]
+                  : [document],
+              )
+            }
+          />
+        ) : (
+          documents.map((document) => <ImageComponent image={document} />)
+        )}
       </div>
     </main>
   );

@@ -13,7 +13,10 @@ export default function Panel({
 }) {
   return (
     <div className={className}>
-      <article className="no-padding border">
+      <article
+        className="no-padding border"
+        style={{ display: "flex", flexDirection: "column", height: "100%" }}
+      >
         {typeof image === "string" ? (
           <img
             className="responsive small"
@@ -23,10 +26,17 @@ export default function Panel({
         ) : (
           image
         )}
-        <div className="padding">
+        <div
+          className="padding"
+          style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}
+        >
           <h5 className="max truncate center-align">{title}</h5>
           {children}
-          {actions && <nav>{actions}</nav>}
+          {actions && (
+            <nav className="center-align" style={{ marginTop: "auto" }}>
+              {actions}
+            </nav>
+          )}
         </div>
       </article>
     </div>
