@@ -16,7 +16,7 @@
  */
 package cloud.imagey.domain.mail;
 
-import javax.json.bind.annotation.JsonbTypeAdapter;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
 import cloud.imagey.domain.mail.Email.Adapter;
 import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;

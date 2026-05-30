@@ -19,7 +19,7 @@ package cloud.imagey.application.authentication;
 import java.security.Principal;
 import java.util.function.Function;
 
-import javax.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.SecurityContext;
 
 public interface DefaultSecurityContext extends SecurityContext {
 

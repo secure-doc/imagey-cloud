@@ -20,7 +20,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 
-import javax.json.bind.adapter.JsonbAdapter;
+import jakarta.json.bind.adapter.JsonbAdapter;
 
 public class AbstractSimpleRecordAdapter<R extends Record, S> implements JsonbAdapter<R, S> {
 

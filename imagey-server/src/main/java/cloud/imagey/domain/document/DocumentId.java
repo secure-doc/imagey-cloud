@@ -16,7 +16,7 @@
  */
 package cloud.imagey.domain.document;
 
-import javax.json.bind.annotation.JsonbTypeAdapter;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
 import cloud.imagey.domain.document.DocumentId.Adapter;
 import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;

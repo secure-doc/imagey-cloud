@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import javax.json.bind.JsonbBuilder;
+import jakarta.json.bind.JsonbBuilder;
 
 public abstract class AbstractRecordConverter {
 

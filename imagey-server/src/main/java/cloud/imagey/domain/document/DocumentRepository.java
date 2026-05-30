@@ -19,7 +19,7 @@ package cloud.imagey.domain.document;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static javax.json.bind.JsonbBuilder.create;
+import static jakarta.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.readFileToByteArray;
 import static org.apache.commons.io.FileUtils.write;
 import static org.apache.commons.io.FileUtils.writeByteArrayToFile;
@@ -31,9 +31,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import javax.annotation.PostConstruct;
-import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Inject;
+import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

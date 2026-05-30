@@ -16,9 +16,9 @@
  */
 package cloud.imagey;
 
-import static javax.ws.rs.client.ClientBuilder.newClient;
-import static javax.ws.rs.client.Entity.json;
-import static javax.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
+import static jakarta.ws.rs.client.ClientBuilder.newClient;
+import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,8 +26,9 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 
-import javax.inject.Inject;
-import javax.ws.rs.core.Response;
+import jakarta.inject.Inject;
+import jakarta.mail.MessagingException;
+import jakarta.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
@@ -35,8 +36,6 @@ import org.apache.meecrowave.testing.ConfigurationInject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import jakarta.mail.MessagingException;
 
 @MonoMeecrowaveConfig
 public class EmailTest {

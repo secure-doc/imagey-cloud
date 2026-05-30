@@ -16,8 +16,8 @@
  */
 package cloud.imagey;
 
-import static javax.ws.rs.client.ClientBuilder.newClient;
-import static javax.ws.rs.core.Response.Status.NOT_FOUND;
+import static jakarta.ws.rs.client.ClientBuilder.newClient;
+import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,8 +25,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
-import javax.inject.Inject;
-import javax.ws.rs.core.Response;
+import jakarta.inject.Inject;
+import jakarta.mail.MessagingException;
+import jakarta.ws.rs.core.Response;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.meecrowave.Meecrowave;
@@ -35,8 +36,6 @@ import org.apache.meecrowave.testing.ConfigurationInject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-
-import jakarta.mail.MessagingException;
 
 @MonoMeecrowaveConfig
 public class AcmeChallengeTest {

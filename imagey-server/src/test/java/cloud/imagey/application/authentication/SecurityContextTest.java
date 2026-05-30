@@ -16,7 +16,7 @@
  */
 package cloud.imagey.application.authentication;
 
-import static javax.ws.rs.core.SecurityContext.DIGEST_AUTH;
+import static jakarta.ws.rs.core.SecurityContext.DIGEST_AUTH;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;

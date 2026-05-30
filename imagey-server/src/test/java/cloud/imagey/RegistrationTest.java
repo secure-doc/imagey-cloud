@@ -16,15 +16,15 @@
  */
 package cloud.imagey;
 
+import static jakarta.ws.rs.client.ClientBuilder.newClient;
+import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE;
+import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
+import static jakarta.ws.rs.core.Response.Status.FOUND;
+import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static java.lang.Integer.MAX_VALUE;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.valueOf;
-import static javax.ws.rs.client.ClientBuilder.newClient;
-import static javax.ws.rs.client.Entity.json;
-import static javax.ws.rs.core.MediaType.APPLICATION_JSON_TYPE;
-import static javax.ws.rs.core.Response.Status.FORBIDDEN;
-import static javax.ws.rs.core.Response.Status.FOUND;
-import static javax.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -35,9 +35,12 @@ import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.Optional;
 
-import javax.inject.Inject;
-import javax.ws.rs.core.GenericType;
-import javax.ws.rs.core.Response;
+import jakarta.inject.Inject;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
+import jakarta.ws.rs.core.GenericType;
+import jakarta.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
@@ -55,9 +58,6 @@ import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
-import jakarta.mail.internet.MimeMultipart;
 
 @GreenMail
 @MonoMeecrowaveConfig

@@ -20,8 +20,8 @@ import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 
 import java.io.IOException;
 
-import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Inject;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.mail.Email;

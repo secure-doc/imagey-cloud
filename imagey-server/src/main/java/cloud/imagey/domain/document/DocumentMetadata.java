@@ -16,8 +16,8 @@
  */
 package cloud.imagey.domain.document;
 
-import javax.json.bind.annotation.JsonbCreator;
-import javax.json.bind.annotation.JsonbProperty;
+import jakarta.json.bind.annotation.JsonbCreator;
+import jakarta.json.bind.annotation.JsonbProperty;
 
 public record DocumentMetadata(
     @JsonbProperty("documentId") DocumentId documentId,
