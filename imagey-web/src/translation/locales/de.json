@@ -33,5 +33,11 @@
   "This device": "Dieses Gerät",
   "Uknown Authentication Error": "Unbekannter Authentifizierungsfehler",
   "unverified": "nicht verifiziert",
-  "Wrong password": "Falsches Password"
+  "Wrong password": "Falsches Password",
+  "Profile": "Profil",
+  "Email Addresses": "E-Mail-Adressen",
+  "Add Email": "E-Mail hinzufügen",
+  "Name": "Name",
+  "Change Picture": "Bild ändern",
+  "Save": "Speichern"
 }
