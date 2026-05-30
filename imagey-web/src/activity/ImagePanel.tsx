@@ -13,7 +13,9 @@ export default function ImagePanel({
     <Panel
       className={className}
       title={activity.image.name}
-      image={<ImageComponent image={activity.image} />}
+      image={
+        <ImageComponent image={activity.image} className="responsive small" />
+      }
     ></Panel>
   );
 }

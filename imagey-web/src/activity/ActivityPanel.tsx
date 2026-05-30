@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Activity, ActivityType } from "./Activity";
 import ImagePanel from "./ImagePanel";
 import InvitationPanel from "./InvitationPanel";
@@ -5,13 +6,15 @@ import UploadPanel from "./UploadPanel";
 
 export default function ActivityPanel({
   className,
-  activity,
+  activity: initialActivity,
   onActivityHandled,
 }: {
   className?: string;
   activity: Activity;
   onActivityHandled: () => void;
 }) {
+  const [activity, setActivity] = useState<Activity>(initialActivity);
+
   switch (activity.type) {
     case ActivityType.INVITATION:
       return (
@@ -24,7 +27,14 @@ export default function ActivityPanel({
     case ActivityType.IMAGE:
       return <ImagePanel className={className} activity={activity} />;
     case ActivityType.UPLOAD:
-      return <UploadPanel className={className} />;
+      return (
+        <UploadPanel
+          className={className}
+          onUploadComplete={(document) =>
+            setActivity({ type: ActivityType.IMAGE, image: document })
+          }
+        />
+      );
     default:
       return <></>;
   }

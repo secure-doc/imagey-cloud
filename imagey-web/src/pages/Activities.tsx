@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 //import { useActionIcons } from "../contexts/ActionBarContext";
 //import FileChooser from "../components/FileChooser";
-import { Activity } from "../activity/Activity";
+import { Activity, ActivityType } from "../activity/Activity";
 import ActivityPanel from "../activity/ActivityPanel";
 import { activityService } from "../activity/ActivityService";
 
@@ -30,6 +30,7 @@ export default function Activities() {
       .getActivities(user, keyPair)
       .then((activities) => setActivities(activities));
   }, [user, keyPair]);
+
   return (
     <main className="grid">
       {activities ? (
