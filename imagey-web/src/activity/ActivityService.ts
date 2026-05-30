@@ -23,12 +23,14 @@ export const activityService = {
     const activities: Activity[] = [
       ...contactRequests.map(
         (request): InvitationActivity => ({
+          id: `invitation-${request.email}`,
           type: ActivityType.INVITATION,
           userName: request.email,
         }),
       ),
       ...images.map(
         (image): ImageActivity => ({
+          id: `image-${image.documentId}`,
           type: ActivityType.IMAGE,
           image: image,
         }),
@@ -36,7 +38,7 @@ export const activityService = {
     ];
 
     if (activities.length === 0) {
-      return [{ type: ActivityType.UPLOAD }];
+      return [{ id: "upload", type: ActivityType.UPLOAD }];
     }
     return activities;
   },

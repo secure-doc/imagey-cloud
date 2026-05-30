@@ -30,21 +30,24 @@ export default function Activities() {
       .getActivities(user, keyPair)
       .then((activities) => setActivities(activities));
   }, [user, keyPair]);
+
   return (
     <main className="grid">
       {activities ? (
-        activities.map((activity, index) => (
-          <ActivityPanel
-            key={index}
-            className="s12 m6 l3"
-            activity={activity}
-            onActivityHandled={() =>
-              setActivities((activities) =>
-                activities?.filter((a) => a !== activity),
-              )
-            }
-          />
-        ))
+        activities.map((activity) => {
+          return (
+            <ActivityPanel
+              key={activity.id}
+              className="s12 m6 l3"
+              activity={activity}
+              onActivityHandled={() =>
+                setActivities((activities) =>
+                  activities?.filter((a) => a !== activity),
+                )
+              }
+            />
+          );
+        })
       ) : (
         <p>{t("Loading activities...")}</p>
       )}

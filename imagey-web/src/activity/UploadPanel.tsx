@@ -2,7 +2,15 @@ import { useTranslation } from "react-i18next";
 import Panel from "../components/Panel";
 import UploadButton from "../components/UploadButton";
 
-export default function UploadPanel({ className }: { className?: string }) {
+import Document from "../document/Document";
+
+export default function UploadPanel({
+  className,
+  onUploadComplete,
+}: {
+  className?: string;
+  onUploadComplete?: (document: Document) => void;
+}) {
   const { t } = useTranslation();
 
   return (
@@ -11,7 +19,11 @@ export default function UploadPanel({ className }: { className?: string }) {
       title={t("Upload Images")}
       image={
         <div className="row center-align padding">
-          <UploadButton className="circle extra" multiple>
+          <UploadButton
+            className="circle extra"
+            multiple
+            onUploadComplete={onUploadComplete}
+          >
             <i>upload</i>
           </UploadButton>
         </div>

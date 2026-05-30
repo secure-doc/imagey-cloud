@@ -1,7 +1,13 @@
 import { useTranslation } from "react-i18next";
 import Document from "../document/Document";
 
-export default function ImageComponent({ image }: { image: Document }) {
+export default function ImageComponent({
+  image,
+  className = "small-width small-height",
+}: {
+  image: Document;
+  className?: string;
+}) {
   const { t } = useTranslation();
   const content = image.content;
   if (content) {
@@ -18,13 +24,13 @@ export default function ImageComponent({ image }: { image: Document }) {
         src={url}
         alt={image.name}
         loading="lazy"
-        className="small-width small-height"
+        className={className}
         style={{ objectFit: "cover" }}
       />
     );
   } else {
     return (
-      <div key={image.documentId} className="small-width small-height">
+      <div key={image.documentId} className={className}>
         {t("Error loading {{name}}", { name: image.name })}
       </div>
     );
