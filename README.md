@@ -11,3 +11,15 @@ To test the application locally and complete the registration process, follow th
 5. Extract the registration link from the retrieved email body.
 6. Replace the domain part of the extracted link (`https://imagey.cloud`) with your local frontend address (`http://localhost:5173` or the respective port).
 7. Open the modified link in your browser to complete the registration by setting a password. You will then be logged in and can access features such as the user profile.
+
+## Running Multiple Environments in Parallel
+
+To run multiple features or branches in parallel on the same machine without port conflicts, you can override the default ports by providing environment variables. Docker Compose is set up to automatically map these if provided.
+
+Run the following command, specifying unique ports for each instance:
+
+```bash
+MEECROWAVE_PORT=8082 SMTP_PORT=3026 IMAP_PORT=3144 GREENMAIL_API_PORT=8083 docker compose -p feature-branch up -d
+```
+
+*(Note: The `-p feature-branch` flag ensures Docker assigns unique container names. If you are starting `docker compose` from separate directories, Docker already generates unique project names automatically, so the `-p` parameter is not required.)*

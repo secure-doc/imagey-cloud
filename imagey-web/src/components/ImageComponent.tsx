@@ -19,6 +19,7 @@ export default function ImageComponent({ image }: { image: Document }) {
         alt={image.name}
         loading="lazy"
         className="small-width small-height"
+        style={{ objectFit: "cover" }}
       />
     );
   } else {

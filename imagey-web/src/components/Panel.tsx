@@ -15,7 +15,11 @@ export default function Panel({
     <div className={className}>
       <article className="no-padding border">
         {typeof image === "string" ? (
-          <img className="responsive small" src={image} />
+          <img
+            className="responsive small"
+            src={image}
+            style={{ objectFit: "cover" }}
+          />
         ) : (
           image
         )}
