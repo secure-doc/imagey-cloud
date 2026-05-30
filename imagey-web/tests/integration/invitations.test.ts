@@ -211,3 +211,45 @@ test("decline open invitations fails", async ({ page }) => {
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
+
+test("send contact request", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+  await prepareMarysEmptyContactRequests();
+
+  const builder = provider
+    .addInteraction()
+    .uponReceiving("a request of mary to send an invitation to bill")
+    .withRequest("POST", "/users/mary@imagey.cloud/contact-requests", (r) => {
+      r.headers({
+        "Content-Type": "application/json",
+      });
+      r.jsonBody({ email: "bill@imagey.cloud" });
+    })
+    .willRespondWith(201);
+
+  await builder.executeTest(async (mockServer) => {
+    // When
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    // Act: Navigate to chats
+    await page.getByRole("link", { name: "Chats" }).click();
+
+    // Act: Click add contact in NoContactsPanel
+    await page.getByRole("button", { name: "Invite Contact" }).click();
+
+    // Enter email in dialog
+    const emailInput = page.getByPlaceholder("email@imagey.cloud");
+    await expect(emailInput).toBeVisible();
+    await emailInput.fill("bill@imagey.cloud");
+
+    // Submit dialog
+    await page.getByRole("button", { name: "Confirm" }).click();
+
+    // Assert: dialog is closed
+    await expect(emailInput).not.toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});

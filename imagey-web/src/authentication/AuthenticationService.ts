@@ -31,11 +31,7 @@ export const authenticationService = {
       device.deviceKeyPair.publicKey,
     );
     if (inviter) {
-      await contactRepository.acceptContactRequest(
-        email,
-        inviter,
-        mainKeyPair.privateKey,
-      );
+      await contactRepository.acceptContactRequest(email, inviter, mainKeyPair);
     }
     return {
       mainKeyPair,

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router";
 import { useActionIcons } from "../contexts/ActionBarContext";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
 import { useAuthentication } from "../contexts/AuthenticationContext";
@@ -13,6 +14,7 @@ export default function Chats() {
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<Contact[]>();
   const [contacts, setContacts] = useState<Contact[]>();
@@ -99,8 +101,12 @@ export default function Chats() {
             ))}
           {contacts &&
             contacts.map((contact, index) => (
-              <li key={index + (contactRequests ? contactRequests.length : 0)}>
-                <button className="circle">
+              <li
+                key={index + (contactRequests ? contactRequests.length : 0)}
+                onClick={() => navigate(`/chats/${contact.email}`)}
+                style={{ cursor: "pointer" }}
+              >
+                <button className="circle transparent">
                   {contact.email.charAt(0).toLocaleUpperCase()}
                 </button>
                 <div className="max">
