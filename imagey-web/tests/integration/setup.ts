@@ -25,7 +25,13 @@ export const provider = new PactV4({
 });
 
 export async function clearLocalStorage(page: Page) {
+  await page.route("/users/**", (route) => route.abort());
+  await page.route("/authentications/**", (route) => route.abort());
+  await page.route("/registrations/**", (route) => route.abort());
   await page.goto("/");
+  await page.unroute("/users/**");
+  await page.unroute("/authentications/**");
+  await page.unroute("/registrations/**");
   await page.evaluate(() => localStorage.removeItem("imagey.user"));
   await page.evaluate(() =>
     localStorage.removeItem("imagey.deviceIds[mary@imagey.cloud]"),
@@ -162,14 +168,23 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
         }
       }
 
-      const response = await route.fetch({
-        url: requestUrl.href,
-        method: request.method(),
-        headers: headers,
-        postData: postData,
-      });
+      try {
+        const response = await route.fetch({
+          url: requestUrl.href,
+          method: request.method(),
+          headers: headers,
+          postData: postData,
+        });
 
-      await route.fulfill({ response });
+        await route.fulfill({ response });
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message.includes("ECONNREFUSED")) {
+          // The mock server might have shut down at the end of the test, abort the route safely
+          await route.abort("failed");
+        } else {
+          throw e;
+        }
+      }
     } finally {
       runningPactRequests--;
     }
@@ -665,4 +680,28 @@ export async function prepareMarysContactRequests() {
       }),
     )
     .willRespondWith(200, (r) => r.jsonBody(["laura@imagey.cloud"]));
+}
+
+export async function prepareMarysEmptyContactRequests() {
+  provider
+    .addInteraction()
+    .given("Mary has declined lauras invitation")
+    .uponReceiving("a request of mary to get empty contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  return provider
+    .addInteraction()
+    .given("Mary has declined lauras invitation")
+    .uponReceiving("a request of mary to get empty contact requests")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
 }

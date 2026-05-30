@@ -14,25 +14,16 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.user;
+package cloud.imagey.domain.chat;
 
-import jakarta.json.bind.adapter.JsonbAdapter;
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.chat.Channel.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
-@JsonbTypeAdapter(User.Adapter.class)
-public record User(Email email) {
+@JsonbTypeAdapter(Adapter.class)
+public record Channel(String value) {
 
-    public static class Adapter implements JsonbAdapter<User, String> {
-        @Override
-        public String adaptToJson(User u) {
-            return u == null ? null : u.email().address();
-        }
-
-        @Override
-        public User adaptFromJson(String s) {
-            return s == null ? null : new User(new Email(s));
-        }
+    public static class Adapter extends AbstractSimpleRecordAdapter<Channel, String> {
     }
 }

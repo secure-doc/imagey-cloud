@@ -20,6 +20,9 @@ buildNumber.properties
 .checkstyle
 .externalToolBuilders
 
+# VSCode
+.vscode/
+
 # Npm
 node
 node_modules
