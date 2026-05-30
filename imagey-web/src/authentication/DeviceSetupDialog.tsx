@@ -1,8 +1,8 @@
 import PasswordDialog from "./PasswordDialog";
 import { deviceRepository } from "../device/DeviceRepository";
-import { cryptoService } from "./CryptoService";
 import { authenticationService } from "./AuthenticationService";
 import { useTranslation } from "react-i18next";
+import { deviceService } from "../device/DeviceService";
 
 interface DeviceSetupDialogProperties {
   email: string;
@@ -38,8 +38,8 @@ export default function DeviceSetupDialog({
       email={email}
       onWrongUser={onWrongUser}
       validatePassword={(password) =>
-        cryptoService
-          .decryptPrivatePasswordKey(encryptedPrivateDeviceKey, password)
+        deviceService
+          .unlockLocalDeviceKey(deviceId, password)
           .then((privateDeviceKey) =>
             authenticationService
               .loadPrivateMainKey(email, deviceId, privateDeviceKey)

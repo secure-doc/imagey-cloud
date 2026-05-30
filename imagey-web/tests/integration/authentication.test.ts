@@ -446,7 +446,7 @@ test("login with missing email", async ({ page }) => {
     // When
     await setupMockServer(page, mockServer);
     await page.evaluate(() => localStorage.removeItem("imagey.user"));
-    await page.reload();
+    await page.goto("/");
     const emailInput = page.getByPlaceholder("email@imagey.cloud");
     await expect(emailInput).toBeVisible();
 
@@ -658,6 +658,7 @@ test("existing user authenticates via challenge-response on existing device", as
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
+    .given("mary has no contacts")
     .uponReceiving("a request of mary to get contacts after challenge")
     .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
       r.headers({ Accept: "application/json" }),
@@ -759,4 +760,65 @@ test("existing user authenticates via challenge-response but provides wrong pass
       await expect(page.getByText("Wrong password")).toBeVisible();
       await expect.poll(() => runningPactRequests).toBe(0);
     });
+});
+
+test("passwords do not match shows error", async ({ page }) => {
+  await provider
+    .addInteraction()
+    .uponReceiving("a request to get public key for unknown user")
+    .withRequest("GET", "/users/unknown@imagey.cloud/public-keys/0")
+    .willRespondWith(404)
+    .executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      await page.goto("/?email=unknown@imagey.cloud");
+
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill("Password123");
+
+      const confirmPasswordInput = page.getByLabel("Confirm Password");
+      await expect(confirmPasswordInput).toBeVisible();
+      await confirmPasswordInput.fill("DifferentPassword123");
+
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      await expect(page.getByText("Passwords do not match")).toBeVisible();
+    });
+});
+
+test("unlockLocalDeviceKey fails if private key missing locally", async ({
+  page,
+}) => {
+  const builder = provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get public key for unlock error")
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+
+    // Use an existing device (this sets localStorage with keys and deviceId)
+    await setupMarysDevice(page);
+
+    await page.goto("/?email=mary@imagey.cloud");
+
+    const passwordInput = page.getByLabel("Password", { exact: true });
+    await expect(passwordInput).toBeVisible();
+
+    // Clear the specific private key before filling password
+    await page.evaluate((deviceId) => {
+      localStorage.removeItem(`imagey.devices[${deviceId}].key`);
+    }, TestData.mary.devices[0].deviceId);
+
+    await passwordInput.fill(TestData.mary.password);
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+    // Wrong password (since decrypt fails) or error
+    await expect(page.getByText("Wrong password")).toBeVisible();
+  });
 });

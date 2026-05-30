@@ -150,6 +150,26 @@ export const cryptoService = {
     return arrayBufferToBase64(combined.buffer);
   },
 
+  encryptMessage: async (message: string, key: JsonWebKey): Promise<string> => {
+    const cryptoKey = await importSymmetricKey(key);
+    const encoded = new TextEncoder().encode(message);
+    const encrypted = await encryptAESGCM(
+      encoded.buffer as ArrayBuffer,
+      cryptoKey,
+    );
+    return arrayBufferToBase64(encrypted);
+  },
+
+  decryptMessage: async (
+    encryptedBase64: string,
+    key: JsonWebKey,
+  ): Promise<string> => {
+    const cryptoKey = await importSymmetricKey(key);
+    const encryptedBuffer = base64ToArrayBuffer(encryptedBase64);
+    const decryptedBuffer = await decryptAESGCM(encryptedBuffer, cryptoKey);
+    return new TextDecoder().decode(decryptedBuffer);
+  },
+
   arrayBufferToBase64,
   base64ToArrayBuffer,
 };

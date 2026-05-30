@@ -21,21 +21,21 @@ import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
+import jakarta.ws.rs.ext.Provider;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.user.DomainName;
 
+@Provider
 @ApplicationScoped
-@jakarta.ws.rs.ext.Provider
 public class CorsFilter implements ContainerResponseFilter {
 
     @Inject
-    private Provider<DomainName> currentDomain;
+    private DomainNameProvider domainNameProvider;
 
     @Inject
     @ConfigProperty(name = "secure-doc.urls")
@@ -44,7 +44,7 @@ public class CorsFilter implements ContainerResponseFilter {
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
 
-        DomainName domain = currentDomain.get();
+        DomainName domain = domainNameProvider.getDomainName(requestContext);
         if (!allowedUrls.contains(domain)) {
             return;
         }

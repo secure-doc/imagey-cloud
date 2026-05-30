@@ -26,7 +26,9 @@ import static java.net.URI.create;
 import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.copyURLToFile;
-import static org.apache.commons.io.FileUtils.forceDelete;
+import static org.apache.commons.io.FileUtils.deleteQuietly;
+import static org.apache.commons.io.FileUtils.writeStringToFile;
+
 
 import java.io.File;
 import java.io.IOException;
@@ -78,7 +80,7 @@ public class ContractTest {
         context.setTarget(fromUrl(create("http://localhost:" + config.getHttpPort()).toURL()));
         File data = new File(rootPath);
         if (data.exists()) {
-            forceDelete(data);
+            deleteQuietly(data);
         }
         copyDirectory(TEST_DATA_DIRECTORY, data);
     }
@@ -105,6 +107,9 @@ public class ContractTest {
 
         File marysData = new File(rootPath, "mary@imagey.cloud");
 
+        File marysInvitationsIncoming = new File(new File(marysData, "invitations"), "incoming");
+        new File(marysInvitationsIncoming, "alice@imagey.cloud").mkdirs();
+        new File(marysInvitationsIncoming, "bob@imagey.cloud").mkdirs();
         File marysDevices = new File(marysData, "devices");
         File secondDevice = new File(marysDevices, "00b7d225-202c-4ab9-8efc-36e6f3afb169");
         if (!secondDevice.exists()) {
@@ -130,6 +135,40 @@ public class ContractTest {
 
     }
 
+    @State("mary has no contacts and a contact request from bill")
+    void maryHasNoContactsAndBillRequest() throws IOException {
+        File marysContacts = new File(getMarysData(), "contacts");
+        deleteQuietly(marysContacts);
+        File marysContactRequests = new File(getMarysData(), "contact-requests");
+        deleteQuietly(marysContactRequests);
+        File billReq = new File(marysContactRequests, "bill@imagey.cloud");
+        billReq.mkdirs();
+        writeStringToFile(new File(billReq, "status.txt"), "INVITATION_RECEIVED", java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @State("mary has no contacts")
+    void maryHasNoContacts() throws IOException {
+        deleteQuietly(new File(getMarysData(), "contacts"));
+        deleteQuietly(new File(getMarysData(), "contact-requests"));
+    }
+
+    @State("Mary has a chat with alice")
+    void maryHasChatWithAlice() throws IOException {
+        File marysContacts = new File(getMarysData(), "contacts");
+        deleteQuietly(marysContacts);
+        File aliceChat = new File(marysContacts, "alice@imagey.cloud");
+        aliceChat.mkdirs();
+        writeStringToFile(new File(aliceChat, "invitation-key.enc"), "dummy-encrypted-key", java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @State("Mary has a chat with bill")
+    void maryHasChatWithBill() throws IOException {
+        File marysContacts = new File(getMarysData(), "contacts");
+        deleteQuietly(marysContacts);
+        File billChat = new File(marysContacts, "bill@imagey.cloud");
+        billChat.mkdirs();
+        writeStringToFile(new File(billChat, "invitation-key.enc"), "dummy-encrypted-key", java.nio.charset.StandardCharsets.UTF_8);
+    }
     @State("marys second device unlocked")
     void marysSecondDeviceUnlocked() throws URISyntaxException, IOException {
         marysSecondDeviceRegistered();
@@ -137,13 +176,13 @@ public class ContractTest {
         File marysDocumentsForUnlock = new File(marysDataForUnlock, "documents");
         if (marysDocumentsForUnlock.exists()) {
             for (File file : marysDocumentsForUnlock.listFiles()) {
-                forceDelete(file);
+                deleteQuietly(file);
             }
         }
         File marysContactRequests = new File(marysDataForUnlock, "contact-requests");
         if (marysContactRequests.exists()) {
             for (File file : marysContactRequests.listFiles()) {
-                forceDelete(file);
+                deleteQuietly(file);
             }
         }
         File marysData = new File(rootPath, "mary@imagey.cloud");
@@ -171,15 +210,17 @@ public class ContractTest {
     void removeMarysUpload() throws URISyntaxException, IOException {
         File data = new File(rootPath);
         if (data.exists()) {
-            forceDelete(data);
+            deleteQuietly(data);
         }
         copyDirectory(TEST_DATA_DIRECTORY, data);
     }
 
     @State("Mary has declined lauras invitation")
     void maryHasDeclinedLaurasInvitation() throws URISyntaxException, IOException {
-        forceDelete(getMarysContactRequestOfLaura());
+        deleteQuietly(getMarysContactRequestOfLaura());
     }
+
+
 
     private Optional<Token> generateToken(HttpRequest request) {
         Optional<User> extractedUser = extractUser(request);

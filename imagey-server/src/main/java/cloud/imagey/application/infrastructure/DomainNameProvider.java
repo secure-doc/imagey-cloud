@@ -16,19 +16,15 @@
  */
 package cloud.imagey.application.infrastructure;
 
-import static java.util.Optional.ofNullable;
-import static java.util.function.Predicate.not;
-
-import java.util.Optional;
-
-import jakarta.enterprise.context.RequestScoped;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.ws.rs.container.ContainerRequestContext;
 
 import cloud.imagey.domain.user.DomainName;
 
-@RequestScoped
+@ApplicationScoped
 public class DomainNameProvider {
 
     @Inject
@@ -36,30 +32,44 @@ public class DomainNameProvider {
 
     @Produces
     public DomainName getDomainName() {
-        return getOriginOrReferer()
-            .or(this::getHostFallback)
-            .orElseGet(() -> new DomainName("https://secure-doc.store"));
+        return getDomainName(
+            request.getHeader("Origin"),
+            request.getHeader("Referer"),
+            request.getHeader("X-Forwarded-Host"),
+            request.getHeader("Host"),
+            request.getHeader("X-Forwarded-Proto"),
+            request.getScheme()
+        );
     }
 
-    private Optional<DomainName> getOriginOrReferer() {
-        return ofNullable(request.getHeader("Origin"))
-            .filter(not(String::isBlank))
-            .map(DomainName::new)
-            .or(() -> ofNullable(request.getHeader("Referer"))
-                .filter(not(String::isBlank))
-                .map(DomainName::new));
+    public DomainName getDomainName(ContainerRequestContext requestContext) {
+        return getDomainName(
+            requestContext.getHeaderString("Origin"),
+            requestContext.getHeaderString("Referer"),
+            requestContext.getHeaderString("X-Forwarded-Host"),
+            requestContext.getHeaderString("Host"),
+            requestContext.getHeaderString("X-Forwarded-Proto"),
+            requestContext.getUriInfo().getRequestUri().getScheme()
+        );
     }
 
-    private Optional<DomainName> getHostFallback() {
-        return ofNullable(request.getHeader("X-Forwarded-Host"))
-            .filter(not(String::isBlank))
-            .or(() -> ofNullable(request.getHeader("Host"))
-                .filter(not(String::isBlank)))
-            .map(host -> {
-                String proto = ofNullable(request.getHeader("X-Forwarded-Proto"))
-                    .filter(not(String::isBlank))
-                    .orElseGet(request::getScheme);
-                return new DomainName(proto + "://" + host);
-            });
+    public DomainName getDomainName(
+        String origin, String referer, String forwardedHost, String host, String forwardedProto, String scheme) {
+        if (origin != null && !origin.isBlank()) {
+            return new DomainName(origin);
+        }
+        if (referer != null && !referer.isBlank()) {
+            return new DomainName(referer);
+        }
+        return getHostFallback(forwardedHost, host, forwardedProto, scheme);
+    }
+
+    private DomainName getHostFallback(String forwardedHost, String host, String forwardedProto, String scheme) {
+        String h = forwardedHost != null && !forwardedHost.isBlank() ? forwardedHost : host;
+        if (h != null && !h.isBlank()) {
+            String proto = forwardedProto != null && !forwardedProto.isBlank() ? forwardedProto : scheme;
+            return new DomainName(proto + "://" + h);
+        }
+        return new DomainName("https://secure-doc.store");
     }
 }

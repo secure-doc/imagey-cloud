@@ -24,7 +24,7 @@ import java.util.List;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
-import jakarta.ws.rs.BadRequestException;
+import jakarta.validation.ValidationException;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -70,7 +70,7 @@ public class UserService {
     public AuthenticationStatus startAuthenticationProcess(User user) {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
-            throw new BadRequestException("Invalid client URL: " + domain.value());
+            throw new ValidationException("Invalid client URL: " + domain.value());
         }
 
         Token token = tokenService.generateToken(user, ONE_DAY);

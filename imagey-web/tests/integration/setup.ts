@@ -25,7 +25,7 @@ export const provider = new PactV4({
 });
 
 export async function clearLocalStorage(page: Page) {
-  await page.goto("/");
+  await page.goto("/favicon.ico");
   await page.evaluate(() => localStorage.removeItem("imagey.user"));
   await page.evaluate(() =>
     localStorage.removeItem("imagey.deviceIds[mary@imagey.cloud]"),
@@ -648,6 +648,7 @@ export async function inputMarysPassword(page: Page) {
 export async function prepareMarysContactRequests() {
   provider
     .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
     .uponReceiving("a request of mary to get contacts")
     .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
       r.headers({
@@ -658,11 +659,117 @@ export async function prepareMarysContactRequests() {
 
   return provider
     .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
     .uponReceiving("a request of mary to get contact requests")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(["laura@imagey.cloud"]));
+    .willRespondWith(200, (r) => r.jsonBody(["bill@imagey.cloud"]));
+}
+
+export async function prepareMarysEmptyContactRequests() {
+  provider
+    .addInteraction()
+    .given("mary has no contacts")
+    .uponReceiving("a request of mary to get empty contacts")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  return provider
+    .addInteraction()
+    .given("mary has no contacts")
+    .uponReceiving("a request of mary to get empty contact requests")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+}
+
+export async function prepareMarysChat(
+  contactEmail: string,
+  suffix: string = "",
+) {
+  const chat = TestData.mary.chats!.find(
+    (c) => c.contactEmail === contactEmail,
+  )!;
+  const contactName = contactEmail.split("@")[0] as keyof TestDataStructure;
+
+  let builder = provider.addInteraction();
+  if (contactEmail !== "laura@imagey.cloud") {
+    builder = builder.given(`Mary has a chat with ${contactName}`);
+  }
+
+  builder
+    .uponReceiving(
+      `a request of mary to get ${contactName}s public key${suffix}`,
+    )
+    .withRequest("GET", `/users/${contactEmail}/public-keys/0`, (r) => {
+      r.headers({ Accept: "application/json" });
+    })
+    .willRespondWith(200, (r) =>
+      r.jsonBody((TestData[contactName] as TestUser).publicMainKey!),
+    );
+
+  builder = provider.addInteraction();
+  if (contactEmail !== "laura@imagey.cloud") {
+    builder = builder.given(`Mary has a chat with ${contactName}`);
+  }
+
+  builder
+    .uponReceiving(`a request to get shared contact key${suffix}`)
+    .withRequest("GET", `/users/mary@imagey.cloud/contacts/${contactEmail}/key`)
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        invitationKey: Matchers.string(chat.encryptedSharedKey),
+      }),
+    );
+
+  builder = provider.addInteraction();
+  if (contactEmail !== "laura@imagey.cloud") {
+    builder = builder.given(`Mary has a chat with ${contactName}`);
+  }
+
+  builder
+    .uponReceiving(`a request to store the updated key${suffix}`)
+    .withRequest(
+      "PUT",
+      `/users/mary@imagey.cloud/contacts/${contactEmail}/key`,
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({ key: Matchers.like("dummy-key") });
+      },
+    )
+    .willRespondWith(204);
+
+  builder = provider.addInteraction();
+  if (contactEmail !== "laura@imagey.cloud") {
+    builder = builder.given(`Mary has a chat with ${contactName}`);
+  }
+
+  builder
+    .uponReceiving(`a request of mary to get contacts in chat${suffix}`)
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) => {
+      r.headers({ Accept: "application/json" });
+    })
+    .willRespondWith(200, (r) => r.jsonBody([contactEmail]));
+
+  builder = provider.addInteraction();
+  if (contactEmail !== "laura@imagey.cloud") {
+    builder = builder.given(`Mary has a chat with ${contactName}`);
+  }
+
+  return builder
+    .uponReceiving(`a request of mary to get contact requests in chat${suffix}`)
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) => {
+      r.headers({ Accept: "application/json" });
+    })
+    .willRespondWith(200, (r) => r.jsonBody([]));
 }

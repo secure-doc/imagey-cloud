@@ -31,7 +31,7 @@ import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 
-@WebFilter("/*")
+@WebFilter(value = "/*", asyncSupported = true)
 public class MultipartMockFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
