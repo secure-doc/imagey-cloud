@@ -8,7 +8,7 @@ COPY imagey-web/pom.xml imagey-web/
 COPY imagey-server/pom.xml imagey-server/
 
 # Download frontend dependencies to cache them
-RUN mvn dependency:go-offline -pl imagey-web -am
+RUN mvn dependency:go-offline initialize -pl imagey-web -am
 
 # Copy frontend source code and build it
 COPY imagey-web/ imagey-web/

@@ -1,8 +1,11 @@
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 
 export default function Navigation({ className }: { className?: string }) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const isSettings = location.pathname.startsWith("/settings");
+
   return (
     <nav className={className ?? ""}>
       <NavLink aria-label={t("Home")} to="/">
@@ -18,14 +21,22 @@ export default function Navigation({ className }: { className?: string }) {
         <div>{t("Chats")}</div>
       </NavLink>
       <NavLink
-        className="m l"
+        className={({ isActive }) =>
+          `m l ${isActive || isSettings ? "active" : ""}`.trim()
+        }
         aria-label={t("Settings")}
         to="/settings/profile"
       >
         <i>settings</i>
         <div>{t("Settings")}</div>
       </NavLink>
-      <NavLink className="s" aria-label={t("Settings")} to="/settings">
+      <NavLink
+        className={({ isActive }) =>
+          `s ${isActive || isSettings ? "active" : ""}`.trim()
+        }
+        aria-label={t("Settings")}
+        to="/settings"
+      >
         <i>settings</i>
         <div>{t("Settings")}</div>
       </NavLink>

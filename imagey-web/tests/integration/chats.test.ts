@@ -5,7 +5,6 @@ import {
   loginAsMary,
   prepareMarysDocuments,
   prepareMarysLogin,
-  prepareMarysContacts,
   setupMockServer,
   provider,
   TestData,
@@ -21,9 +20,7 @@ test("navigate to chats", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  await prepareMarysContactRequests();
-  const builder = await prepareMarysContacts();
-
+  const builder = await prepareMarysContactRequests();
   await builder.executeTest(async (mockServer) => {
     // When
     await setupMockServer(page, mockServer);
@@ -49,7 +46,6 @@ test("accept open invitations", async ({ page }) => {
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
   await prepareMarysContactRequests();
-  await prepareMarysContacts();
 
   provider
     .addInteraction()
@@ -121,7 +117,6 @@ test("decline open invitations", async ({ page }) => {
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
   await prepareMarysContactRequests();
-  await prepareMarysContacts();
 
   const builder = provider
     .addInteraction()

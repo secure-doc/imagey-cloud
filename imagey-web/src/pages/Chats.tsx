@@ -7,9 +7,10 @@ import { contactRepository } from "../contact/ContactRepository";
 import { Contact } from "../contact/Contact";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
+import NoContactsPanel from "../activity/NoContactsPanel";
 
 export default function Chats() {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -33,10 +34,12 @@ export default function Chats() {
   useEffect(() => {
     contactRepository
       .getContacts(user)
-      .then((contacts) => setContacts(contacts));
+      .then((contacts) => setContacts(contacts))
+      .catch((e) => console.error("Failed to fetch contacts", e));
     contactRepository
       .getContactRequests(user)
-      .then((contactRequests) => setContactRequests(contactRequests));
+      .then((contactRequests) => setContactRequests(contactRequests))
+      .catch((e) => console.error("Failed to fetch contact requests", e));
   }, [user]);
 
   const handleContactRequest = async (email: string) => {
@@ -109,7 +112,7 @@ export default function Chats() {
             ))}
         </ul>
       ) : (
-        <p>{t("No chats available")}</p>
+        <NoContactsPanel className="s12" />
       )}
 
       {isDialogOpen && (

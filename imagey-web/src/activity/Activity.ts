@@ -1,6 +1,10 @@
 import Document from "../document/Document";
 
-export type Activity = InvitationActivity | ImageActivity | UploadActivity;
+export type Activity =
+  | InvitationActivity
+  | ImageActivity
+  | UploadActivity
+  | NoContactsActivity;
 
 export interface InvitationActivity {
   id: string;
@@ -20,8 +24,14 @@ export interface UploadActivity {
   type: ActivityType.UPLOAD;
 }
 
+export interface NoContactsActivity {
+  id: string;
+  type: ActivityType.NO_CONTACTS;
+}
+
 export enum ActivityType {
   INVITATION,
   IMAGE,
   UPLOAD,
+  NO_CONTACTS,
 }
