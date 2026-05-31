@@ -10,11 +10,13 @@ interface DeviceRegistrationDialogProperties {
     privateMainKey: JsonWebKey,
     deviceKeyPair: JsonWebKeyPair,
   ) => void;
+  onWrongUser: () => void;
 }
 
 export default function DeviceRegistrationDialog({
   email,
   onKeysDecrypted,
+  onWrongUser,
 }: DeviceRegistrationDialogProperties) {
   const { t } = useTranslation();
   const [message, setMessage] = useState<string>();
@@ -53,6 +55,9 @@ export default function DeviceRegistrationDialog({
   return (
     <PasswordDialog<string>
       message={t("Select a password for this device")}
+      email={email}
+      onWrongUser={onWrongUser}
+      requireConfirmation
       validatePassword={(password) => Promise.resolve(password)}
       onPasswordValid={(password) => {
         setPassword(password);

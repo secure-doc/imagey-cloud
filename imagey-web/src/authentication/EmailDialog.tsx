@@ -53,7 +53,6 @@ export default function EmailDialog({
           <span className="error">{emailErrorMessage}</span>
         </div>
         <nav className="right-align no-space">
-          <button className="transparent link">{t("Cancel")}</button>
           <button className="transparent link" type="submit">
             {t("Confirm")}
           </button>

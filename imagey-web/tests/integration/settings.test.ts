@@ -33,7 +33,7 @@ test("navigate to devices", async ({ page }) => {
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const settingsLink = page.getByRole("link", { name: "Settings" });
     await expect(settingsLink).toBeVisible();
-    settingsLink.click();
+    await settingsLink.click();
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
     await devicesLink.click();
@@ -67,10 +67,10 @@ test("navigate to devices on mobile resolution", async ({ page }) => {
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const settingsLink = page.getByRole("link", { name: "Settings" });
     await expect(settingsLink).toBeVisible();
-    settingsLink.click();
+    await settingsLink.click();
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
-    devicesLink.click();
+    await devicesLink.click();
 
     // Then
     const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);

@@ -9,6 +9,9 @@ export const deviceRepository = {
   storeUser: (user: string) => {
     localStorage.setItem("imagey.user", user);
   },
+  removeUser: () => {
+    localStorage.removeItem("imagey.user");
+  },
   loadDeviceId: (email: string) => {
     const deviceId = localStorage.getItem("imagey.deviceIds[" + email + "]");
     return deviceId ? deviceId : undefined;

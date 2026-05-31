@@ -74,7 +74,6 @@ export const documentService = {
     privateKey: JsonWebKey,
   ): Promise<Document> => {
     try {
-      console.log("LOAD DOCUMENT METADATA:", metadata);
       const encryptedDocumentKey =
         metadata.sharedKey ??
         (await documentRepository.loadKey(user, metadata.documentId));
@@ -134,8 +133,13 @@ export const documentService = {
     privateKey: JsonWebKey,
   ): Promise<Document[]> => {
     const metadata = await documentRepository.loadDocuments(user);
+    const validMetadata = metadata.filter(
+      (meta) =>
+        meta.documentId !== "profile" &&
+        meta.documentId !== "profile-pic-doc-id",
+    );
     return Promise.all(
-      metadata.map((meta) =>
+      validMetadata.map((meta) =>
         documentService.loadDocument(user, meta, publicKey, privateKey),
       ),
     );

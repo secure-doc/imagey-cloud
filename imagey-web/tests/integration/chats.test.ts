@@ -29,7 +29,7 @@ test("navigate to chats", async ({ page }) => {
 
     const chatsLink = page.getByRole("link", { name: "Chats" }).first();
     await expect(chatsLink).toBeVisible();
-    chatsLink.click();
+    await chatsLink.click();
 
     // Then
     await expect(
@@ -89,7 +89,7 @@ test("accept open invitations", async ({ page }) => {
 
     const chatsLink = page.getByRole("link", { name: "Chats" }).first();
     await expect(chatsLink).toBeVisible();
-    chatsLink.click();
+    await chatsLink.click();
 
     // Then Invitation Visible
     const invitationPanel = page
@@ -141,7 +141,7 @@ test("decline open invitations", async ({ page }) => {
 
     const chatsLink = page.getByRole("link", { name: "Chats" }).first();
     await expect(chatsLink).toBeVisible();
-    chatsLink.click();
+    await chatsLink.click();
 
     // Then Invitation Visible
     const invitationPanel = page
