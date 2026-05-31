@@ -40,6 +40,9 @@ export async function clearLocalStorage(page: Page) {
     localStorage.removeItem("imagey.deviceIds[alice@imagey.cloud]"),
   );
   await page.evaluate(() =>
+    localStorage.removeItem("imagey.deviceIds[bill@imagey.cloud]"),
+  );
+  await page.evaluate(() =>
     localStorage.removeItem("imagey.devices[1234].key"),
   );
 }
@@ -47,6 +50,34 @@ export async function clearLocalStorage(page: Page) {
 export async function loginAsMary(page: Page) {
   await page.goto("/");
   await inputMarysPassword(page);
+}
+
+export async function loginAsJoe(page: Page) {
+  await page.goto("/");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill(TestData.joe.password);
+  const confirmButton = page.getByRole("button", {
+    name: "Confirm",
+    exact: true,
+  });
+  await expect(confirmButton).toBeVisible();
+  await confirmButton.click();
+  await expect(confirmButton).not.toBeVisible();
+}
+
+export async function loginAsBill(page: Page) {
+  await page.goto("/");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill(TestData.bill.password);
+  const confirmButton = page.getByRole("button", {
+    name: "Confirm",
+    exact: true,
+  });
+  await expect(confirmButton).toBeVisible();
+  await confirmButton.click();
+  await expect(confirmButton).not.toBeVisible();
 }
 
 export let runningPactRequests = 0;
@@ -193,6 +224,115 @@ export async function prepareMarysLogin(page: Page) {
   await setupMarysDevice(page);
 }
 
+export async function prepareBillsLogin(page: Page) {
+  provider
+    .addInteraction()
+    .uponReceiving("a request of bill to get public key")
+    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
+  provider
+    .addInteraction()
+    .uponReceiving("a request of bill to get public device key")
+    .withRequest(
+      "GET",
+      `/users/bill@imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/public-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.bill.devices[0].publicDeviceKey),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of bill to get encrypted private main key for device",
+    )
+    .withRequest(
+      "GET",
+      `/users/bill@imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/private-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        kid: "0",
+        encryptingDeviceId: TestData.bill.devices[0].deviceId,
+        key: TestData.bill.devices[0].encryptedPrivateMainKey,
+      }),
+    );
+  await setupBillsDevice(page);
+}
+
+export async function prepareJoesLogin(page: Page) {
+  provider
+    .addInteraction()
+    .given("joe is logged in")
+    .uponReceiving("a request of authenticated joe to get public key")
+    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.joe.publicMainKey));
+  provider
+    .addInteraction()
+    .uponReceiving("a request of joe to get public device key")
+    .withRequest(
+      "GET",
+      `/users/joe@imagey.cloud/devices/${TestData.joe.devices[0].deviceId}/public-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.joe.devices[0].publicDeviceKey),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of joe to get encrypted private main key for device",
+    )
+    .withRequest(
+      "GET",
+      `/users/joe@imagey.cloud/devices/${TestData.joe.devices[0].deviceId}/private-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        kid: "0",
+        encryptingDeviceId: TestData.joe.devices[0].deviceId,
+        key: TestData.joe.devices[0].encryptedPrivateMainKey,
+      }),
+    );
+
+  await page.goto("/");
+  await page.evaluate(
+    ({ deviceId, privateDeviceKey }) => {
+      localStorage.setItem("imagey.user", "joe@imagey.cloud");
+      localStorage.setItem("imagey.deviceIds[joe@imagey.cloud]", deviceId);
+      localStorage.setItem(`imagey.devices[${deviceId}].key`, privateDeviceKey);
+    },
+    {
+      deviceId: TestData.joe.devices[0].deviceId,
+      privateDeviceKey: TestData.joe.devices[0].encryptedPrivateDeviceKey,
+    },
+  );
+}
+
 export async function prepareMarysDocuments() {
   provider
     .addInteraction()
@@ -206,6 +346,8 @@ export async function prepareMarysDocuments() {
       r.jsonBody([
         {
           documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+          smallImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+          previewImageId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
           encryptedData:
             "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
           sharedKey: fs.readFileSync(
@@ -215,12 +357,28 @@ export async function prepareMarysDocuments() {
         },
         {
           documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+          smallImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+          previewImageId: "f232a44d-6396-42bb-9196-f0013d46ded5",
           encryptedData:
             "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
           sharedKey: fs.readFileSync(
             "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/shared-keys/mary@imagey.cloud/encrypted-shared.key",
             "utf8",
           ),
+        },
+        {
+          documentId: "profile",
+          encryptedData:
+            "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
+          sharedKey:
+            "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+        },
+        {
+          documentId: "profile-pic-doc-id",
+          encryptedData:
+            "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
+          sharedKey:
+            "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
         },
       ]),
     );
@@ -262,6 +420,44 @@ export async function prepareMarysDocuments() {
       r.binaryFile(
         "application/octet-stream",
         "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/contents/f232a44d-6396-42bb-9196-f0013d46ded5",
+      ),
+    );
+}
+
+export async function prepareMarysProfileContents() {
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get profile content")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/profile/contents/profile",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "../imagey-server/src/test/resources/data/mary@imagey.cloud/documents/profile/contents/profile",
+      ),
+    );
+
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get profile picture content")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "../imagey-server/src/test/resources/data/mary@imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
       ),
     );
 }
@@ -421,11 +617,11 @@ export async function setupBillsDevice(page: Page) {
     localStorage.setItem("i18nextLng", "en");
     localStorage.setItem("imagey.user", "bill@imagey.cloud");
   });
-  await page.evaluate(
-    (deviceId) =>
-      localStorage.setItem("imagey.deviceIds[bill@imagey.cloud]", deviceId),
-    TestData.bill.devices[0].deviceId,
-  );
+  await page.evaluate((deviceId) => {
+    localStorage.setItem("imagey.devices", JSON.stringify([deviceId]));
+    localStorage.setItem("imagey.deviceId", deviceId);
+    localStorage.setItem("imagey.deviceIds[bill@imagey.cloud]", deviceId);
+  }, TestData.bill.devices[0].deviceId);
   await page.evaluate(
     ({ deviceId, key }) =>
       localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
@@ -437,12 +633,15 @@ export async function setupBillsDevice(page: Page) {
 }
 
 export async function inputMarysPassword(page: Page) {
-  const passwordInput = page.getByLabel("password");
+  const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
-  passwordInput.fill(TestData.mary.password);
-  const confirmButton = page.getByText("Confirm");
+  await passwordInput.fill(TestData.mary.password);
+  const confirmButton = page.getByRole("button", {
+    name: "Confirm",
+    exact: true,
+  });
   await expect(confirmButton).toBeVisible();
-  confirmButton.click();
+  await confirmButton.click();
   await expect(confirmButton).not.toBeVisible();
 }
 

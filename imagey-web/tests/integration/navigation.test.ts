@@ -52,10 +52,9 @@ test("navigate to chats", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    await page.waitForTimeout(10_000);
     const chatsLink = page.getByRole("link", { name: "Chats" });
     await expect(chatsLink).toBeVisible();
-    chatsLink.click();
+    await chatsLink.click();
 
     // Then
     await expect(page.getByText("No contacts yet?")).toBeVisible();
@@ -84,7 +83,7 @@ test("open and close navigation drawer on mobile resolution", async ({
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
-    menuButton.click();
+    await menuButton.click();
     const chatsLink = page.getByRole("link", { name: "Chats" });
     await expect(chatsLink).toHaveCount(2);
 
@@ -135,10 +134,10 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const menuButton = page.locator("button[aria-label='main-menu']");
     await expect(menuButton).toBeVisible();
-    menuButton.click();
+    await menuButton.click();
     const chatsLink = page.getByRole("link", { name: "Chats" });
     await expect(chatsLink).toHaveCount(2);
-    chatsLink.first().click();
+    await chatsLink.first().click();
 
     // Then
     await expect(page.getByText("No contacts yet?")).toBeVisible();
@@ -192,15 +191,15 @@ test("navigate to devices and back on mobile resolution", async ({ page }) => {
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     const settingsLink = page.getByRole("link", { name: "Settings" });
     await expect(settingsLink).toBeVisible();
-    settingsLink.click();
+    await settingsLink.click();
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
-    devicesLink.click();
+    await devicesLink.click();
     const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);
     await expect(deviceEntry).toBeVisible();
     const backButton = page.getByRole("button", { name: "back-button" });
     await expect(backButton).toBeVisible();
-    backButton.click();
+    await backButton.click();
 
     // Then
     await expect(backButton).not.toBeVisible();

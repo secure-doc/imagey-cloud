@@ -91,24 +91,18 @@ public class ContractTest {
         context.verifyInteraction();
     }
 
-
-
-    void initializeDefaultState() throws URISyntaxException, IOException {
+    @State("User is unauthenticated")
+    void unauthenticated() throws URISyntaxException, IOException {
         user = null;
         tokenState = NO_TOKEN;
     }
 
-
-
     @State("marys second device registered")
     void marysSecondDeviceRegistered() throws URISyntaxException, IOException {
-        initializeDefaultState();
         tokenState = VALID_TOKEN;
         user = new User(new Email("mary@imagey.cloud"));
 
         File marysData = new File(rootPath, "mary@imagey.cloud");
-
-
 
         File marysDevices = new File(marysData, "devices");
         File secondDevice = new File(marysDevices, "00b7d225-202c-4ab9-8efc-36e6f3afb169");
