@@ -18,6 +18,7 @@ export default function RegistrationDialog({
   return (
     <PasswordDialog<string>
       message={t("Select a password for this device")}
+      requireConfirmation
       validatePassword={(password) => Promise.resolve(password)}
       onPasswordValid={(password) => {
         authenticationService

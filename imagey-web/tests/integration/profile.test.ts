@@ -1,6 +1,7 @@
 import { test, expect } from "./fixtures";
 import { MatchersV3 } from "@pact-foundation/pact";
-import path from "path";
+import * as fs from "fs";
+import * as path from "path";
 import {
   clearLocalStorage,
   loginAsMary,
@@ -134,6 +135,195 @@ test("edit and save profile", async ({ page }) => {
 
     // Then
     await expect(page.getByText("Mary Doe")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("load existing profile with picture", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
+  await prepareMarysDocuments();
+
+  const profileMockPath = path.join(
+    process.cwd(),
+    "tests",
+    "integration",
+    "profile_mock.json",
+  );
+  const profileMock = JSON.parse(fs.readFileSync(profileMockPath, "utf8"));
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get her profile")
+    .withRequest("GET", "/users/mary@imagey.cloud/profile", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(profileMock));
+
+  const profilePictureKeyInteraction = provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get her profile picture key")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "text/plain",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "text/plain",
+        "./tests/images/encrypted/profile-pic-doc-id/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+      ),
+    );
+
+  const profilePictureInteraction = provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get her profile picture")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "./tests/images/encrypted/profile-pic-doc-id/contents/profile-pic-content-id",
+      ),
+    );
+
+  const profileContentPath = path.join(
+    process.cwd(),
+    "tests",
+    "images",
+    "encrypted",
+    "profile",
+    "mary@imagey.cloud",
+    "profile-content",
+  );
+  fs.mkdirSync(path.dirname(profileContentPath), { recursive: true });
+  fs.writeFileSync(
+    profileContentPath,
+    Buffer.from(profileMock.encryptedData, "base64"),
+  );
+
+  const profileContentInteraction = provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get her profile content")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/profile/contents/profile",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "./tests/images/encrypted/profile/mary@imagey.cloud/profile-content",
+      ),
+    );
+
+  // When
+  await profilePictureInteraction.executeTest(async (mockServer) => {
+    // Use the mock server URLs but override the page routes
+    await setupMockServer(page, mockServer);
+
+    // Explicitly override the default mocks from setupMockServer for /profile and document contents
+    await page.route("**/users/mary*imagey.cloud/profile", async (route) => {
+      if (route.request().method() === "GET") {
+        const response = await route.fetch({
+          url: mockServer.url + "/users/mary@imagey.cloud/profile",
+          headers: route.request().headers(),
+        });
+        await route.fulfill({ response });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await page.route(
+      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary*imagey.cloud",
+      async (route) => {
+        if (route.request().method() === "GET") {
+          const response = await route.fetch({
+            url:
+              mockServer.url +
+              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary@imagey.cloud",
+            headers: route.request().headers(),
+          });
+          await route.fulfill({ response });
+        } else {
+          await route.continue();
+        }
+      },
+    );
+
+    await page.route(
+      "**/users/mary*imagey.cloud/documents/profile/contents/profile",
+      async (route) => {
+        if (route.request().method() === "GET") {
+          const response = await route.fetch({
+            url:
+              mockServer.url +
+              "/users/mary@imagey.cloud/documents/profile/contents/profile",
+            headers: route.request().headers(),
+          });
+          await route.fulfill({ response });
+        } else {
+          await route.continue();
+        }
+      },
+    );
+
+    await page.route(
+      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+      async (route) => {
+        if (route.request().method() === "GET") {
+          const response = await route.fetch({
+            url:
+              mockServer.url +
+              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+            headers: route.request().headers(),
+          });
+          await route.fulfill({ response });
+        } else {
+          await route.continue();
+        }
+      },
+    );
+
+    await loginAsMary(page);
+
+    // Go to settings
+    const settingsLink = page.getByRole("link", { name: "Settings" });
+    await expect(settingsLink).toBeVisible();
+    await settingsLink.click();
+
+    // Go to profile
+    const profileLink = page
+      .getByRole("heading", { name: "Profile", exact: true })
+      .first();
+    await expect(profileLink).toBeVisible();
+    await profileLink.click();
+
+    // Then: wait for profile data to appear
+    const nameInput = page.getByLabel("Name");
+    await expect(nameInput).toHaveValue("Mary Doe");
+
+    // Verify the profile picture is loaded (vitalykobzun-frau-7385461.jpg)
+    // The profile picture panel should contain an image element
+    const avatarImage = page.locator("article img").first();
+    await expect(avatarImage).toBeVisible();
+
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

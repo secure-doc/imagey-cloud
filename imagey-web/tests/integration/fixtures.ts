@@ -1,5 +1,5 @@
 import { test as base } from "@playwright/test";
-import fs from "fs";
+import * as fs from "fs";
 
 export const test = base.extend({
   page: async ({ page }, use) => {

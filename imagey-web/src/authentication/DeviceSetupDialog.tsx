@@ -11,12 +11,14 @@ interface DeviceSetupDialogProperties {
     privateMainKey: JsonWebKey,
     privateDeviceKey: JsonWebKey,
   ) => void;
+  onWrongUser: () => void;
 }
 
 export default function DeviceSetupDialog({
   email,
   deviceId,
   onPrivateKeysDecrypted,
+  onWrongUser,
 }: DeviceSetupDialogProperties) {
   const { t } = useTranslation();
   const encryptedPrivateDeviceKey = deviceRepository.loadKey(deviceId);
@@ -33,6 +35,8 @@ export default function DeviceSetupDialog({
       privateDeviceKey: JsonWebKey;
     }>
       message={t("Input the password for this device")}
+      email={email}
+      onWrongUser={onWrongUser}
       validatePassword={(password) =>
         cryptoService
           .decryptPrivatePasswordKey(encryptedPrivateDeviceKey, password)
