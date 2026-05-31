@@ -57,6 +57,11 @@ export default function AuthenticationComponent({
     }
   }, [email]);
 
+  const handleWrongUser = () => {
+    deviceRepository.removeUser();
+    setEmail(undefined);
+  };
+
   if (!email) {
     return <EmailDialog onEmailSelected={(email) => setEmail(email)} />;
   }
@@ -76,6 +81,7 @@ export default function AuthenticationComponent({
           <DeviceSetupDialog
             email={email}
             deviceId={deviceId}
+            onWrongUser={handleWrongUser}
             onPrivateKeysDecrypted={(privateMainKey, privateDeviceKey) =>
               authenticationRepository
                 .loadPublicDeviceKey(email, deviceId)
@@ -98,6 +104,7 @@ export default function AuthenticationComponent({
         return (
           <DeviceRegistrationDialog
             email={email}
+            onWrongUser={handleWrongUser}
             onKeysDecrypted={(privateMainKey, deviceKeyPair) =>
               onKeysDecrypted(email, {
                 mainKeyPair: {

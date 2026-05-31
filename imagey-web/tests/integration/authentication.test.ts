@@ -32,7 +32,7 @@ test("new user enters wrong email", async ({ page }) => {
   await expect(
     page.getByText("Please enter a valid email address."),
   ).toBeVisible();
-  await page.getByText("Confirm").click();
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
   // Then
   await expect(
@@ -69,7 +69,7 @@ test("new user visits page", async ({ page }) => {
       await expect(emailInput).toBeVisible();
 
       await emailInput.fill("joe@imagey.cloud");
-      await page.getByText("Confirm").click();
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       // Then
       await expect(page.getByText(/verification link/)).toBeVisible();
@@ -102,7 +102,7 @@ test("existing user visits page with new device", async ({ page }) => {
       await expect(emailInput).toBeVisible();
 
       await emailInput.fill("mary@imagey.cloud");
-      await page.getByText("Confirm").click();
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       // Then
       await expect(page.getByText(/login link/)).toBeVisible();
@@ -152,7 +152,7 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
       await expect(emailInput).toBeVisible();
 
       await emailInput.fill("mary@imagey.cloud");
-      await page.getByText("Confirm").click();
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       // Then
       await expect(page.getByText(/login link/)).toBeVisible();
@@ -240,7 +240,7 @@ test("new user clicks registration link", async ({ page }) => {
       await setupMockServer(page, mockServer);
       await page.goto("/?email=joe@imagey.cloud");
 
-      const passwordInput = page.getByLabel("password");
+      const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill(TestData.mary.password);
 
@@ -254,7 +254,8 @@ test("new user clicks registration link", async ({ page }) => {
         "**/users/joe@imagey.cloud/contact-requests",
       );
 
-      await page.getByText("Confirm").click();
+      await page.getByLabel("Confirm Password").fill(TestData.mary.password);
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       await Promise.all([
         contactsResponse,
@@ -334,10 +335,11 @@ test("mary logges in with new device", async ({ page }) => {
       await setupMockServer(page, mockServer);
       await page.goto("/?email=mary@imagey.cloud");
 
-      const passwordInput = page.getByLabel("password");
+      const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill(TestData.mary.password);
-      await page.getByText("Confirm").click();
+      await page.getByLabel("Confirm Password").fill(TestData.mary.password);
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
       await expect(
         page.getByText(
           /Device registered, you can now activate it with another device/,
@@ -393,10 +395,10 @@ test("visit page on existing device", async ({ page }) => {
     await setupMarysDevice(page);
     await page.goto("/");
 
-    const passwordInput = page.getByLabel("password");
+    const passwordInput = page.getByLabel("Password", { exact: true });
     await expect(passwordInput).toBeVisible();
     await passwordInput.fill("MarysPassword123");
-    await page.getByText("Confirm").click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
     // Then
     await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
@@ -422,10 +424,10 @@ test("visit page on existing device with wrong password", async ({ page }) => {
       await setupMarysDevice(page);
       await page.goto("/");
 
-      const passwordInput = page.getByLabel("password");
+      const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill("wrongPassword");
-      await page.getByText("Confirm").click();
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       // Then
       await expect(page.getByText(/Wrong password/)).toBeVisible();
@@ -448,7 +450,7 @@ test("login with missing email", async ({ page }) => {
     await expect(emailInput).toBeVisible();
 
     await emailInput.fill("mary@imagey.cloud");
-    await page.getByText("Confirm").click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
     await inputMarysPassword(page);
 
@@ -489,6 +491,43 @@ test("login with lost private key", async ({ page }) => {
       await expect(
         page.getByText("Device key missing, please reregister device"),
       ).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
+test("switch user using wrong user button", async ({ page }) => {
+  // Given
+  await provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get public key for switch user")
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey))
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      // Pass email as query param, this will open DeviceRegistrationDialog (since deviceId is missing)
+      await page.goto("/?email=mary@imagey.cloud");
+
+      // Verify we are on DeviceRegistrationDialog (Password input is visible)
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+
+      // Click "Not mary@imagey.cloud?"
+      const wrongUserButton = page.getByText("Not mary@imagey.cloud?");
+      await expect(wrongUserButton).toBeVisible();
+      await wrongUserButton.click();
+
+      // Then: We should be back at EmailDialog
+      const emailInput = page.getByPlaceholder("email@imagey.cloud");
+      await expect(emailInput).toBeVisible();
+      // Verify local storage is cleared
+      const storedUser = await page.evaluate(() =>
+        localStorage.getItem("imagey.user"),
+      );
+      expect(storedUser).toBeNull();
+
       await expect.poll(() => runningPactRequests).toBe(0);
     });
 });

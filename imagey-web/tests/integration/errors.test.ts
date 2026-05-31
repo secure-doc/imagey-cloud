@@ -1,4 +1,4 @@
-import fs from "fs";
+import * as fs from "fs";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
@@ -134,11 +134,14 @@ test("private key loading error", async ({ page }) => {
   await setupBillsDevice(page);
   await page.goto("/?email=bill@imagey.cloud");
 
-  const passwordInput = page.getByLabel("password");
+  const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(TestData.bill.password);
 
-  const confirmButton = page.getByText("Confirm");
+  const confirmButton = page.getByRole("button", {
+    name: "Confirm",
+    exact: true,
+  });
   await confirmButton.click();
   await expect(page.getByText("Wrong password")).toBeVisible();
 });
@@ -345,4 +348,25 @@ test("load existing profile error handling", async ({ page }) => {
 
   // The page should still render the empty profile form, displaying the fallback user email
   await expect(page.getByText("mary@imagey.cloud")).toBeVisible();
+});
+
+test("public key loading error 500", async ({ page }) => {
+  // Given
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await setupMarysDevice(page);
+  // When
+  await page.goto("/?email=mary@imagey.cloud");
+
+  // Then
+  // It should show Unknown Authentication Error
+  await expect(page.getByText(/Uknown Authentication Error/i)).toBeVisible();
 });

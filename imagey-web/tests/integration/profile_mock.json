@@ -1,0 +1,5 @@
+{
+  "documentId": "profile",
+  "encryptedData": "Ym3xE4ysyX9PxpQKT4gNdlOsbZheFLPFRlmsMWoXnj6bTAkTsd82dqQa2M8QCpt7Xknw9tQUbmrdFJSkxNZJ7avLfanyoAwCO6qmNGnxH2ekZkDOpSQ3dufglUdIy+pjS6nwecwCTSluY3MNcg5fkUwxWUCe+hT6KA==",
+  "sharedKey": "{\"encryptingPublicKey\":{\"key_ops\":[],\"ext\":true,\"kty\":\"EC\",\"x\":\"PtRqB8qgZXel-idjTSt61phRyiB1tdAHhI5NEK7a43o\",\"y\":\"Q2dUmie9EvB2YVD8BD-NkwHoteoE5Wy6lI-sZRWKUHQ\",\"crv\":\"P-256\"},\"key\":\"NbtabbedoWT/RBZ1NEtEBfbfDh49BzkMn3vWhaDAI+5KRXTfkk4RueOU+FCEWMrmY5zSMfJN3oX0mw/uRc6owObEGEuNfnchrdgPMUlgAWQ95kgphkpDmDkbd/daeJQGi8GUNI9z6BOpvhaTnHqSsqBxyles2k1YGRpbaZ4yBpZfmNrOvanaX3wvFdTcxvtEkJreCTc2\"}"
+}

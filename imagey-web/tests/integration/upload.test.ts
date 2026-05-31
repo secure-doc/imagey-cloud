@@ -1,5 +1,5 @@
 import { test, expect } from "./fixtures";
-import path from "path";
+import * as path from "path";
 import {
   clearLocalStorage,
   loginAsMary,

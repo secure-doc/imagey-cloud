@@ -437,12 +437,15 @@ export async function setupBillsDevice(page: Page) {
 }
 
 export async function inputMarysPassword(page: Page) {
-  const passwordInput = page.getByLabel("password");
+  const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
-  passwordInput.fill(TestData.mary.password);
-  const confirmButton = page.getByText("Confirm");
+  await passwordInput.fill(TestData.mary.password);
+  const confirmButton = page.getByRole("button", {
+    name: "Confirm",
+    exact: true,
+  });
   await expect(confirmButton).toBeVisible();
-  confirmButton.click();
+  await confirmButton.click();
   await expect(confirmButton).not.toBeVisible();
 }
 

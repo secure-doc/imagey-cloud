@@ -86,10 +86,11 @@ test("mary registers new device", async ({ page }) => {
       await setupMockServer(page, mockServer);
       await page.goto("/?email=mary@imagey.cloud");
 
-      const passwordInput = page.getByLabel("password");
+      const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill(TestData.mary.password);
-      page.getByText("Confirm").click();
+      await passwordInput.fill(TestData.mary.password);
+      await page.getByLabel("Confirm Password").fill(TestData.mary.password);
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
       await expect(
         page.getByText(
           /Device registered, you can now activate it with another device/,
@@ -275,11 +276,16 @@ test("mary logs into new device", async ({ page }) => {
       await setupMockServer(page, mockServer);
       await page.goto("/?email=mary@imagey.cloud");
 
-      const passwordInput = page.getByLabel("password");
+      const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
-      passwordInput.fill(TestData.mary.password);
-      page.getByText("Confirm").click();
-      await expect(page.getByText("Confirm")).not.toBeVisible();
+      await passwordInput.fill(TestData.mary.password);
+      // Wait, is "mary logs into new device" using DeviceSetupDialog (no confirmation) or Registration?
+      // It is login into a new device (DeviceSetupDialog), so no confirm password field.
+      // Wait, the previous test ("mary registers new device") is Registration.
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+      await expect(
+        page.getByRole("button", { name: "Confirm", exact: true }),
+      ).not.toBeVisible();
 
       // Then
       await expect(page.getByText("Contact Request")).toBeVisible();
