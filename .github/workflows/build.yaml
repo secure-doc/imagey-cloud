@@ -55,6 +55,15 @@ jobs:
       run: mvn -B clean install
     - name: Bundle
       run: mvn -B -f imagey-server/pom.xml meecrowave:bundle
+    - name: Upload bundle
+      run: |
+        # 1. Den HMAC-SHA256-Hash über die ZIP-Datei berechnen
+        DEPLOYMENT_SECRET="${{ secrets.DEPLOYMENT_SECRET }}"
+        SIGNATURE=$(openssl dgst -sha256 -hmac "$DEPLOYMENT_SECRET" -hex target/mein-app-package.zip | awk '{print $2}')
+        curl -X POST \
+          -F "file=@imagey-server/target/imagey-server-meecrowave-distribution.zip \
+          -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+          https://secure-doc.store/deployments
     - name: Copy bundle
       uses: appleboy/scp-action@v0.1.7
       with:
