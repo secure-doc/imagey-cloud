@@ -3,8 +3,10 @@
   "name": "Imagey - Your image vault",
   "short_name": "Imagey",
   "description": "Store and share your images and documents safely.",
-  "start_url": "https://imagey.cloud",
-  "display": "fullscreen",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
   "icons": [
     {
       "src": "imagey192.png",
@@ -14,7 +16,8 @@
     {
       "src": "imagey512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     },
     {
       "src": "imagey.svg",
@@ -22,6 +25,21 @@
       "sizes": "any"
     }
   ],
+  "share_target": {
+    "action": "/upload",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "images",
+          "accept": ["image/*", "video/*"]
+        }
+      ]
+    }
+  },
   "shortcuts": [
     {
       "name": "Images",
@@ -35,7 +53,8 @@
         {
           "src": "imagey512.png",
           "type": "image/png",
-          "sizes": "512x512"
+          "sizes": "512x512",
+          "purpose": "any maskable"
         },
         {
           "src": "imagey.svg",
