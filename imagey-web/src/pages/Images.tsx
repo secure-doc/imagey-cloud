@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import ImageComponent from "../components/ImageComponent";
 import UploadPanel from "../activity/UploadPanel";
+import { shareTargetService } from "../activity/ShareTargetService";
 
 export default function Images() {
   const { t } = useTranslation();
@@ -39,6 +40,60 @@ export default function Images() {
         .then((documents) => setDocuments(documents));
     }
   }, [publicMainKey, privateMainKey, user]);
+
+  useEffect(() => {
+    if (!user || !publicMainKey || !privateMainKey) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("shared") === "true") {
+      shareTargetService
+        .getSharedFiles()
+        .then(async (files) => {
+          if (files.length > 0) {
+            for (const file of files) {
+              const metadata = await documentService.storeDocument(
+                user,
+                file,
+                publicMainKey,
+                privateMainKey,
+              );
+              const doc = await documentService.loadDocument(
+                user,
+                metadata,
+                publicMainKey,
+                privateMainKey,
+              );
+              setDocuments((previousDocuments) =>
+                previousDocuments ? [...previousDocuments, doc] : [doc],
+              );
+            }
+            await shareTargetService.clearSharedFiles();
+            window.history.replaceState(
+              {},
+              window.document.title,
+              window.location.pathname,
+            );
+          } else {
+            window.history.replaceState(
+              {},
+              window.document.title,
+              window.location.pathname,
+            );
+          }
+        })
+        .catch((e) => {
+          /* istanbul ignore next */
+          console.error("Error processing shared files", e);
+          /* istanbul ignore next */
+          window.history.replaceState(
+            {},
+            window.document.title,
+            window.location.pathname,
+          );
+        });
+    }
+  }, [user, publicMainKey, privateMainKey]);
+
   return (
     <main>
       <div className="column scroll">
@@ -47,11 +102,10 @@ export default function Images() {
         ) : documents.length === 0 ? (
           <UploadPanel
             onUploadComplete={(document) =>
-              setDocuments((previousDocuments) =>
-                previousDocuments
-                  ? [...previousDocuments, document]
-                  : [document],
-              )
+              setDocuments((previousDocuments) => [
+                ...(previousDocuments || []),
+                document,
+              ])
             }
           />
         ) : (

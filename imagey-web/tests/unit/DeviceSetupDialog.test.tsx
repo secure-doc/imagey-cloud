@@ -73,8 +73,6 @@ describe("DeviceSetupDialog", () => {
     );
 
     expect(screen.getByTestId("password-dialog")).toBeInTheDocument();
-    expect(
-      screen.getByText("Input the password for this device"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Unlock this device")).toBeInTheDocument();
   });
 });
