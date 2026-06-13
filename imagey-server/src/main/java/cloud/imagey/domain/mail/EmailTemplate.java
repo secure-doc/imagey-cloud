@@ -27,6 +27,6 @@ public record EmailTemplate(Email sender, EmailSubject subject, EmailBody body) 
     }
 
     public EmailTemplate formatted(Object... values) {
-        return new EmailTemplate(sender, subject, body.formatted(values));
+        return new EmailTemplate(sender, subject.formatted(values), body.formatted(values));
     }
 }

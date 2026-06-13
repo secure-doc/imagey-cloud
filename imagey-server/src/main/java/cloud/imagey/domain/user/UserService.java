@@ -41,17 +41,6 @@ import cloud.imagey.domain.token.TokenService;
 @ApplicationScoped
 public class UserService {
 
-    private static final EmailTemplate REGISTRATION_MAIL = new EmailTemplate(
-        new Email("verification@imagey.cloud"),
-        new EmailSubject("Email Verification"),
-        new EmailBody("""
-            Please verify your email address to register to Imagey by clicking the following link: <a href=\"%s\">Register</a>
-        """));
-    private static final EmailTemplate LOGIN_MAIL = new EmailTemplate(
-        new Email("login@imagey.cloud"),
-        new EmailSubject("Sign in via email"),
-        new EmailBody("Please click the link to sign in to Imagey: <a href=\"%s\">Sign in</a>"));
-
     @Inject
     private TokenService tokenService;
     @Inject
@@ -65,6 +54,18 @@ public class UserService {
     @Inject
     @ConfigProperty(name = "secure-doc.urls")
     private List<DomainName> allowedUrls;
+    @Inject
+    @ConfigProperty(name = "mail.login.subject")
+    private EmailSubject loginSubject;
+    @Inject
+    @ConfigProperty(name = "mail.login.body")
+    private EmailBody loginBody;
+    @Inject
+    @ConfigProperty(name = "mail.registration.subject")
+    private EmailSubject registrationSubject;
+    @Inject
+    @ConfigProperty(name = "mail.registration.body")
+    private EmailBody registrationBody;
 
     public AuthenticationStatus startAuthenticationProcess(User user) {
         DomainName domain = currentDomain.get();
@@ -74,10 +75,20 @@ public class UserService {
 
         Token token = tokenService.generateToken(user, ONE_DAY);
         if (userRepository.exists(user)) {
-            mailService.send(user.email(), LOGIN_MAIL.formatted(domain.value() + "/authentications/" + token.token()));
+            String link = domain.value() + "/authentications/" + token.token();
+            mailService.send(user.email(), new EmailTemplate(
+                new Email("login@" + domain.getHost()),
+                loginSubject,
+                loginBody
+            ).formatted(domain.getAppName(), link));
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
-            mailService.send(user.email(), REGISTRATION_MAIL.formatted(domain.value() + "/registrations/" + token.token()));
+            String link = domain.value() + "/registrations/" + token.token();
+            mailService.send(user.email(), new EmailTemplate(
+                new Email("verification@" + domain.getHost()),
+                registrationSubject,
+                registrationBody
+            ).formatted(domain.getAppName(), link));
             return AuthenticationStatus.REGISTRATION_STARTED;
         }
     }

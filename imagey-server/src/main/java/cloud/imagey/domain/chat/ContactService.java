@@ -51,13 +51,6 @@ public class ContactService {
 
     private static final Logger LOG = LogManager.getLogger(ContactService.class);
 
-    private static final EmailTemplate CONTACT_MAIL = new EmailTemplate(
-        new Email("invitation@imagey.cloud"),
-        new EmailSubject("Invitation to Imagey"),
-        new EmailBody("""
-            You are invited to Imagey by %s: To accept the invitation, click <a href=\"%s\">here</a>
-        """));
-
     @Inject
     private TokenService tokenService;
     @Inject
@@ -71,6 +64,12 @@ public class ContactService {
     @Inject
     @ConfigProperty(name = "secure-doc.urls")
     private List<DomainName> allowedUrls;
+    @Inject
+    @ConfigProperty(name = "mail.invitation.subject")
+    private EmailSubject invitationSubject;
+    @Inject
+    @ConfigProperty(name = "mail.invitation.body")
+    private EmailBody invitationBody;
 
     public boolean invite(User sender, User recipient) throws IOException {
         DomainName domain = currentDomain.get();
@@ -93,11 +92,12 @@ public class ContactService {
         } else {
             contactRepository.persist(sender, recipient, ContactStatus.INVITATION_SENT);
             Token token = tokenService.generateToken(recipient, ONE_WEEK);
-            mailService.send(
-                recipient.email(),
-                CONTACT_MAIL.formatted(
-                sender.email().address(),
-                domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.email().address()));
+            String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.email().address();
+            mailService.send(recipient.email(), new EmailTemplate(
+                new Email("invitation@" + domain.getHost()),
+                invitationSubject,
+                invitationBody
+            ).formatted(domain.getAppName(), sender.email().address(), link));
             return true;
         }
     }

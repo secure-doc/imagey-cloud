@@ -18,4 +18,8 @@ package cloud.imagey.domain.mail;
 
 public record EmailSubject(String subject) {
 
+    public EmailSubject formatted(Object... values) {
+        return new EmailSubject(subject.formatted(values));
+    }
+
 }

@@ -17,9 +17,38 @@
 package cloud.imagey.domain.user;
 
 public record DomainName(String value) {
+    private static final int HTTPS_LENGTH = 8;
+    private static final int HTTP_LENGTH = 7;
+
     public DomainName {
         if (value != null && value.endsWith("/")) {
             value = value.substring(0, value.length() - 1);
         }
+    }
+
+
+
+    public String getAppName() {
+        if (value != null && value.contains("secure-doc")) {
+            return "Secure Doc";
+        }
+        return "Imagey";
+    }
+
+    public String getHost() {
+        if (value == null) {
+            return "imagey.cloud";
+        }
+        String host = value;
+        if (host.startsWith("https://")) {
+            host = host.substring(HTTPS_LENGTH);
+        }
+        if (host.startsWith("http://")) {
+            host = host.substring(HTTP_LENGTH);
+        }
+        if (host.contains(":")) {
+            host = host.substring(0, host.indexOf(":"));
+        }
+        return host;
     }
 }
