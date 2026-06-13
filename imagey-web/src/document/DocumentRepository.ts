@@ -77,25 +77,6 @@ export const documentRepository = {
     );
     return resolve(response, () => response.text());
   },
-  storeKey: async (email: string, documentId: string, key: string) => {
-    const response = await fetch(
-      "/users/" +
-        email +
-        "/documents/" +
-        documentId +
-        "/encrypted-shared-keys/" +
-        email,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "text/plain",
-        },
-        credentials: "same-origin",
-        body: key,
-      },
-    );
-    return resolve(response, () => Promise.resolve());
-  },
   loadContent: async (
     email: string,
     documentId: string,
