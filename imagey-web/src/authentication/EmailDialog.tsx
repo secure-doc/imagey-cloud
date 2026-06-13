@@ -5,6 +5,8 @@ interface EmailDialogProperties {
   onEmailSelected: (email: string) => void;
 }
 
+import { getAppName } from "../utils/appName";
+
 export default function EmailDialog({
   onEmailSelected,
 }: EmailDialogProperties) {
@@ -41,7 +43,9 @@ export default function EmailDialog({
     <dialog className="surface-bright" open>
       <h5 className="primary-text">{t("Email")}</h5>
       <form onSubmit={handleSubmit}>
-        {t("Bitte geben Sie ihre Email ein, um Imagey nutzen zu können.")}
+        {t("Please enter your email to use {{appName}}.", {
+          appName: getAppName(),
+        })}
         <div className={`field border ${emailError ? "invalid" : ""}`}>
           <input
             id="email"

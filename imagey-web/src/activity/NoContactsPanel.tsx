@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
+import { getAppName } from "../utils/appName";
 import Panel from "../components/Panel";
 
 export default function NoContactsPanel({ className }: { className?: string }) {
@@ -41,7 +42,10 @@ export default function NoContactsPanel({ className }: { className?: string }) {
         }
       >
         <p className="center-align">
-          {t("Invite someone to Imagey to start sharing images and more!")}
+          {t(
+            "Invite someone to {{appName}} to start sharing images and more!",
+            { appName: getAppName() },
+          )}
         </p>
       </Panel>
 

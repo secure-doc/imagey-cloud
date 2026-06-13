@@ -370,3 +370,16 @@ test("public key loading error 500", async ({ page }) => {
   // It should show Unknown Authentication Error
   await expect(page.getByText(/Uknown Authentication Error/i)).toBeVisible();
 });
+
+test("manifest loading error fallback", async ({ page }) => {
+  // Mock failure
+  await page.route("/manifest.json", async (route) => {
+    await route.abort("failed");
+  });
+
+  // Go to root
+  await page.goto("/");
+
+  // Verify that the fallback title ("Documents") is used
+  await expect(page).toHaveTitle("Documents");
+});
