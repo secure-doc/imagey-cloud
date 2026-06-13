@@ -27,6 +27,7 @@ import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.copyURLToFile;
 import static org.apache.commons.io.FileUtils.forceDelete;
+import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
 import java.io.IOException;
@@ -105,6 +106,9 @@ public class ContractTest {
 
         File marysData = new File(rootPath, "mary@imagey.cloud");
 
+        File marysInvitationsIncoming = new File(new File(marysData, "invitations"), "incoming");
+        new File(marysInvitationsIncoming, "alice@imagey.cloud").mkdirs();
+        new File(marysInvitationsIncoming, "bob@imagey.cloud").mkdirs();
         File marysDevices = new File(marysData, "devices");
         File secondDevice = new File(marysDevices, "00b7d225-202c-4ab9-8efc-36e6f3afb169");
         if (!secondDevice.exists()) {
@@ -119,6 +123,27 @@ public class ContractTest {
 
     }
 
+    @State("alice is registered")
+    void aliceIsRegistered() throws URISyntaxException, IOException {
+        unauthenticated();
+        File aliceData = new File(rootPath, "alice@imagey.cloud");
+        aliceData.mkdirs();
+        File publicKeys = new File(aliceData, "public-keys");
+        publicKeys.mkdirs();
+        File publicKey = new File(publicKeys, "0.json");
+        copyURLToFile(ContractTest.class.getResource("/second-device-public-key.json"), publicKey);
+    }
+
+    @State("bob is registered")
+    void bobIsRegistered() throws URISyntaxException, IOException {
+        unauthenticated();
+        File bobData = new File(rootPath, "bob@imagey.cloud");
+        bobData.mkdirs();
+        File publicKeys = new File(bobData, "public-keys");
+        publicKeys.mkdirs();
+        File publicKey = new File(publicKeys, "0.json");
+        copyURLToFile(ContractTest.class.getResource("/second-device-public-key.json"), publicKey);
+    }
     @State("marys second device unlocked")
     void marysSecondDeviceUnlocked() throws URISyntaxException, IOException {
         marysSecondDeviceRegistered();
@@ -162,6 +187,38 @@ public class ContractTest {
     @State("Mary has declined lauras invitation")
     void maryHasDeclinedLaurasInvitation() throws URISyntaxException, IOException {
         forceDelete(getMarysContactRequestOfLaura());
+    }
+
+    @State("Mary is chatting with Laura")
+    void maryIsChattingWithLaura() throws URISyntaxException, IOException {
+        maryHasDeclinedLaurasInvitation();
+        File lauraContacts = new File(getMarysData(), "contacts/laura@imagey.cloud");
+        lauraContacts.mkdirs();
+        File keyFile = new File(lauraContacts, "invitation-key.enc");
+        write(keyFile, "mock-encrypted-key", java.nio.charset.Charset.forName("UTF-8"));
+
+        File lauraData = new File(rootPath, "laura@imagey.cloud");
+        lauraData.mkdirs();
+        File lauraPublicKeys = new File(lauraData, "public-keys");
+        lauraPublicKeys.mkdirs();
+        File lauraPublicKey = new File(lauraPublicKeys, "0.json");
+        write(lauraPublicKey, "{}", java.nio.charset.Charset.forName("UTF-8"));
+
+        File maryMessages = new File(getMarysData(), "messages/laura@imagey.cloud");
+        maryMessages.mkdirs();
+        File msg123 = new File(maryMessages, "msg-123.msg");
+        write(msg123, "mock-encrypted-message", java.nio.charset.Charset.forName("UTF-8"));
+    }
+
+    @State("There are no messages")
+    void thereAreNoMessages() throws URISyntaxException, IOException {
+        maryIsChattingWithLaura();
+        File maryMessages = new File(getMarysData(), "messages/laura@imagey.cloud");
+        if (maryMessages.exists()) {
+            for (File file : maryMessages.listFiles()) {
+                forceDelete(file);
+            }
+        }
     }
 
     private Optional<Token> generateToken(HttpRequest request) {

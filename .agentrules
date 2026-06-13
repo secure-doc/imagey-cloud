@@ -42,3 +42,4 @@ If you (the AI agent) or a human developer need to verify complex features or E2
 
 3. **Java Imports:**
    Do not use fully qualified class names in Java code (e.g., `java.util.List<String>`). Always import the classes at the top of the file and use their simple names (e.g., `List<String>`).
+- To test 500 errors please don't use pact, but the errors.test.ts with playwright `page.route`.

@@ -1,5 +1,4 @@
 {
-  "{{user}} whants to connect with you.": "{{user}} whants to connect with you.",
   "Add Contact": "Add Contact",
   "Add Email": "Add Email",
   "Authentication in progress": "Authentication in progress",
@@ -50,5 +49,6 @@
   "Uknown Authentication Error": "Uknown Authentication Error",
   "Unlock this device": "Unlock this device",
   "unverified": "unverified",
-  "Wrong password": "Wrong password"
+  "Wrong password": "Wrong password",
+  "{{user}} whants to connect with you.": "{{user}} whants to connect with you."
 }

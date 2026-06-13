@@ -29,6 +29,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -42,6 +43,7 @@ import jakarta.ws.rs.core.UriInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.chat.ContactKeys;
 import cloud.imagey.domain.chat.ContactRepository;
 import cloud.imagey.domain.chat.ContactService;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
@@ -99,9 +101,27 @@ public class ContactResource {
     @RolesAllowed("owner")
     @Path("{email}/contacts/{contact}")
     @Consumes(APPLICATION_JSON)
-    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, EncryptedSharedKey key)
+    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, ContactKeys keys)
             throws IOException {
 
-        contactService.acceptInvitation(user, contact, key);
+        contactService.acceptInvitation(user, contact, keys);
+    }
+
+    @GET
+    @RolesAllowed("owner")
+    @Path("{email}/contacts/{contact}/key")
+    @Produces(APPLICATION_JSON)
+    public ContactKeys getContactKeys(@PathParam("email") User user, @PathParam("contact") User contact) {
+        return contactRepository.getContactKeys(user, contact).orElseThrow(NotFoundException::new);
+    }
+
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{email}/contacts/{contact}/key")
+    @Produces(APPLICATION_JSON)
+    public void updateContactKey(@PathParam("email") User user, @PathParam("contact") User contact, EncryptedSharedKey key)
+            throws IOException {
+
+        contactRepository.updateContactKey(user, contact, key);
     }
 }

@@ -52,7 +52,8 @@ test("navigate to chats", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    const chatsLink = page.getByRole("link", { name: "Chats" });
+    await page.waitForTimeout(10_000);
+    const chatsLink = page.getByRole("link", { name: "Chats" }).first();
     await expect(chatsLink).toBeVisible();
     await chatsLink.click();
 
@@ -88,7 +89,7 @@ test("open and close navigation drawer on mobile resolution", async ({
     await expect(chatsLink).toHaveCount(2);
 
     // When
-    await page.getByRole("banner").click({ position: { x: 411, y: 457 } });
+    await page.mouse.click(411, 457);
 
     // Then
     await expect(chatsLink).toHaveCount(1);

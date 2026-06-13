@@ -31,7 +31,7 @@ public abstract class AbstractRecordMessageBodyWriter {
             return r;
         }
         RecordComponent[] recordComponents = r.getClass().getRecordComponents();
-        if (recordComponents.length == 1) {
+        if (recordComponents.length == 1 && !r.getClass().getSimpleName().equals("EncryptedSharedKey")) {
             return read((Record)r, recordComponents[0]);
         }
         Map<String, Object> values = new HashMap<>();

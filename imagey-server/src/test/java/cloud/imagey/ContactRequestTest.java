@@ -145,7 +145,7 @@ public class ContactRequestTest {
         // mary cannot accept the request
         Response contactRequestNotAccepted = marysClient.path("contacts/laura@imagey.cloud").put(json("""
                 {
-                    "key": "public-shared-key"
+                    "userKey": {"key": "public-shared-key"}, "contactKey": {"key": "contact-shared-key"}
                 }
             """));
         assertThat(contactRequestNotAccepted.getStatus()).isEqualTo(CONFLICT.getStatusCode());
@@ -154,7 +154,7 @@ public class ContactRequestTest {
         // laura accepts the contact request
         Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
                 {
-                    "key": "public-shared-key"
+                    "key": "public-shared-key", "invitationKey": "contact-shared-key"
                 }
             """));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
@@ -170,6 +170,15 @@ public class ContactRequestTest {
         assertThat(laurasContacts).contains("mary@imagey.cloud");
         marysPublicKeyResponse = marysPublicKey.request().header("Origin", "https://secure-doc.store").cookie(laurasCookie).get();
         assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(OK.getStatusCode());
+
+        // Verify getContactKeys endpoint
+        Response keysResponse = laurasClient.path("contacts/mary@imagey.cloud/key").get();
+        assertThat(keysResponse.getStatus()).isEqualTo(OK.getStatusCode());
+
+        // Verify updateContactKey endpoint
+        Response updateKeyResponse = laurasClient.path("contacts/mary@imagey.cloud/key").put(json(of("key", "new-public-shared-key")));
+        assertThat(updateKeyResponse.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+
         File marysContactRequestsFolder = getMarysContactRequests();
         assertThat(marysContactRequestsFolder).isDirectory();
         assertThat(marysContactRequestsFolder.listFiles()).isEmpty();
@@ -235,7 +244,7 @@ public class ContactRequestTest {
         // laura accepts the contact request
         Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
                 {
-                    "key": "public-shared-key"
+                    "key": "public-shared-key", "invitationKey": "contact-shared-key"
                 }
             """));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);

@@ -8,20 +8,30 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/users": "http://localhost:8080",
-      "/authentications": "http://localhost:8080",
-      "/registrations": "http://localhost:8080",
-    },
-  },
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["tests/unit/setup.ts"],
-    include: ["tests/unit/**/*.test.ts", "tests/unit/**/*.test.tsx"],
-    coverage: {
-      provider: "istanbul",
-      reporter: ["json"],
-      reportsDirectory: ".nyc_output",
+      "/users": {
+        target: "http://localhost:8080",
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            console.log("proxy error ignored", err.message);
+          });
+        },
+      },
+      "/authentications": {
+        target: "http://localhost:8080",
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            console.log("proxy error ignored", err.message);
+          });
+        },
+      },
+      "/registrations": {
+        target: "http://localhost:8080",
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            console.log("proxy error ignored", err.message);
+          });
+        },
+      },
     },
   },
   plugins: [

@@ -33,7 +33,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-@AnalyzeClasses(packages = "cloud.imagey")
+@AnalyzeClasses(packages = "cloud.imagey", importOptions = com.tngtech.archunit.core.importer.ImportOption.DoNotIncludeTests.class)
 public class ArchitectureTest {
     @ArchTest
     private static ArchRule noCycles = slices().matching("cloud.imagey.(*)..").should().beFreeOfCycles();
@@ -50,4 +50,8 @@ public class ArchitectureTest {
         .should()
         .beAnnotatedWith(RolesAllowed.class)
         .orShould().beAnnotatedWith(PermitAll.class);
+    @ArchTest
+    private static ArchRule noJakartaRsInDomain = com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses()
+        .that().resideInAPackage("cloud.imagey.domain..")
+        .should().dependOnClassesThat().resideInAPackage("jakarta.ws.rs..");
 }

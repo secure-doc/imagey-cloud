@@ -12,13 +12,13 @@ export default function AcceptInvitationButton({
   contact: string;
   onAccepted: () => void;
 }) {
-  const privateMainKey = useAuthentication().keyPairs.mainKeyPair.privateKey;
+  const mainKeyPair = useAuthentication().keyPairs.mainKeyPair;
   return (
     <button
-      className={className ?? "" + " circle transparent"}
+      className={`${className} circle transparent`}
       onClick={() => {
         contactRepository
-          .acceptContactRequest(user, contact, privateMainKey)
+          .acceptContactRequest(user, contact, mainKeyPair)
           .then(() => onAccepted());
       }}
     >
