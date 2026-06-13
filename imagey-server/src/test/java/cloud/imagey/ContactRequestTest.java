@@ -16,6 +16,7 @@
  */
 package cloud.imagey;
 
+import static java.lang.Integer.MAX_VALUE;
 import static java.util.Map.of;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
@@ -93,12 +94,17 @@ public class ContactRequestTest {
                 .target("http://localhost:" + config.getHttpPort())
                 .path("users").path(mary.email().address()).path(path)
                 .request()
-                .cookie(new Cookie("token", tokenService.generateToken(mary, Integer.MAX_VALUE).token()));
-        laurasCookie = new Cookie("token", tokenService.generateToken(laura, Integer.MAX_VALUE).token());
+                .header("Origin", "https://secure-doc.store")
+                .cookie(new Cookie.Builder("token")
+                    .value(tokenService.generateToken(mary, MAX_VALUE).token())
+                    .build());
+        laurasCookie = new Cookie.Builder("token")
+                .value(tokenService.generateToken(laura, MAX_VALUE).token())
+                .build();
         laurasClient = path -> newClient()
                 .target("http://localhost:" + config.getHttpPort())
                 .path("users").path(laura.email().address()).path(path)
-                .request()
+                .request().header("Origin", "https://secure-doc.store")
                 .cookie(laurasCookie);
     }
 
@@ -118,7 +124,7 @@ public class ContactRequestTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/public-keys/0");
         Response marysPublicKeyResponse = marysPublicKey
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .cookie(laurasCookie)
             .get();
         assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
@@ -131,7 +137,7 @@ public class ContactRequestTest {
         // laura can see the contact request
         laurasContactRequests = laurasClient.path("contact-requests").get(new GenericType<List<String>>() { });
         assertThat(laurasContactRequests).containsExactly("mary@imagey.cloud");
-        marysPublicKeyResponse = marysPublicKey.request().cookie(laurasCookie).get();
+        marysPublicKeyResponse = marysPublicKey.request().header("Origin", "https://secure-doc.store").cookie(laurasCookie).get();
         assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(OK.getStatusCode());
         // mary cannot see her own contact requests
         marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
@@ -162,7 +168,7 @@ public class ContactRequestTest {
         assertThat(marysContacts).contains("laura@imagey.cloud");
         assertThat(laurasContactRequests).isEmpty();
         assertThat(laurasContacts).contains("mary@imagey.cloud");
-        marysPublicKeyResponse = marysPublicKey.request().cookie(laurasCookie).get();
+        marysPublicKeyResponse = marysPublicKey.request().header("Origin", "https://secure-doc.store").cookie(laurasCookie).get();
         assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(OK.getStatusCode());
         File marysContactRequestsFolder = getMarysContactRequests();
         assertThat(marysContactRequestsFolder).isDirectory();

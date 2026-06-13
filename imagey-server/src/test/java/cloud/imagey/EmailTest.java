@@ -59,6 +59,7 @@ public class EmailTest {
                 .target("http://localhost:" + config.getHttpPort())
                 .path(verificationPath)
                 .request()
+                .header("Origin", "https://secure-doc.store")
                 .post(json(""));
 
             // Then

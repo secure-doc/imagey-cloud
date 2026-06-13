@@ -70,7 +70,7 @@ public class LoginTest {
         newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/verifications")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .post(json(""));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
@@ -80,7 +80,7 @@ public class LoginTest {
         String link = extractLink(receivedMessages[0]);
         Response response = newClient()
             .target(link)
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -101,7 +101,7 @@ public class LoginTest {
         newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/joe@imagey.cloud/verifications")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .post(json(""));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
@@ -112,7 +112,7 @@ public class LoginTest {
         // When
         Response response = newClient()
             .target(loginLink)
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -128,7 +128,7 @@ public class LoginTest {
         // When
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort() + "/authentications/" + invalidToken)
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -155,6 +155,6 @@ public class LoginTest {
         int startIndex = loginMail.indexOf("href=\"") + "href=\"".length();
         int endIndex = loginMail.indexOf('"', startIndex);
         return loginMail.substring(startIndex, endIndex)
-            .replace("https://imagey.cloud", "http://localhost:" + config.getHttpPort());
+            .replace("https://secure-doc.store", "http://localhost:" + config.getHttpPort());
     }
 }

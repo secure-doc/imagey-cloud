@@ -58,6 +58,7 @@ public class AcmeChallengeTest {
             .path(".well-known/acme-challenge")
             .path("test-challenge")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .get(String.class);
 
         // Then
@@ -76,6 +77,7 @@ public class AcmeChallengeTest {
             .path(".well-known/acme-challenge")
             .path("test/challenge")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -94,6 +96,7 @@ public class AcmeChallengeTest {
             .path(".well-known/acme-challenge")
             .path("../challenge")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -112,6 +115,7 @@ public class AcmeChallengeTest {
             .path(".well-known/acme-challenge")
             .path("test-challenge")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
