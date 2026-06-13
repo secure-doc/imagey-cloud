@@ -69,7 +69,7 @@ public class UserService {
     public AuthenticationStatus startAuthenticationProcess(User user) {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
-            throw new BadRequestException("Invalid client URL");
+            throw new BadRequestException("Invalid client URL: " + domain.value());
         }
 
         Token token = tokenService.generateToken(user, ONE_DAY);
