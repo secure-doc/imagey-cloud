@@ -79,6 +79,8 @@ public class RolesFilter implements ContainerRequestFilter {
         if (decodedToken.isEmpty()) {
             DefaultSecurityContext context = "anonymous"::toString;
             requestContext.setSecurityContext(context);
+            Supplier<Principal> principalSupplier = requestContext.getSecurityContext()::getUserPrincipal;
+            request.setAttribute(Principal.class.getName() + ".supplier", principalSupplier);
             return;
         }
         User user = extractUser(requestContext.getUriInfo());
