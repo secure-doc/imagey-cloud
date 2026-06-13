@@ -114,3 +114,100 @@ test("decline open invitations", async ({ page }) => {
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
+
+test("accept open invitations fails", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+  await prepareMarysContactRequests();
+
+  const builder = provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get lauras public key (fail case)")
+    .withRequest("GET", "/users/laura@imagey.cloud/public-keys/0", (r) => {
+      r.headers({
+        Accept: "application/json",
+      });
+    })
+    .willRespondWith(200, (r) => r.jsonBody(TestData.laura.publicMainKey));
+
+  await builder.executeTest(async (mockServer) => {
+    // When
+    await setupMockServer(page, mockServer);
+
+    // Override the PUT request with Playwright's page.route to return 500
+    // so we don't pollute the Pact contract!
+    await page.route(
+      "**/users/mary@imagey.cloud/contacts/laura@imagey.cloud",
+      async (route) => {
+        if (route.request().method() === "PUT") {
+          await route.fulfill({ status: 500 });
+        } else {
+          await route.fallback();
+        }
+      },
+    );
+
+    await loginAsMary(page);
+
+    const invitationPanel = page
+      .getByRole("heading", {
+        name: "Contact Request",
+      })
+      .locator("..");
+    await expect(invitationPanel).toBeVisible();
+
+    // Act: Accept Alice
+    const acceptAliceBtn = invitationPanel.getByRole("button", {
+      name: "check",
+    });
+    await acceptAliceBtn.click();
+
+    // Panel should still be visible because it threw an error
+    await expect(invitationPanel).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("decline open invitations fails", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+  const builder = await prepareMarysContactRequests();
+
+  await builder.executeTest(async (mockServer) => {
+    // When
+    await setupMockServer(page, mockServer);
+
+    // Override the DELETE request with Playwright's page.route to return 500
+    await page.route(
+      "**/users/mary@imagey.cloud/contact-requests/laura@imagey.cloud",
+      async (route) => {
+        if (route.request().method() === "DELETE") {
+          await route.fulfill({ status: 500 });
+        } else {
+          await route.fallback();
+        }
+      },
+    );
+
+    await loginAsMary(page);
+
+    const invitationPanel = page
+      .getByRole("heading", {
+        name: "Contact Request",
+      })
+      .locator("..");
+    await expect(invitationPanel).toBeVisible();
+
+    // Act: Decline Alice
+    const declineAliceBtn = invitationPanel.getByRole("button", {
+      name: "close",
+    });
+    await declineAliceBtn.click();
+
+    // Panel should still be visible because it threw an error
+    await expect(invitationPanel).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
