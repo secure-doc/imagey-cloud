@@ -88,6 +88,7 @@ public class ContractTest {
     void contracts(PactVerificationContext context, HttpRequest request) {
         Optional<Token> token = generateToken(request);
         token.ifPresent(t -> request.addHeader("Cookie", "token=" + t.token()));
+        request.setHeader("Origin", "https://secure-doc.store");
         context.verifyInteraction();
     }
 

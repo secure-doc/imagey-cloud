@@ -17,21 +17,39 @@
 package cloud.imagey.application.infrastructure;
 
 import java.io.IOException;
+import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
-import jakarta.ws.rs.ext.Provider;
 
-@Provider
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import cloud.imagey.domain.user.DomainName;
+
 @ApplicationScoped
+@jakarta.ws.rs.ext.Provider
 public class CorsFilter implements ContainerResponseFilter {
+
+    @Inject
+    private Provider<DomainName> currentDomain;
+
+    @Inject
+    @ConfigProperty(name = "secure-doc.urls")
+    private List<DomainName> allowedUrls;
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
 
-        responseContext.getHeaders().add("Access-Control-Allow-Origin", "*");
+        DomainName domain = currentDomain.get();
+        if (!allowedUrls.contains(domain)) {
+            return;
+        }
+        responseContext.getHeaders().add("Access-Control-Allow-Origin", domain.value());
+
         responseContext.getHeaders().add("Access-Control-Allow-Credentials", "true");
         responseContext.getHeaders().add("Access-Control-Allow-Headers", "origin, content-type, accept, authorization");
         responseContext.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");

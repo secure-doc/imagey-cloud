@@ -87,7 +87,7 @@ public class ProfileTest {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/profile")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .put(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
@@ -124,14 +124,14 @@ public class ProfileTest {
         newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/profile")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .put(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/profile")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get();
 
@@ -162,7 +162,7 @@ public class ProfileTest {
         newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/profile")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .put(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
@@ -170,7 +170,7 @@ public class ProfileTest {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/profile")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .put(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 

@@ -80,7 +80,7 @@ public class RegistrationTest {
         newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/joe@imagey.cloud/verifications")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .post(json(""));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
@@ -90,7 +90,7 @@ public class RegistrationTest {
         String link = extractLink(receivedMessages[0]);
         Response response = newClient()
             .target(link)
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -115,7 +115,7 @@ public class RegistrationTest {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .post(json("""
                 {
@@ -138,21 +138,21 @@ public class RegistrationTest {
         Map<String, Object> publicMainKey = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/joe@imagey.cloud/public-keys/0")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(new GenericType<Map<String, Object>>() { });
         assertThat(publicMainKey).contains(entry("main", "public"), entry("key", ONE));
         Map<String, Object> publicDeviceKey = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/joe@imagey.cloud/devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/public-keys/0")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(new GenericType<Map<String, Object>>() { });
         assertThat(publicDeviceKey).contains(entry("device", "public"), entry("key", valueOf(2)));
         String encryptedPrivateKey = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/joe@imagey.cloud/devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/private-keys/0")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .accept(APPLICATION_JSON_TYPE)
             .get(String.class);
@@ -169,7 +169,7 @@ public class RegistrationTest {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users")
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .post(json("""
                 {
@@ -201,7 +201,7 @@ public class RegistrationTest {
         // When
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort() + "/registrations/" + invalidToken)
-            .request()
+            .request().header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -228,6 +228,6 @@ public class RegistrationTest {
         int startIndex = registrationMail.indexOf("href=\"") + "href=\"".length();
         int endIndex = registrationMail.indexOf('"', startIndex);
         return registrationMail.substring(startIndex, endIndex)
-            .replace("https://imagey.cloud", "http://localhost:" + config.getHttpPort());
+            .replace("https://secure-doc.store", "http://localhost:" + config.getHttpPort());
     }
 }

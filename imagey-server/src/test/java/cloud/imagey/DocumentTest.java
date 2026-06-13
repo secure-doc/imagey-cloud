@@ -26,6 +26,7 @@ import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM_TYPE;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
 import static jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -86,6 +87,7 @@ public class DocumentTest {
             .path(documentId)
             .path("meta-data")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .put(json("""
                 {
@@ -101,6 +103,7 @@ public class DocumentTest {
                 .path("contents")
                 .path(documentId)
                 .request()
+                .header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
                 .put(entity(documentContent, APPLICATION_OCTET_STREAM_TYPE));
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
@@ -110,7 +113,7 @@ public class DocumentTest {
                 .path(documentId)
                 .path("contents")
                 .path(smallImageId)
-                .request()
+                .request().header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
                 .put(entity(smallContent, APPLICATION_OCTET_STREAM_TYPE));
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
@@ -121,6 +124,7 @@ public class DocumentTest {
                 .path("contents")
                 .path(previewImageId)
                 .request()
+                .header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
                 .put(entity(previewContent, APPLICATION_OCTET_STREAM_TYPE));
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
@@ -130,6 +134,7 @@ public class DocumentTest {
                 .path(documentId)
                 .path("encrypted-shared-keys/mary@imagey.cloud")
                 .request()
+                .header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
                 .put(entity(sharedKey, TEXT_PLAIN_TYPE));
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
@@ -139,6 +144,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(new GenericType<List<Map<String, Object>>>() { });
         Map<String, Object> metadata = newClient()
@@ -147,6 +153,7 @@ public class DocumentTest {
             .path(documentId)
             .path("meta-data")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(new GenericType<Map<String, Object>>() { });
         assertThat(metadatas).contains(metadata);
@@ -161,6 +168,7 @@ public class DocumentTest {
             .path("contents")
             .path(documentId)
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(byte[].class);
         byte[] actualSmallImageContent = newClient()
@@ -170,6 +178,7 @@ public class DocumentTest {
             .path("contents")
             .path(smallImageId)
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(byte[].class);
         byte[] actualPreviewImageContent = newClient()
@@ -179,6 +188,7 @@ public class DocumentTest {
             .path("contents")
             .path(previewImageId)
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get(byte[].class);
         assertThat(actualDocumentContent).isEqualTo(documentContent);
@@ -217,6 +227,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
@@ -252,6 +263,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
@@ -266,6 +278,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/contents/non-existent-content")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get();
         assertThat(response.getStatus()).isEqualTo(404);
@@ -279,6 +292,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/encrypted-shared-keys/unknown@imagey.cloud")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .get();
         assertThat(response.getStatus()).isEqualTo(404);
@@ -293,7 +307,7 @@ public class DocumentTest {
         // Delete documents home directory to trigger creation
         File marysDocuments = new File(new File(rootPath, "mary@imagey.cloud"), "documents");
         if (marysDocuments.exists()) {
-            org.apache.commons.io.FileUtils.deleteDirectory(marysDocuments);
+            deleteDirectory(marysDocuments);
         }
 
         List<Attachment> attachments = List.of(
@@ -311,6 +325,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
             .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 

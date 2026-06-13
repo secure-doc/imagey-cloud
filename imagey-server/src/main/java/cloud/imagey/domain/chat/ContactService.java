@@ -22,12 +22,16 @@ import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
 import static cloud.imagey.domain.token.TokenService.ONE_WEEK;
 
 import java.io.IOException;
+import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
+import jakarta.ws.rs.BadRequestException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
@@ -37,6 +41,7 @@ import cloud.imagey.domain.mail.EmailTemplate;
 import cloud.imagey.domain.mail.MailService;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.user.DomainName;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserRepository;
 import cloud.imagey.infrastructure.ResourceConflictException;
@@ -61,8 +66,18 @@ public class ContactService {
     private UserRepository userRepository;
     @Inject
     private ContactRepository contactRepository;
+    @Inject
+    private Provider<DomainName> currentDomain;
+    @Inject
+    @ConfigProperty(name = "secure-doc.urls")
+    private List<DomainName> allowedUrls;
 
     public boolean invite(User sender, User recipient) throws IOException {
+        DomainName domain = currentDomain.get();
+        if (!allowedUrls.contains(domain)) {
+            throw new BadRequestException("Invalid client URL");
+        }
+
         if (userRepository.exists(recipient)) {
             ContactStatus currentStatus = contactRepository.getContactStatus(sender, recipient).orElse(null);
             if (currentStatus == DENIAL_RECEIVED) {
@@ -82,7 +97,7 @@ public class ContactService {
                 recipient.email(),
                 CONTACT_MAIL.formatted(
                 sender.email().address(),
-                "https://imagey.cloud/invitations/" + token.token() + "?invited-by=" + sender.email().address()));
+                domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.email().address()));
             return true;
         }
     }

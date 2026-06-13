@@ -76,7 +76,9 @@ public class InvitationTest {
             forceDelete(data);
         }
         copyDirectory(TEST_DATA_DIRECTORY, data);
-        marysToken = new Cookie("token", tokenService.generateToken(new User(new Email("mary@imagey.cloud")), ONE_HOUR).token());
+        marysToken = new Cookie.Builder("token")
+            .value(tokenService.generateToken(new User(new Email("mary@imagey.cloud")), ONE_HOUR).token())
+            .build();
     }
 
     @Test
@@ -87,6 +89,7 @@ public class InvitationTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/contact-requests")
             .request()
+            .header("Origin", "https://secure-doc.store")
             .cookie(marysToken)
             .post(json("""
                 {
@@ -102,6 +105,7 @@ public class InvitationTest {
         Response response = newClient()
             .target(link)
             .request()
+            .header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -130,6 +134,7 @@ public class InvitationTest {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort() + "/invitations/" + invalidToken)
             .request()
+            .header("Origin", "https://secure-doc.store")
             .get();
 
         // Then
@@ -142,6 +147,6 @@ public class InvitationTest {
         int startIndex = registrationMail.indexOf("href=\"") + "href=\"".length();
         int endIndex = registrationMail.indexOf('"', startIndex);
         return registrationMail.substring(startIndex, endIndex)
-            .replace("https://imagey.cloud", "http://localhost:" + config.getHttpPort());
+            .replace("https://secure-doc.store", "http://localhost:" + config.getHttpPort());
     }
 }

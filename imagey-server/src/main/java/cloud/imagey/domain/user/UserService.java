@@ -19,9 +19,14 @@ package cloud.imagey.domain.user;
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 
 import java.io.IOException;
+import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
+import jakarta.ws.rs.BadRequestException;
+
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.mail.Email;
@@ -55,14 +60,24 @@ public class UserService {
     private UserRepository userRepository;
     @Inject
     private DeviceRepository deviceRepository;
+    @Inject
+    private Provider<DomainName> currentDomain;
+    @Inject
+    @ConfigProperty(name = "secure-doc.urls")
+    private List<DomainName> allowedUrls;
 
     public AuthenticationStatus startAuthenticationProcess(User user) {
+        DomainName domain = currentDomain.get();
+        if (!allowedUrls.contains(domain)) {
+            throw new BadRequestException("Invalid client URL");
+        }
+
         Token token = tokenService.generateToken(user, ONE_DAY);
         if (userRepository.exists(user)) {
-            mailService.send(user.email(), LOGIN_MAIL.formatted("https://imagey.cloud/authentications/" + token.token()));
+            mailService.send(user.email(), LOGIN_MAIL.formatted(domain.value() + "/authentications/" + token.token()));
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
-            mailService.send(user.email(), REGISTRATION_MAIL.formatted("https://imagey.cloud/registrations/" + token.token()));
+            mailService.send(user.email(), REGISTRATION_MAIL.formatted(domain.value() + "/registrations/" + token.token()));
             return AuthenticationStatus.REGISTRATION_STARTED;
         }
     }
