@@ -56,6 +56,71 @@ export const authenticationService = {
         ? Promise.resolve(RegistrationResult.AuthenticationStarted)
         : Promise.reject();
   },
+  requestChallenge: async (
+    email: string,
+    deviceId: string,
+  ): Promise<{ nonce: string; ephemeralPublicKey: JsonWebKey }> => {
+    const response = await fetch(
+      "/users/" + email + "/devices/" + deviceId + "/challenges",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+      },
+    );
+    if (response.ok) {
+      return response.json();
+    }
+    return Promise.reject("Failed to request challenge");
+  },
+  authenticateWithChallenge: async (
+    email: string,
+    deviceId: string,
+    password: string,
+  ): Promise<{ privateMainKey: JsonWebKey; privateDeviceKey: JsonWebKey }> => {
+    const challenge = await authenticationService.requestChallenge(
+      email,
+      deviceId,
+    );
+    const serverPublicKey = challenge.ephemeralPublicKey;
+
+    const privateDeviceKey = await deviceService.unlockLocalDeviceKey(
+      deviceId,
+      password,
+    );
+
+    const signature = await cryptoService.encryptChallengeNonce(
+      challenge.nonce,
+      serverPublicKey,
+      privateDeviceKey,
+    );
+
+    const response = await fetch(
+      "/users/" + email + "/devices/" + deviceId + "/authentications",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ signature }),
+        credentials: "same-origin",
+      },
+    );
+
+    if (!response.ok) {
+      return Promise.reject("Authentication failed");
+    }
+
+    const privateMainKey = await authenticationService.loadPrivateMainKey(
+      email,
+      deviceId,
+      privateDeviceKey,
+    );
+
+    return { privateMainKey, privateDeviceKey };
+  },
   loadPrivateMainKey: async (
     email: string,
     deviceId: string,

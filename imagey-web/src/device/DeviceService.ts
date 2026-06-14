@@ -51,6 +51,16 @@ export const deviceService = {
       encryptedPrivateMainKey,
     );
   },
+  unlockLocalDeviceKey: async (deviceId: string, devicePassword: string) => {
+    const encryptedPrivateDeviceKey = deviceRepository.loadKey(deviceId);
+    if (!encryptedPrivateDeviceKey) {
+      return Promise.reject("Private Key missing");
+    }
+    return cryptoService.decryptPrivatePasswordKey(
+      encryptedPrivateDeviceKey,
+      devicePassword,
+    );
+  },
   unlockDevice: async (email: string, devicePassword: string) => {
     const deviceId = deviceRepository.loadDeviceId(email);
     if (!deviceId) {

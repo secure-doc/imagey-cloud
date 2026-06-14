@@ -110,6 +110,17 @@ public class ContractTest {
         if (!secondDevice.exists()) {
             secondDevice.mkdirs();
         }
+        File firstDevice = new File(marysDevices, "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c");
+        if (!firstDevice.exists()) {
+            firstDevice.mkdirs();
+        }
+        File firstPublicKeyDir = new File(firstDevice, "public-keys");
+        if (!firstPublicKeyDir.exists()) {
+            firstPublicKeyDir.mkdirs();
+        }
+        File firstPublicKey = new File(firstPublicKeyDir, "0.json");
+        copyURLToFile(ContractTest.class.getResource(
+            "/data/mary@imagey.cloud/devices/1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c/public-keys/0.json"), firstPublicKey);
         File secondPublicKeyDir = new File(secondDevice, "public-keys");
         if (!secondPublicKeyDir.exists()) {
             secondPublicKeyDir.mkdirs();
@@ -126,6 +137,12 @@ public class ContractTest {
         File marysDocumentsForUnlock = new File(marysDataForUnlock, "documents");
         if (marysDocumentsForUnlock.exists()) {
             for (File file : marysDocumentsForUnlock.listFiles()) {
+                forceDelete(file);
+            }
+        }
+        File marysContactRequests = new File(marysDataForUnlock, "contact-requests");
+        if (marysContactRequests.exists()) {
+            for (File file : marysContactRequests.listFiles()) {
                 forceDelete(file);
             }
         }
