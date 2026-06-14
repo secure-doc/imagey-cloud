@@ -110,6 +110,16 @@ public class ContractTest {
         if (!secondDevice.exists()) {
             secondDevice.mkdirs();
         }
+        File firstDevice = new File(marysDevices, "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c");
+        if (!firstDevice.exists()) {
+            firstDevice.mkdirs();
+        }
+        File firstPublicKeyDir = new File(firstDevice, "public-keys");
+        if (!firstPublicKeyDir.exists()) {
+            firstPublicKeyDir.mkdirs();
+        }
+        File firstPublicKey = new File(firstPublicKeyDir, "0.json");
+        copyURLToFile(ContractTest.class.getResource("/first-device-public-key.json"), firstPublicKey);
         File secondPublicKeyDir = new File(secondDevice, "public-keys");
         if (!secondPublicKeyDir.exists()) {
             secondPublicKeyDir.mkdirs();
@@ -142,6 +152,36 @@ public class ContractTest {
 
     @State("User has invalid token")
     void invalidateMarysToken() throws URISyntaxException, IOException {
+        tokenState = INVALID_TOKEN;
+    }
+
+    @State("a request of mary to get public key, returning 401 to trigger challenge")
+    void maryTriggerChallenge() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
+        tokenState = INVALID_TOKEN;
+    }
+
+    @State("a request for a challenge")
+    void requestChallenge() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
+        tokenState = INVALID_TOKEN;
+    }
+
+    @State("a request for a challenge with wrong password")
+    void requestChallengeWrongPassword() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
+        tokenState = INVALID_TOKEN;
+    }
+
+    @State("a request to authenticate with a challenge signature")
+    void authenticateChallengeSignature() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
+        tokenState = INVALID_TOKEN;
+    }
+
+    @State("a request of mary to get device public key during challenge with wrong password")
+    void maryGetDevicePublicKeyWrongPassword() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
         tokenState = INVALID_TOKEN;
     }
 

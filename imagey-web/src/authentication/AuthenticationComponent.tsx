@@ -8,6 +8,7 @@ import RegistrationDialog from "./RegistrationDialog";
 import AuthenticationDialog from "./AuthenticationDialog";
 import DeviceSetupDialog from "./DeviceSetupDialog";
 import DeviceRegistrationDialog from "./DeviceRegistrationDialog";
+import ChallengeAuthenticationDialog from "./ChallengeAuthenticationDialog";
 import { useTranslation } from "react-i18next";
 import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 
@@ -47,6 +48,7 @@ export default function AuthenticationComponent({
             case ResponseError.UNAUTHORIZED:
             case ResponseError.FORBIDDEN: {
               setAuthenticationStatus(AuthenticationStatus.UNAUTHENTICATED);
+              setDeviceId(deviceRepository.loadDeviceId(email));
               break;
             }
             default: {
@@ -62,12 +64,26 @@ export default function AuthenticationComponent({
     setEmail(undefined);
   };
 
+  const handleAuthenticated = () => {
+    // Reload to trigger the authenticated flow
+    window.location.reload();
+  };
+
   if (!email) {
     return <EmailDialog onEmailSelected={(email) => setEmail(email)} />;
   }
   switch (authenticationStatus) {
     case AuthenticationStatus.UNAUTHENTICATED:
-      return <AuthenticationDialog email={email} />;
+      return deviceId ? (
+        <ChallengeAuthenticationDialog
+          email={email}
+          deviceId={deviceId}
+          onAuthenticated={handleAuthenticated}
+          onWrongUser={handleWrongUser}
+        />
+      ) : (
+        <AuthenticationDialog email={email} />
+      );
     case AuthenticationStatus.NOT_REGISTERED:
       return (
         <RegistrationDialog

@@ -129,6 +129,27 @@ export const cryptoService = {
     return decryptAESGCM(content, cryptoKey);
   },
 
+  encryptChallengeNonce: async (
+    nonce: string,
+    serverPublicKey: JsonWebKey,
+    privateDeviceKey: JsonWebKey,
+  ): Promise<string> => {
+    const derivedKey = await deriveKey(privateDeviceKey, serverPublicKey);
+    const plaintext = base64ToArrayBuffer(nonce);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      derivedKey,
+      plaintext,
+    );
+
+    const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), iv.byteLength);
+
+    return arrayBufferToBase64(combined.buffer);
+  },
+
   arrayBufferToBase64,
   base64ToArrayBuffer,
 };

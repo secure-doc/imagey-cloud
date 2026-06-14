@@ -532,3 +532,180 @@ test("switch user using wrong user button", async ({ page }) => {
       await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
+
+test("existing user authenticates via challenge-response on existing device", async ({
+  page,
+}) => {
+  // Given
+  provider
+    .addInteraction()
+    .given(
+      "a request of mary to get public key, returning 401 to trigger challenge",
+    )
+    .uponReceiving(
+      "a request to get public key, returning 401 to trigger challenge",
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(401);
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request for a challenge")
+    .withRequest(
+      "POST",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        ephemeralPublicKey: Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+        nonce: Matchers.like("c29tZS1yYW5kb20tbm9uY2U="),
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get device public key during challenge",
+    )
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[0].publicDeviceKey),
+    );
+
+  await provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get encrypted private main key for device during challenge",
+    )
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        kid: "0",
+        encryptingDeviceId: TestData.mary.devices[0].deviceId,
+        key: TestData.mary.devices[0].encryptedPrivateMainKey,
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .uponReceiving("a request to authenticate with a challenge signature")
+    .withRequest(
+      "POST",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+      (r) =>
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          signature: Matchers.string("any-signature"),
+        }),
+    )
+    .willRespondWith(200)
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await setupMarysDevice(page);
+
+      await page.goto("/");
+
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill("MarysPassword123");
+
+      const authenticationsResponse = page.waitForResponse(
+        "**/users/mary@imagey.cloud/devices/*/authentications",
+      );
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      // Then
+      await authenticationsResponse;
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
+test("existing user authenticates via challenge-response but provides wrong password", async ({
+  page,
+}) => {
+  provider
+    .addInteraction()
+    .given(
+      "a request of mary to get public key, returning 401 to trigger challenge",
+    )
+    .uponReceiving(
+      "a request to get public key, returning 401 to trigger challenge for wrong password",
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(401);
+
+  await provider
+    .addInteraction()
+    .uponReceiving("a request for a challenge with wrong password")
+    .withRequest(
+      "POST",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        ephemeralPublicKey: Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+        nonce: Matchers.like("c29tZS1yYW5kb20tbm9uY2U="),
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get device public key during challenge with wrong password",
+    )
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody(TestData.mary.devices[0].publicDeviceKey),
+    )
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await setupMarysDevice(page);
+
+      await page.goto("/");
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill("WrongPassword");
+
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      // Then
+      await expect(page.getByText("Wrong password")).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
