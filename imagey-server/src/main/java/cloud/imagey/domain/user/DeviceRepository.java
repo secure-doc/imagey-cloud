@@ -20,7 +20,6 @@ import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static jakarta.json.bind.JsonbBuilder.create;
-import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,7 +31,6 @@ import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -67,11 +65,7 @@ public class DeviceRepository extends AbstractFileRepository {
 
     public void storeDevicePublicKey(User user, DeviceId deviceId, PublicKey key) throws IOException {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
-        if (!keyDirectory.exists()) {
-            keyDirectory.mkdirs();
-        }
-        File keyFile = createNewFile(keyDirectory, "0.json");
-        FileUtils.write(keyFile, key.key(), UTF_8, false);
+        createNewFileWithContent(keyDirectory, "0.json", key.key());
     }
 
     public Optional<String> loadDevicePublicKey(User user, DeviceId deviceId, Kid kid) {
@@ -93,11 +87,7 @@ public class DeviceRepository extends AbstractFileRepository {
 
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) throws IOException {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
-        if (!keyDirectory.exists()) {
-            keyDirectory.mkdirs();
-        }
-        File keyFile = createNewFile(keyDirectory, "0.json");
-        write(keyFile, metadata, UTF_8, false);
+        createNewFileWithContent(keyDirectory, "0.json", metadata);
     }
 
     private File getUserHome(User user) {

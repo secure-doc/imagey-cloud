@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { deviceService } from "./DeviceService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
@@ -16,6 +17,8 @@ export default function DeviceActivationDialog({
   const keyPairs = authentication.keyPairs;
   const decryptedPrivateMainKey = keyPairs.mainKeyPair.privateKey;
   const privateDeviceKeyOfThisDevice = keyPairs.deviceKeyPair.privateKey;
+  const [loading, setLoading] = useState(false);
+
   return (
     <dialog className="surface-bright" open>
       {t("Do you want to activate the device with id {{deviceId}}?", {
@@ -24,7 +27,9 @@ export default function DeviceActivationDialog({
       <nav className="right-align no-space">
         <button
           className="transparent link"
-          onClick={() =>
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
             deviceService
               .activateDevice(
                 authentication.user,
@@ -34,9 +39,10 @@ export default function DeviceActivationDialog({
               )
               .then(() => onActivation())
               .catch((e) => {
+                setLoading(false);
                 onError(e);
-              })
-          }
+              });
+          }}
         >
           {t("Confirm")}
         </button>
