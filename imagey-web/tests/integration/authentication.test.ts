@@ -1,4 +1,4 @@
-import { Matchers } from "@pact-foundation/pact";
+import { MatchersV2 as Matchers } from "@pact-foundation/pact";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,

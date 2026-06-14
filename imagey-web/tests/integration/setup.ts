@@ -1,5 +1,5 @@
 import { expect, Page } from "@playwright/test";
-import { PactV4, Matchers } from "@pact-foundation/pact";
+import { PactV4, MatchersV2 as Matchers } from "@pact-foundation/pact";
 import * as fs from "fs";
 import * as path from "path";
 import { TestData } from "./testdata";
