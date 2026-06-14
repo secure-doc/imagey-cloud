@@ -532,3 +532,231 @@ test("switch user using wrong user button", async ({ page }) => {
       await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
+
+test("existing user authenticates via challenge-response on existing device", async ({
+  page,
+}) => {
+  // Given
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("User has invalid token")
+    .uponReceiving(
+      "a request to get public key, returning 401 to trigger challenge",
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(401);
+
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("User has invalid token")
+    .uponReceiving("a request for a challenge")
+    .withRequest(
+      "POST",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        ephemeralPublicKey: Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+        nonce: Matchers.like("some-random-nonce"),
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("User has invalid token")
+    .uponReceiving("a request to authenticate with a challenge signature")
+    .withRequest(
+      "POST",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+      (r) =>
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          signature: Matchers.string("any-signature"),
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({
+        "Set-Cookie": Matchers.string("Authorization=test-token; Path=/"),
+      }),
+    );
+
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving("a request to get private key after authentication")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        kid: "0",
+        encryptingDeviceId: TestData.mary.devices[0].deviceId,
+        key: TestData.mary.devices[0].encryptedPrivateMainKey,
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving("a request to get public main key after authentication")
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+        Cookie: Matchers.like("Authorization="),
+      }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody(
+        Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+      ),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving("a request to get public device key after authentication")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+          Cookie: Matchers.like("Authorization="),
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody(
+        Matchers.like({
+          crv: TestData.mary.devices[0].publicDeviceKey.crv,
+          kty: TestData.mary.devices[0].publicDeviceKey.kty,
+          x: TestData.mary.devices[0].publicDeviceKey.x,
+          y: TestData.mary.devices[0].publicDeviceKey.y,
+        }),
+      ),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving("a request of mary to get contacts after challenge")
+    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving("a request of mary to get documents after challenge")
+    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving("a request of mary to get contact requests after challenge")
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]))
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await setupMarysDevice(page);
+
+      await page.goto("/");
+
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill("MarysPassword123");
+
+      const authenticationsResponse = page.waitForResponse(
+        "**/users/mary@imagey.cloud/devices/*/authentications",
+      );
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      // Then
+      await authenticationsResponse;
+
+      await expect(page.getByText(/Upload Images/)).toBeVisible();
+
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
+test("existing user authenticates via challenge-response but provides wrong password", async ({
+  page,
+}) => {
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("User has invalid token")
+    .uponReceiving(
+      "a request to get public key, returning 401 to trigger challenge for wrong password",
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(401);
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("User has invalid token")
+    .uponReceiving("a request for a challenge with wrong password")
+    .withRequest(
+      "POST",
+      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        ephemeralPublicKey: Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+        nonce: Matchers.like("some-random-nonce"),
+      }),
+    )
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await setupMarysDevice(page);
+
+      await page.goto("/");
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill("WrongPassword");
+
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      // Then
+      await expect(page.getByText("Wrong password")).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});

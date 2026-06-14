@@ -4,6 +4,9 @@ export default defineConfig({
   // Look for test files in the "tests" directory, relative to this configuration file.
   testDir: "tests/integration",
 
+  // Global teardown script
+  globalTeardown: "./tests/integration/global-teardown.ts",
+
   // Run all tests in parallel.
   fullyParallel: true,
 

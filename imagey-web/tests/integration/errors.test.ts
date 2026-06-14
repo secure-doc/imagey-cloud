@@ -383,3 +383,81 @@ test("manifest loading error fallback", async ({ page }) => {
   // Verify that the fallback title ("Documents") is used
   await expect(page).toHaveTitle("Documents");
 });
+
+test("existing user fails to get challenge", async ({ page }) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 401,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill("MarysPassword123");
+
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+  await expect(page.getByText("Wrong password")).toBeVisible();
+});
+
+test("existing user authentication rejected by server", async ({ page }) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 401,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    async (route) => {
+      await route.fulfill({
+        status: 201,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          ephemeralPublicKey: TestData.mary.publicMainKey,
+          nonce: "some-random-nonce",
+        },
+      });
+    },
+  );
+
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+    async (route) => {
+      await route.fulfill({
+        status: 401,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill("MarysPassword123");
+
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+  await expect(page.getByText("Wrong password")).toBeVisible();
+});
