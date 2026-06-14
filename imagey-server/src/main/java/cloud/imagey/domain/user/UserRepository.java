@@ -28,7 +28,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -77,11 +76,7 @@ public class UserRepository extends AbstractFileRepository {
 
     public void storePublicKey(User user, Kid kid, PublicKey publicKey) throws IOException {
         File publicKeysFolder = new File(getUserHome(user), "public-keys");
-        if (!publicKeysFolder.exists()) {
-            publicKeysFolder.mkdirs();
-        }
-        File keyFile = createNewFile(publicKeysFolder, kid.id() + ".json");
-        FileUtils.write(keyFile, publicKey.key(), UTF_8, false);
+        createNewFileWithContent(publicKeysFolder, kid.id() + ".json", publicKey.key());
     }
 
     private File getUserHome(User user) {

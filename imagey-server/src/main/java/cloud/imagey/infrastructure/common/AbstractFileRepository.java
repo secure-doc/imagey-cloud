@@ -40,6 +40,24 @@ public class AbstractFileRepository {
         return file;
     }
 
+    protected void createNewFileWithContent(File folder, String filename, String content) {
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        File file = new File(folder, filename);
+        if (file.exists()) {
+            if (content.equals(readFileToString(file))) {
+                return;
+            }
+            throw new ResourceConflictException(filename + " already exists");
+        }
+        try {
+            FileUtils.write(file, content, UTF_8, false);
+        } catch (IOException e) {
+            throw new IoProblemException(e.getMessage());
+        }
+    }
+
     protected void mkdir(File folder) {
         if (folder.exists()) {
             throw new ResourceConflictException(folder + " already exists");

@@ -23,7 +23,6 @@ import static jakarta.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.readFileToByteArray;
 import static org.apache.commons.io.FileUtils.write;
 import static org.apache.commons.io.FileUtils.writeByteArrayToFile;
-import static org.apache.commons.io.FileUtils.writeStringToFile;
 
 import java.io.File;
 import java.io.IOException;
@@ -145,8 +144,7 @@ public class DocumentRepository extends AbstractFileRepository {
         File documentFolder = new File(documentHome, documentId.id());
         File sharedKeysFolder = new File(documentFolder, "shared-keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        File sharedKey = createNewFile(sharedKeyFolder, "encrypted-shared.key");
-        writeStringToFile(sharedKey, key.key(), UTF_8);
+        createNewFileWithContent(sharedKeyFolder, "encrypted-shared.key", key.key());
     }
 
     private File getUserHome(User user) {
