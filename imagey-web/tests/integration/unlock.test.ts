@@ -11,7 +11,7 @@ import {
   TestData,
   prepareMarysContactRequests,
 } from "./setup";
-import { Matchers } from "@pact-foundation/pact";
+import { MatchersV2 as Matchers } from "@pact-foundation/pact";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
