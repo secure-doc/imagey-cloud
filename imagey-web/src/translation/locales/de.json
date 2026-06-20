@@ -1,5 +1,4 @@
 {
-  "{{user}} whants to connect with you.": "{{user}} möchte sich mit dir verbinden.",
   "Add Contact": "Kontakt hinzufügen",
   "Add Email": "E-Mail hinzufügen",
   "Authentication in progress": "Authentifizierung wird durchgeführt",
@@ -51,5 +50,7 @@
   "Uknown Authentication Error": "Unbekannter Authentifizierungsfehler",
   "Unlock this device": "Gerät entsperren",
   "unverified": "nicht verifiziert",
-  "Wrong password": "Falsches Password"
+  "Wrong password": "Falsches Password",
+  "Unexpected server error. Please try again later.": "Unerwarteter Serverfehler. Bitte versuchen Sie es später erneut.",
+  "{{user}} whants to connect with you.": "{{user}} möchte sich mit dir verbinden."
 }

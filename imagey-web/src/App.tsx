@@ -9,6 +9,7 @@ import Navigation from "./components/Navigation";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
+import Chat from "./pages/Chat";
 import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
@@ -19,6 +20,7 @@ import {
   AuthenticationContext,
 } from "./contexts/AuthenticationContext";
 import Activities from "./pages/Activities";
+import { useTranslation } from "react-i18next";
 
 function App() {
   /*
@@ -44,6 +46,7 @@ function App() {
   4. User comes with registration token.
      Create symmetric key, register device. User is logged in.
   */
+  const { t } = useTranslation();
   const [user, setUser] = useState<Email>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
   useEffect(() => {
@@ -73,12 +76,17 @@ function App() {
               <Route path=":id" element={<Image />} />
             </Route>
             <Route path="chats" element={<Chats />} />
+            <Route path="chats/:contactEmail" element={<Chat />} />
             <Route path="settings">
               <Route index element={<Settings />} />
               <Route path="profile" element={user && <Profile />} />
               <Route path="devices" element={user && <Devices />} />
             </Route>
           </Routes>
+          <div className="toast bottom center" id="server-error-toast">
+            <i>error</i>
+            <span>{t("Unexpected server error. Please try again later.")}</span>
+          </div>
           <aside></aside>
           <Navigation className="bottom s" />
         </BrowserRouter>

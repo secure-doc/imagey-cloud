@@ -33,7 +33,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
@@ -102,10 +101,14 @@ public class ContactService {
         }
     }
 
-    public void acceptInvitation(User user, User contact, EncryptedSharedKey key) throws IOException {
+    public void acceptInvitation(User user, User contact, ContactKeys keys) throws IOException {
         if (contactRepository.getContactStatus(user, contact).filter(INVITATION_RECEIVED::equals).isPresent()) {
-            contactRepository.persist(user, contact, key);
-            contactRepository.persist(contact, user, key);
+            contactRepository.persist(user, contact, keys.key());
+            if (keys.invitationKey() != null) {
+                contactRepository.persist(contact, user, keys.invitationKey());
+            } else {
+                contactRepository.persist(contact, user, keys.key());
+            }
         } else {
             throw new ResourceConflictException("Contact request rejected");
         }

@@ -36,7 +36,7 @@ export default function Activities() {
       style={{
         alignContent: "flex-start",
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+        gridTemplateColumns: "repeat(auto-fill, minmax(400px, 1fr))",
       }}
     >
       {contacts && contacts.length === 0 && (

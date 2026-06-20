@@ -3,6 +3,7 @@ import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { deviceService } from "../device/DeviceService";
 import { authenticationRepository } from "./AuthenticationRepository";
 import { cryptoService } from "./CryptoService";
+import { apiFetch } from "../utils/apiFetch";
 
 export enum RegistrationResult {
   RegistrationStarted,
@@ -31,11 +32,7 @@ export const authenticationService = {
       device.deviceKeyPair.publicKey,
     );
     if (inviter) {
-      await contactRepository.acceptContactRequest(
-        email,
-        inviter,
-        mainKeyPair.privateKey,
-      );
+      await contactRepository.acceptContactRequest(email, inviter, mainKeyPair);
     }
     return {
       mainKeyPair,
@@ -43,7 +40,7 @@ export const authenticationService = {
     };
   },
   startAuthentication: async (email: string): Promise<RegistrationResult> => {
-    const response = await fetch("/users/" + email + "/verifications/", {
+    const response = await apiFetch("/users/" + email + "/verifications/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -60,7 +57,7 @@ export const authenticationService = {
     email: string,
     deviceId: string,
   ): Promise<{ nonce: string; ephemeralPublicKey: JsonWebKey }> => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" + email + "/devices/" + deviceId + "/challenges",
       {
         method: "POST",
@@ -97,7 +94,7 @@ export const authenticationService = {
       privateDeviceKey,
     );
 
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" + email + "/devices/" + deviceId + "/authentications",
       {
         method: "POST",

@@ -2,6 +2,7 @@ import { cryptoService } from "../authentication/CryptoService";
 import DocumentMetadata from "../document/DocumentMetadata";
 import { Profile } from "./Profile";
 import { documentService } from "../document/DocumentService";
+import { apiFetch } from "../utils/apiFetch";
 
 export const profileService = {
   saveProfile: async (
@@ -55,7 +56,7 @@ export const profileService = {
       new Blob([encryptedDocuments[0]], { type: "application/octet-stream" }),
     );
 
-    const response = await fetch(`/users/${email}/profile`, {
+    const response = await apiFetch(`/users/${email}/profile`, {
       method: "PUT",
       credentials: "same-origin",
       body: formData,
@@ -71,36 +72,31 @@ export const profileService = {
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<Profile | null> => {
-    try {
-      const response = await fetch(`/users/${user}/profile`, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        credentials: "same-origin",
-      });
+    const response = await apiFetch(`/users/${user}/profile`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+    });
 
-      if (response.status === 404) {
-        return null;
-      }
-      if (response.status >= 400) {
-        throw new Error("Http Error " + response.status);
-      }
-
-      const metadata: DocumentMetadata = await response.json();
-      const doc = await documentService.loadDocument(
-        user,
-        metadata,
-        publicKey,
-        privateKey,
-      );
-
-      const contentText = new TextDecoder().decode(doc.content);
-      const profile: Profile = JSON.parse(contentText);
-      return profile;
-    } catch (e) {
-      console.error("Failed to load profile", e);
+    if (response.status === 404) {
       return null;
     }
+    if (response.status >= 400) {
+      throw new Error("Http Error " + response.status);
+    }
+
+    const metadata: DocumentMetadata = await response.json();
+    const doc = await documentService.loadDocument(
+      user,
+      metadata,
+      publicKey,
+      privateKey,
+    );
+
+    const contentText = new TextDecoder().decode(doc.content);
+    const profile: Profile = JSON.parse(contentText);
+    return profile;
   },
 };
