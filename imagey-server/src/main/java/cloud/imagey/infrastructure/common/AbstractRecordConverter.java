@@ -113,6 +113,9 @@ public abstract class AbstractRecordConverter {
     }
 
     protected <T> T instantiate(Class<T> type, Class<?>[] parameterTypes, Object[] parameters) {
+        if (parameterTypes.length == 1 && parameterTypes[0] == type) {
+            return (T)parameters[0];
+        }
         try {
             Constructor<T> constructor = type.getDeclaredConstructor(parameterTypes);
             constructor.setAccessible(true);

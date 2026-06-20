@@ -126,6 +126,85 @@ export const authenticationRepository = {
     );
     await resolve(response);
   },
+  startAuthentication: async (email: string): Promise<Response> => {
+    const response = await fetch("/users/" + email + "/verifications/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+    });
+    return resolve(response);
+  },
+  requestChallenge: async (
+    email: string,
+    deviceId: string,
+  ): Promise<{ nonce: string; ephemeralPublicKey: JsonWebKey }> => {
+    const response = await fetch(
+      "/users/" + email + "/devices/" + deviceId + "/challenges",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+      },
+    );
+    const resolvedResponse = await resolve(response);
+    return resolvedResponse.json();
+  },
+  authenticateWithChallenge: async (
+    email: string,
+    deviceId: string,
+    signature: string,
+    trustedDevice: boolean,
+  ): Promise<void> => {
+    const query = trustedDevice ? "?trusted=true" : "";
+    const response = await fetch(
+      "/users/" + email + "/devices/" + deviceId + "/authentications" + query,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ signature }),
+        credentials: "same-origin",
+      },
+    );
+    await resolve(response);
+  },
+  loadRecoveryKey: async (email: string, deviceId: string): Promise<string> => {
+    const response = await fetch(
+      `/users/${email}/devices/${deviceId}/recovery-key`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+      },
+    );
+    const resolvedResponse = await resolve(response);
+    return resolvedResponse.json();
+  },
+  storeRecoveryKey: async (
+    email: string,
+    deviceId: string,
+    recoveryKey: string,
+  ): Promise<void> => {
+    const response = await fetch(
+      `/users/${email}/devices/${deviceId}/recovery-key`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(recoveryKey),
+        credentials: "same-origin",
+      },
+    );
+    await resolve(response);
+  },
 };
 
 async function resolve(response: Response): Promise<Response> {

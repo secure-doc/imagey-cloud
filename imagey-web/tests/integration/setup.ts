@@ -584,7 +584,7 @@ export async function setupMarysDevice(page: Page) {
   );
   await page.evaluate(
     ({ deviceId, key }) =>
-      localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
+      localStorage.setItem(`imagey.devices[${deviceId}].key`, key),
     {
       deviceId: TestData.mary.devices[0].deviceId,
       key: TestData.mary.devices[0].encryptedPrivateDeviceKey,
@@ -604,7 +604,7 @@ export async function setupMarysSecondDevice(page: Page) {
   );
   await page.evaluate(
     ({ deviceId, key }) =>
-      localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
+      localStorage.setItem(`imagey.devices[${deviceId}].key`, key),
     {
       deviceId: TestData.mary.devices[1].deviceId,
       key: TestData.mary.devices[1].encryptedPrivateDeviceKey,
@@ -624,7 +624,7 @@ export async function setupBillsDevice(page: Page) {
   }, TestData.bill.devices[0].deviceId);
   await page.evaluate(
     ({ deviceId, key }) =>
-      localStorage.setItem("imagey.devices[" + deviceId + "].key", key),
+      localStorage.setItem(`imagey.devices[${deviceId}].key`, key),
     {
       deviceId: TestData.bill.devices[0].deviceId,
       key: TestData.bill.devices[0].encryptedPrivateDeviceKey,

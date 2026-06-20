@@ -13,20 +13,35 @@ export const deviceRepository = {
     localStorage.removeItem("imagey.user");
   },
   loadDeviceId: (email: string) => {
-    const deviceId = localStorage.getItem("imagey.deviceIds[" + email + "]");
+    const deviceId = localStorage.getItem(`imagey.deviceIds[${email}]`);
     return deviceId ? deviceId : undefined;
   },
   storeDeviceId: (email: string, deviceId: string) => {
-    localStorage.setItem("imagey.deviceIds[" + email + "]", deviceId);
+    localStorage.setItem(`imagey.deviceIds[${email}]`, deviceId);
   },
   loadKey: (deviceId: string) => {
-    const key = localStorage.getItem("imagey.devices[" + deviceId + "].key");
+    const key = localStorage.getItem(`imagey.devices[${deviceId}].key`);
     return key ? key : undefined;
   },
   storeKey: (deviceId: string, encryptedPrivateKey: string) => {
     localStorage.setItem(
-      "imagey.devices[" + deviceId + "].key",
+      `imagey.devices[${deviceId}].key`,
       encryptedPrivateKey,
     );
+  },
+  loadRecoveryKey: (deviceId: string) => {
+    const key = localStorage.getItem(
+      `imagey.devices[${deviceId}].recovery-key`,
+    );
+    return key ? key : undefined;
+  },
+  storeRecoveryKey: (deviceId: string, encryptedRecoveryKey: string) => {
+    localStorage.setItem(
+      `imagey.devices[${deviceId}].recovery-key`,
+      encryptedRecoveryKey,
+    );
+  },
+  removeRecoveryKey: (deviceId: string) => {
+    localStorage.removeItem(`imagey.devices[${deviceId}].recovery-key`);
   },
 };

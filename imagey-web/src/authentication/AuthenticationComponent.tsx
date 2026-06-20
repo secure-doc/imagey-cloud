@@ -12,6 +12,8 @@ import ChallengeAuthenticationDialog from "./ChallengeAuthenticationDialog";
 import { useTranslation } from "react-i18next";
 import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 
+import { authenticationService } from "./AuthenticationService";
+
 interface AuthenticationComponentProperties {
   onKeysDecrypted: (user: Email, keyPairs: JsonWebKeyPairs) => void;
 }
@@ -33,11 +35,41 @@ export default function AuthenticationComponent({
     if (email) {
       authenticationRepository
         .loadPublicMainKey(email)
-        .then((publicMainKey) => {
+        .then(async (publicMainKey) => {
           setPublicMainKey(publicMainKey);
-          setAuthenticationStatus(AuthenticationStatus.AUTHENTICATED);
           deviceRepository.storeUser(email);
-          setDeviceId(deviceRepository.loadDeviceId(email));
+          const currentDeviceId = deviceRepository.loadDeviceId(email);
+          setDeviceId(currentDeviceId);
+
+          if (currentDeviceId) {
+            const encryptedRecoveryDeviceKey =
+              deviceRepository.loadRecoveryKey(currentDeviceId);
+            if (encryptedRecoveryDeviceKey) {
+              try {
+                const keys = await authenticationService.autoLogin(
+                  email,
+                  currentDeviceId,
+                  encryptedRecoveryDeviceKey,
+                );
+
+                onKeysDecrypted(email, {
+                  mainKeyPair: {
+                    publicKey: publicMainKey,
+                    privateKey: keys.privateMainKey,
+                  },
+                  deviceKeyPair: {
+                    publicKey: keys.publicDeviceKey,
+                    privateKey: keys.privateDeviceKey,
+                  },
+                });
+                return;
+              } catch (e) {
+                console.warn("Auto-login failed", e);
+              }
+            }
+          }
+
+          setAuthenticationStatus(AuthenticationStatus.AUTHENTICATED);
         })
         .catch((error) => {
           switch (error) {
@@ -57,6 +89,7 @@ export default function AuthenticationComponent({
           }
         });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
   const handleWrongUser = () => {

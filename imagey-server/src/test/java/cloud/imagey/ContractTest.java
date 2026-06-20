@@ -135,6 +135,16 @@ public class ContractTest {
 
     }
 
+    @State("marys second device registered with recovery key")
+    void marysSecondDeviceRegisteredWithRecoveryKey() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
+        File marysData = new File(rootPath, "mary@imagey.cloud");
+        File marysDevices = new File(marysData, "devices");
+        File firstDevice = new File(marysDevices, "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c");
+        File recoveryKeyFile = new File(firstDevice, "recovery-key.txt");
+        java.nio.file.Files.writeString(recoveryKeyFile.toPath(), "\"any-recovery-key\"");
+    }
+
     @State("mary has no contacts and a contact request from bill")
     void maryHasNoContactsAndBillRequest() throws IOException {
         File marysContacts = new File(getMarysData(), "contacts");

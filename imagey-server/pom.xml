@@ -267,7 +267,7 @@
               <goal>checkstyle</goal>
             </goals>
             <configuration>
-              <configLocation>${project.basedir}/src/main/checkstyle/test-configuration.xml</configLocation>
+              <configLocation>${project.basedir}/src/test/checkstyle/configuration.xml</configLocation>
               <includeTestSourceDirectory>true</includeTestSourceDirectory>
             </configuration>
           </execution>

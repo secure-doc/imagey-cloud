@@ -6,8 +6,9 @@ interface PasswordDialogProperties<R> {
   email?: string;
   requireConfirmation?: boolean;
   onWrongUser?: () => void;
-  validatePassword: (password: string) => Promise<R>;
-  onPasswordValid: (result: R) => void;
+  showKeepLoggedIn?: boolean;
+  validatePassword: (password: string, keepLoggedIn: boolean) => Promise<R>;
+  onPasswordValid: (result: R, keepLoggedIn: boolean) => void;
 }
 
 export default function PasswordDialog<R>({
@@ -15,10 +16,12 @@ export default function PasswordDialog<R>({
   email,
   requireConfirmation,
   onWrongUser,
+  showKeepLoggedIn,
   validatePassword,
   onPasswordValid,
 }: PasswordDialogProperties<R>) {
   const { t } = useTranslation();
+  const [keepLoggedIn, setKeepLoggedIn] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
   const [passwordsDoNotMatch, setPasswordsDoNotMatch] = useState(false);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -34,10 +37,10 @@ export default function PasswordDialog<R>({
     setPasswordsDoNotMatch(false);
 
     if (password) {
-      validatePassword(password)
+      validatePassword(password, keepLoggedIn)
         .then((result) => {
           setPasswordError(false);
-          onPasswordValid(result);
+          onPasswordValid(result, keepLoggedIn);
         })
         .catch(() =>
           // TODO handle forbidden
@@ -86,6 +89,18 @@ export default function PasswordDialog<R>({
             <span className="error">
               {passwordsDoNotMatch ? t("Passwords do not match") : ""}
             </span>
+          </div>
+        )}
+        {showKeepLoggedIn && (
+          <div className="field">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={keepLoggedIn}
+                onChange={(e) => setKeepLoggedIn(e.target.checked)}
+              />
+              <span>{t("Keep me logged in")}</span>
+            </label>
           </div>
         )}
         <nav className="right-align no-space">
