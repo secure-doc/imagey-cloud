@@ -26,12 +26,14 @@ export default function ChallengeAuthenticationDialog({
     }>
       message={t("Login via Device Key")}
       email={email}
+      showKeepLoggedIn={true}
       onWrongUser={onWrongUser}
-      validatePassword={(password) =>
+      validatePassword={(password, keepLoggedIn) =>
         authenticationService.authenticateWithChallenge(
           email,
           deviceId,
           password,
+          keepLoggedIn,
         )
       }
       onPasswordValid={({ privateMainKey, privateDeviceKey }) =>

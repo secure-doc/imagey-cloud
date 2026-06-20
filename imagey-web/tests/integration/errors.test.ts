@@ -461,3 +461,45 @@ test("existing user authentication rejected by server", async ({ page }) => {
 
   await expect(page.getByText("Wrong password")).toBeVisible();
 });
+
+test("existing user recovery key 500 error falls back to password dialog", async ({
+  page,
+}) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await setupMarysDevice(page);
+  // Simulate having a stored recovery key
+  await page.evaluate(
+    (deviceId) =>
+      localStorage.setItem(
+        `imagey.devices[${deviceId}].recovery-key`,
+        "mock-encrypted-key",
+      ),
+    TestData.mary.devices[0].deviceId,
+  );
+
+  await page.goto("/?email=mary@imagey.cloud");
+
+  // Since recovery key failed with 500, it should fallback to password dialog
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await expect(passwordInput).toBeVisible();
+});

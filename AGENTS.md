@@ -1,0 +1,2 @@
+# Build Instructions
+- Um die Backend-Tests erfolgreich ausführen zu können, muss zuerst das Frontend mit `mvn clean install` im Verzeichnis `imagey-web` (oder als Teil eines Root-Builds) gebaut werden. Dies ist notwendig, damit die vom Frontend generierten Pact-Dateien (z.B. `imagey-web-imagey-server.json`) in das Backend kopiert und entpackt werden können (`imagey-server/target/pacts`). Ansonsten schlägt der Backend-Build beim `unpack-dependencies` fehl oder nutzt veraltete Pact-Dateien, was zu Fehlern im `ContractTest` führt.

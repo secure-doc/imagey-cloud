@@ -23,7 +23,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import cloud.imagey.domain.authentication.ChallengeService;
+import cloud.imagey.domain.authentication.ChallengeSignature;
 import cloud.imagey.domain.user.DeviceId;
+import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
 @Specializes
@@ -32,11 +34,11 @@ public class MockChallengeService extends ChallengeService {
     private static final Logger LOG = LogManager.getLogger(MockChallengeService.class);
 
     @Override
-    public boolean verifyChallenge(DeviceId deviceId, String publicDeviceKeyJwk, String encryptedNonceBase64) {
-        if ("any-signature".equals(encryptedNonceBase64)) {
+    public void verifyChallenge(User user, DeviceId deviceId, ChallengeSignature challenge) {
+        if ("any-signature".equals(challenge.signature())) {
             LOG.info("Bypassing challenge verification for Pact test with signature 'any-signature'");
-            return true;
+        } else {
+            super.verifyChallenge(user, deviceId, challenge);
         }
-        return super.verifyChallenge(deviceId, publicDeviceKeyJwk, encryptedNonceBase64);
     }
 }

@@ -18,8 +18,8 @@ package cloud.imagey.application;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
-import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +37,12 @@ import java.security.spec.ECGenParameterSpec;
 import java.util.Arrays;
 import java.util.Base64;
 
+import javax.crypto.Cipher;
+import javax.crypto.KeyAgreement;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 
@@ -51,13 +57,8 @@ import org.junit.jupiter.api.Test;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
 
-import cloud.imagey.application.ChallengeResource.ChallengeSignature;
 import cloud.imagey.domain.authentication.ChallengeService.ChallengeResponse;
-import javax.crypto.Cipher;
-import javax.crypto.KeyAgreement;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
+import cloud.imagey.domain.authentication.ChallengeSignature;
 
 @MonoMeecrowaveConfig
 public class ChallengeResourceTest {
@@ -134,7 +135,7 @@ public class ChallengeResourceTest {
             .request()
             .header("Origin", "https://secure-doc.store")
             .post(json(""))) {
-            assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+            assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
         }
     }
 
@@ -147,7 +148,7 @@ public class ChallengeResourceTest {
             .request()
             .header("Origin", "https://secure-doc.store")
             .post(json(new ChallengeSignature("invalid-signature")))) {
-            assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+            assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
         }
     }
 
@@ -160,7 +161,7 @@ public class ChallengeResourceTest {
             .request()
             .header("Origin", "https://secure-doc.store")
             .post(json(new ChallengeSignature("invalid-signature")))) {
-            assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+            assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
         }
     }
 
@@ -182,7 +183,7 @@ public class ChallengeResourceTest {
             .request()
             .header("Origin", "https://secure-doc.store")
             .post(json(new ChallengeSignature("invalid-signature")))) {
-            assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+            assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
         }
     }
 
@@ -235,6 +236,60 @@ public class ChallengeResourceTest {
             .post(json(new ChallengeSignature(signatureBase64)))) {
             assertThat(verifyResponse.getStatus()).isEqualTo(OK.getStatusCode());
             assertThat(verifyResponse.getHeaderString("Set-Cookie")).contains("token=");
+        }
+    }
+
+    @Test
+    @DisplayName("VerifyChallenge succeeds for valid signature with trusted device")
+    void verifyChallengeTrustedDeviceSuccess() throws Exception {
+        ChallengeResponse challenge;
+        try (Response createResponse = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/challenges")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(json(""))) {
+            assertThat(createResponse.getStatus()).isEqualTo(CREATED.getStatusCode());
+            challenge = createResponse.readEntity(ChallengeResponse.class);
+        }
+
+        ECKey serverEphemeralKey = ECKey.parse(challenge.ephemeralPublicKey());
+        PublicKey serverPubKey = serverEphemeralKey.toPublicKey();
+
+        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
+        ka.init(clientKeyPair.getPrivate());
+        ka.doPhase(serverPubKey, true);
+        byte[] sharedSecret = ka.generateSecret();
+
+        byte[] aesKeyBytes = Arrays.copyOf(sharedSecret, 32);
+        SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
+
+        byte[] iv = new byte[12];
+        new SecureRandom().nextBytes(iv);
+
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        GCMParameterSpec spec = new GCMParameterSpec(128, iv);
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey, spec);
+
+        byte[] nonceBytes = challenge.nonce().getBytes(StandardCharsets.UTF_8);
+        byte[] ciphertext = cipher.doFinal(nonceBytes);
+
+        byte[] combined = new byte[iv.length + ciphertext.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+
+        String signatureBase64 = Base64.getEncoder().encodeToString(combined);
+
+        try (Response verifyResponse = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/authentications")
+            .queryParam("trusted", true)
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(json(new ChallengeSignature(signatureBase64)))) {
+            assertThat(verifyResponse.getStatus()).isEqualTo(OK.getStatusCode());
+            assertThat(verifyResponse.getHeaderString("Set-Cookie")).contains("token=");
+            assertThat(verifyResponse.getHeaderString("Set-Cookie")).contains("Max-Age=2592000");
         }
     }
 }

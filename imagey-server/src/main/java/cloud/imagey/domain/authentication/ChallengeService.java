@@ -17,35 +17,46 @@
 package cloud.imagey.domain.authentication;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECGenParameterSpec;
+import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import jakarta.enterprise.context.ApplicationScoped;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import com.nimbusds.jose.jwk.Curve;
-import com.nimbusds.jose.jwk.ECKey;
-
-import cloud.imagey.domain.user.DeviceId;
 import javax.crypto.Cipher;
 import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.validation.ValidationException;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.jwk.Curve;
+import com.nimbusds.jose.jwk.ECKey;
+
+import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.token.Kid;
+import cloud.imagey.domain.user.DeviceId;
+import cloud.imagey.domain.user.DeviceRepository;
+import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserRepository;
 
 @ApplicationScoped
 public class ChallengeService {
@@ -56,9 +67,17 @@ public class ChallengeService {
     private static final int IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
 
+    @Inject
+    private UserRepository userRepository;
+    @Inject
+    private DeviceRepository deviceRepository;
+
     private final Map<DeviceId, ChallengeContext> challenges = new ConcurrentHashMap<>();
 
-    public ChallengeResponse createChallenge(DeviceId deviceId) {
+    public ChallengeResponse createChallenge(User user, DeviceId deviceId) {
+        if (!userRepository.exists(user)) {
+            throw new ValidationException();
+        }
         try {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
             kpg.initialize(new ECGenParameterSpec("secp256r1"));
@@ -79,20 +98,22 @@ public class ChallengeService {
         }
     }
 
-    public boolean verifyChallenge(DeviceId deviceId, String publicDeviceKeyJwk, String encryptedNonceBase64) {
+    public void verifyChallenge(User user, DeviceId deviceId, ChallengeSignature challenge) {
+        Optional<PublicKey> devicePublicKey = deviceRepository.loadDevicePublicKey(user, deviceId, new Kid("0"));
+        PublicKey publicKey = devicePublicKey.orElseThrow(ValidationException::new);
         ChallengeContext context = challenges.remove(deviceId);
         if (context == null) {
             LOG.warn("No challenge found for device {}", deviceId.id());
-            return false;
+            throw new ValidationException("No Challenge found");
         }
         if (Instant.now().isAfter(context.expiresAt())) {
             LOG.warn("Challenge expired for device {}", deviceId.id());
-            return false;
+            throw new ValidationException("No Challenge found");
         }
 
         try {
-            ECKey clientKey = ECKey.parse(publicDeviceKeyJwk);
-            PublicKey clientPublicKey = clientKey.toPublicKey();
+            ECKey clientKey = ECKey.parse(publicKey.key());
+            var clientPublicKey = clientKey.toPublicKey();
             PrivateKey serverPrivateKey = context.serverKeyPair().toPrivateKey();
 
             KeyAgreement ka = KeyAgreement.getInstance("ECDH");
@@ -104,7 +125,7 @@ public class ChallengeService {
             byte[] aesKeyBytes = Arrays.copyOf(sharedSecret, AES_KEY_LENGTH);
             SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
 
-            byte[] combined = Base64.getDecoder().decode(encryptedNonceBase64);
+            byte[] combined = Base64.getDecoder().decode(challenge.signature());
             byte[] iv = Arrays.copyOfRange(combined, 0, IV_LENGTH);
             byte[] ciphertext = Arrays.copyOfRange(combined, IV_LENGTH, combined.length);
 
@@ -115,11 +136,11 @@ public class ChallengeService {
             byte[] plaintext = cipher.doFinal(ciphertext);
             String decryptedNonce = new String(plaintext, StandardCharsets.UTF_8);
 
-            return context.nonce().equals(decryptedNonce);
-
-        } catch (Exception e) {
-            LOG.error("Failed to verify challenge", e);
-            return false;
+            if (!context.nonce().equals(decryptedNonce)) {
+                throw new ValidationException("Wrong challenge");
+            }
+        } catch (IllegalArgumentException | GeneralSecurityException | ParseException | JOSEException e) {
+            throw new ValidationException(e);
         }
     }
 

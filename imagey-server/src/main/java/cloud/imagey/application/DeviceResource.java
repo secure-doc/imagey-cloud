@@ -76,7 +76,7 @@ public class DeviceResource {
     @RolesAllowed("owner")
     @Path("{deviceId}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
-    public String getDevicePublicKey(
+    public PublicKey getDevicePublicKey(
         @PathParam("email") User user,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {
@@ -111,5 +111,30 @@ public class DeviceResource {
         @PathParam("kid") Kid kid) throws IOException {
 
         return deviceRepository.loadPrivateKey(user, deviceId, kid).orElseThrow(() -> new NotFoundException());
+    }
+
+    @POST
+    @RolesAllowed("owner")
+    @Path("{deviceId}/recovery-key")
+    @Consumes(APPLICATION_JSON)
+    public Response storeDeviceRecoveryKey(
+        @PathParam("email") User user,
+        @PathParam("deviceId") DeviceId deviceId,
+        String recoveryKey) throws IOException {
+
+        deviceRepository.storeDeviceRecoveryKey(user, deviceId, recoveryKey);
+        return Response.ok().build();
+    }
+
+    @GET
+    @RolesAllowed("owner")
+    @Path("{deviceId}/recovery-key")
+    @Produces(APPLICATION_JSON)
+    public String getDeviceRecoveryKey(
+        @PathParam("email") User user,
+        @PathParam("deviceId") DeviceId deviceId) throws IOException {
+
+        LOG.info("Loading device recovery key");
+        return deviceRepository.loadDeviceRecoveryKey(user, deviceId).orElseThrow(NotFoundException::new);
     }
 }

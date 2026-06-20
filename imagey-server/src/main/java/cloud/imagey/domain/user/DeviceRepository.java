@@ -16,10 +16,10 @@
  */
 package cloud.imagey.domain.user;
 
+import static jakarta.json.bind.JsonbBuilder.create;
 import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static jakarta.json.bind.JsonbBuilder.create;
 
 import java.io.File;
 import java.io.IOException;
@@ -68,14 +68,14 @@ public class DeviceRepository extends AbstractFileRepository {
         createNewFileWithContent(keyDirectory, "0.json", key.key());
     }
 
-    public Optional<String> loadDevicePublicKey(User user, DeviceId deviceId, Kid kid) {
+    public Optional<PublicKey> loadDevicePublicKey(User user, DeviceId deviceId, Kid kid) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
-        File keyFile = new File(keyDirectory, "0.json");
+        File keyFile = new File(keyDirectory, kid.id() + ".json");
         if (!keyFile.exists()) {
             LOG.info("Public key does not exist.");
             return empty();
         } else {
-            Optional<String> publicKey = of(readFileToString(keyFile));
+            Optional<PublicKey> publicKey = of(readFileToString(keyFile)).map(PublicKey::new);
             LOG.info("Public key loaded");
             return publicKey;
         }
@@ -88,6 +88,23 @@ public class DeviceRepository extends AbstractFileRepository {
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) throws IOException {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
         createNewFileWithContent(keyDirectory, "0.json", metadata);
+    }
+
+    public void storeDeviceRecoveryKey(User user, DeviceId deviceId, String recoveryKey) throws IOException {
+        File deviceDirectory = new File(new File(getUserHome(user), "devices"), deviceId.id());
+        createNewFileWithContent(deviceDirectory, "recovery-key.txt", recoveryKey);
+    }
+
+    public Optional<String> loadDeviceRecoveryKey(User user, DeviceId deviceId) {
+        File recoveryKeyFile = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "recovery-key.txt");
+        if (!recoveryKeyFile.exists()) {
+            LOG.info("Recovery key does not exist.");
+            return empty();
+        } else {
+            Optional<String> recoveryKey = of(readFileToString(recoveryKeyFile));
+            LOG.info("Recovery key loaded");
+            return recoveryKey;
+        }
     }
 
     private File getUserHome(User user) {

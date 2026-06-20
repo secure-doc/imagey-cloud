@@ -48,6 +48,7 @@ public class TokenService {
     public static final long ONE_HOUR = 60 * 60 * 1000;
     public static final long ONE_DAY = 24 * ONE_HOUR;
     public static final long ONE_WEEK = 7 * ONE_DAY;
+    public static final long ONE_MONTH = 30 * ONE_DAY;
     private static final Logger LOG = LogManager.getLogger(TokenService.class);
     private static final String ISSUER = "https://imagey.cloud";
 

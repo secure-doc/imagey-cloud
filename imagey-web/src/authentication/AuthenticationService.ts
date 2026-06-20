@@ -1,6 +1,7 @@
 import { contactRepository } from "../contact/ContactRepository";
 import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { deviceService } from "../device/DeviceService";
+import { deviceRepository } from "../device/DeviceRepository";
 import { authenticationRepository } from "./AuthenticationRepository";
 import { cryptoService } from "./CryptoService";
 
@@ -39,42 +40,33 @@ export const authenticationService = {
     };
   },
   startAuthentication: async (email: string): Promise<RegistrationResult> => {
-    const response = await fetch("/users/" + email + "/verifications/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-    });
-    return response.status === 201
-      ? Promise.resolve(RegistrationResult.RegistrationStarted)
-      : response.status === 202
-        ? Promise.resolve(RegistrationResult.AuthenticationStarted)
-        : Promise.reject();
+    try {
+      const response =
+        await authenticationRepository.startAuthentication(email);
+      return response.status === 201
+        ? Promise.resolve(RegistrationResult.RegistrationStarted)
+        : response.status === 202
+          ? Promise.resolve(RegistrationResult.AuthenticationStarted)
+          : Promise.reject();
+    } catch {
+      return Promise.reject();
+    }
   },
   requestChallenge: async (
     email: string,
     deviceId: string,
   ): Promise<{ nonce: string; ephemeralPublicKey: JsonWebKey }> => {
-    const response = await fetch(
-      "/users/" + email + "/devices/" + deviceId + "/challenges",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "same-origin",
-      },
-    );
-    if (response.ok) {
-      return response.json();
+    try {
+      return await authenticationRepository.requestChallenge(email, deviceId);
+    } catch {
+      return Promise.reject("Failed to request challenge");
     }
-    return Promise.reject("Failed to request challenge");
   },
   authenticateWithChallenge: async (
     email: string,
     deviceId: string,
     password: string,
+    trustedDevice: boolean = false,
   ): Promise<{ privateMainKey: JsonWebKey; privateDeviceKey: JsonWebKey }> => {
     const challenge = await authenticationService.requestChallenge(
       email,
@@ -93,20 +85,40 @@ export const authenticationService = {
       privateDeviceKey,
     );
 
-    const response = await fetch(
-      "/users/" + email + "/devices/" + deviceId + "/authentications",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ signature }),
-        credentials: "same-origin",
-      },
-    );
-
-    if (!response.ok) {
+    try {
+      await authenticationRepository.authenticateWithChallenge(
+        email,
+        deviceId,
+        signature,
+        trustedDevice,
+      );
+    } catch {
       return Promise.reject("Authentication failed");
+    }
+
+    if (trustedDevice) {
+      const recoveryKeyArray = new Uint8Array(32);
+      crypto.getRandomValues(recoveryKeyArray);
+      const recoveryKey = Array.from(recoveryKeyArray)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      const encryptedRecoveryDeviceKey =
+        await cryptoService.encryptPrivatePasswordKey(
+          privateDeviceKey,
+          recoveryKey,
+        );
+      deviceRepository.storeRecoveryKey(deviceId, encryptedRecoveryDeviceKey);
+
+      try {
+        await authenticationRepository.storeRecoveryKey(
+          email,
+          deviceId,
+          recoveryKey,
+        );
+      } catch {
+        console.warn("Failed to store recovery key on server");
+      }
     }
 
     const privateMainKey = await authenticationService.loadPrivateMainKey(
@@ -134,5 +146,34 @@ export const authenticationService = {
       privateDeviceKey,
     );
     return decryptedPrivateMainKey;
+  },
+  autoLogin: async (
+    email: string,
+    deviceId: string,
+    encryptedRecoveryDeviceKey: string,
+  ): Promise<{
+    privateMainKey: JsonWebKey;
+    privateDeviceKey: JsonWebKey;
+    publicDeviceKey: JsonWebKey;
+  }> => {
+    const recoveryKey = await authenticationRepository.loadRecoveryKey(
+      email,
+      deviceId,
+    );
+    const privateDeviceKey = await cryptoService.decryptPrivatePasswordKey(
+      encryptedRecoveryDeviceKey,
+      recoveryKey,
+    );
+    const privateMainKey = await authenticationService.loadPrivateMainKey(
+      email,
+      deviceId,
+      privateDeviceKey,
+    );
+    const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
+      email,
+      deviceId,
+    );
+
+    return { privateMainKey, privateDeviceKey, publicDeviceKey };
   },
 };

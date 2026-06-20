@@ -24,22 +24,21 @@ import jakarta.annotation.security.PermitAll;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 
 import cloud.imagey.domain.authentication.ChallengeService;
 import cloud.imagey.domain.authentication.ChallengeService.ChallengeResponse;
-import cloud.imagey.domain.token.Kid;
+import cloud.imagey.domain.authentication.ChallengeSignature;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DeviceId;
-import cloud.imagey.domain.user.DeviceRepository;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.domain.user.UserRepository;
 
 @Path("{email}/devices")
 @ApplicationScoped
@@ -49,12 +48,6 @@ public class ChallengeResource {
 
     @Inject
     private ChallengeService challengeService;
-
-    @Inject
-    private DeviceRepository deviceRepository;
-    @Inject
-    private UserRepository userRepository;
-
     @Inject
     private TokenService tokenService;
 
@@ -63,10 +56,7 @@ public class ChallengeResource {
     @Path("{deviceId}/challenges")
     @Produces(APPLICATION_JSON)
     public Response createChallenge(@PathParam("email") User user, @PathParam("deviceId") DeviceId deviceId) {
-        if (!userRepository.exists(user)) {
-            throw new ForbiddenException();
-        }
-        ChallengeResponse challenge = challengeService.createChallenge(deviceId);
+        ChallengeResponse challenge = challengeService.createChallenge(user, deviceId);
         return Response.status(Response.Status.CREATED).entity(challenge).build();
     }
 
@@ -74,28 +64,26 @@ public class ChallengeResource {
     @PermitAll
     @Path("{deviceId}/authentications")
     @Consumes(APPLICATION_JSON)
-    public Response verifyChallenge(@PathParam("email") User user, @PathParam("deviceId") DeviceId deviceId, ChallengeSignature signature) {
-        if (!userRepository.exists(user)) {
-            LOG.warning("VerifyChallenge failed: Unknown user");
-            throw new ForbiddenException("Unknown user");
-        }
-        String publicDeviceKeyJwk = deviceRepository.loadDevicePublicKey(user, deviceId, new Kid("0"))
-            .orElseThrow(() -> {
-                LOG.warning("VerifyChallenge failed: Unknown device");
-                return new ForbiddenException("Unknown device");
-            });
+    public Response verifyChallenge(
+        @PathParam("email") User user,
+        @PathParam("deviceId") DeviceId deviceId,
+        @QueryParam("trusted") @DefaultValue("false") boolean trusted,
+        ChallengeSignature signature) {
 
-        boolean valid = challengeService.verifyChallenge(deviceId, publicDeviceKeyJwk, signature.signature());
-        if (!valid) {
-            LOG.warning("VerifyChallenge failed: Invalid signature or expired challenge");
-            throw new ForbiddenException("Invalid signature or expired challenge");
-        }
+        challengeService.verifyChallenge(user, deviceId, signature);
 
-        Token token = tokenService.generateToken(user, TokenService.ONE_HOUR);
         return Response.ok()
-                .header("Set-Cookie", "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/")
+                .header("Set-Cookie", buildCookie(user, trusted))
                 .build();
     }
 
-    public record ChallengeSignature(String signature) { }
+    private String buildCookie(User user, boolean trusted) {
+        long validity = trusted ? TokenService.ONE_MONTH : TokenService.ONE_HOUR;
+        Token token = tokenService.generateToken(user, validity);
+        String cookieHeader = "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/";
+        if (trusted) {
+            cookieHeader += "; Max-Age=2592000";
+        }
+        return cookieHeader;
+    }
 }
