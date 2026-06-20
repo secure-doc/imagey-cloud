@@ -1,4 +1,5 @@
 import DocumentMetadata from "./DocumentMetadata";
+import { apiFetch } from "../utils/apiFetch";
 
 const cache: Map<string, ArrayBuffer> = new Map();
 
@@ -40,7 +41,7 @@ export const documentRepository = {
       );
     }
 
-    const response = await fetch(`/users/${email}/documents`, {
+    const response = await apiFetch(`/users/${email}/documents`, {
       method: "POST",
       credentials: "same-origin",
       body: formData,
@@ -49,7 +50,7 @@ export const documentRepository = {
   },
 
   loadDocuments: async (email: string): Promise<DocumentMetadata[]> => {
-    const response = await fetch("/users/" + email + "/documents", {
+    const response = await apiFetch("/users/" + email + "/documents", {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -60,7 +61,7 @@ export const documentRepository = {
   },
 
   loadKey: async (email: string, documentId: string): Promise<string> => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" +
         email +
         "/documents/" +
@@ -87,7 +88,7 @@ export const documentRepository = {
     if (cachedValue) {
       return cachedValue;
     }
-    const response = await fetch(path, {
+    const response = await apiFetch(path, {
       method: "GET",
       headers: {
         Accept: "application/octet-stream",

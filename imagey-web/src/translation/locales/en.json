@@ -50,5 +50,6 @@
   "Unlock this device": "Unlock this device",
   "unverified": "unverified",
   "Wrong password": "Wrong password",
+  "Unexpected server error. Please try again later.": "Unexpected server error. Please try again later.",
   "{{user}} whants to connect with you.": "{{user}} whants to connect with you."
 }

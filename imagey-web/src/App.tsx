@@ -20,6 +20,7 @@ import {
   AuthenticationContext,
 } from "./contexts/AuthenticationContext";
 import Activities from "./pages/Activities";
+import { useTranslation } from "react-i18next";
 
 function App() {
   /*
@@ -45,6 +46,7 @@ function App() {
   4. User comes with registration token.
      Create symmetric key, register device. User is logged in.
   */
+  const { t } = useTranslation();
   const [user, setUser] = useState<Email>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
   useEffect(() => {
@@ -81,6 +83,10 @@ function App() {
               <Route path="devices" element={user && <Devices />} />
             </Route>
           </Routes>
+          <div className="toast bottom center" id="server-error-toast">
+            <i>error</i>
+            <span>{t("Unexpected server error. Please try again later.")}</span>
+          </div>
           <aside></aside>
           <Navigation className="bottom s" />
         </BrowserRouter>

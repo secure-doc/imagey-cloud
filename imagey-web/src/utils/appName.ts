@@ -1,8 +1,10 @@
+import { apiFetch } from "./apiFetch";
+
 let appName = "Documents";
 
 export async function initAppName(): Promise<void> {
   try {
-    const response = await fetch("/manifest.json");
+    const response = await apiFetch("/manifest.json");
     if (response.ok) {
       const manifest = await response.json();
       if (manifest && manifest.short_name) {

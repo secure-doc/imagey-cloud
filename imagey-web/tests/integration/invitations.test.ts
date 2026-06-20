@@ -8,6 +8,7 @@ import {
   provider,
   TestData,
   prepareMarysContactRequests,
+  prepareMarysEmptyContactRequests,
   prepareMarysDocuments,
   runningPactRequests,
 } from "./setup";
@@ -45,6 +46,7 @@ test("accept open invitations", async ({ page }) => {
         // We don't exact-match the encrypted key because it changes dynamically
         r.jsonBody({
           key: MatchersV3.like("dummy-encrypted-key"),
+          invitationKey: MatchersV3.like("dummy-encrypted-key"),
         });
       },
     )

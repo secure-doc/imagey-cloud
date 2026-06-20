@@ -1,5 +1,6 @@
 import { Email } from "../contexts/AuthenticationContext";
 import { ResponseError } from "./ResponseError";
+import { apiFetch } from "../utils/apiFetch";
 
 export const authenticationRepository = {
   register: async (
@@ -9,7 +10,7 @@ export const authenticationRepository = {
     encryptedPrivateMainKey: string,
     publicDeviceKey: JsonWebKey,
   ) => {
-    const response = await fetch("/users/", {
+    const response = await apiFetch("/users/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -29,7 +30,7 @@ export const authenticationRepository = {
       : Promise.reject();
   },
   findDevices: async (email: string): Promise<string[]> => {
-    const response = await fetch("/users/" + email + "/devices", {
+    const response = await apiFetch("/users/" + email + "/devices", {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -43,7 +44,7 @@ export const authenticationRepository = {
     email: string,
     deviceId: string,
   ): Promise<{ kid: string; encryptingDeviceId: string; key: string }> => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" + email + "/devices/" + deviceId + "/private-keys/0",
       {
         method: "GET",
@@ -62,7 +63,7 @@ export const authenticationRepository = {
     receivingDeviceId: string,
     encryptedKey: string,
   ): Promise<void> => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" + email + "/devices/" + receivingDeviceId + "/private-keys/",
       {
         method: "POST",
@@ -80,7 +81,7 @@ export const authenticationRepository = {
     await resolve(response);
   },
   loadPublicMainKey: async (email: string): Promise<JsonWebKey> => {
-    const response = await fetch("/users/" + email + "/public-keys/0", {
+    const response = await apiFetch("/users/" + email + "/public-keys/0", {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -94,7 +95,7 @@ export const authenticationRepository = {
     email: string,
     deviceId: string,
   ): Promise<JsonWebKey> => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" + email + "/devices/" + deviceId + "/public-keys/0",
       {
         method: "GET",
@@ -113,7 +114,7 @@ export const authenticationRepository = {
     deviceId: string,
     key: JsonWebKey,
   ): Promise<void> => {
-    const response = await fetch(
+    const response = await apiFetch(
       "/users/" + email + "/devices/" + deviceId + "/public-keys/",
       {
         method: "POST",

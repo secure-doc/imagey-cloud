@@ -51,5 +51,6 @@
   "Unlock this device": "Gerät entsperren",
   "unverified": "nicht verifiziert",
   "Wrong password": "Falsches Password",
+  "Unexpected server error. Please try again later.": "Unerwarteter Serverfehler. Bitte versuchen Sie es später erneut.",
   "{{user}} whants to connect with you.": "{{user}} möchte sich mit dir verbinden."
 }

@@ -1,4 +1,5 @@
 import { Message } from "./Message";
+import { apiFetch } from "../utils/apiFetch";
 
 export const messageRepository = {
   sendMessage: async (
@@ -6,7 +7,7 @@ export const messageRepository = {
     contactEmail: string,
     encryptedContent: string,
   ): Promise<void> => {
-    const response = await fetch(
+    const response = await apiFetch(
       `/users/${senderEmail}/contacts/${contactEmail}/messages`,
       {
         method: "POST",
@@ -26,7 +27,7 @@ export const messageRepository = {
     senderEmail: string,
     sinceId?: string,
   ): Promise<Message[]> => {
-    const response = await fetch(
+    const response = await apiFetch(
       `/users/${receiverEmail}/contacts/${senderEmail}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
       {
         method: "GET",

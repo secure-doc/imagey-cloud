@@ -102,7 +102,9 @@ public class MessageResource {
 
     public void sendMessage(@Observes Message message) {
         Queue<AsyncResponse> responses = waitingRequests.remove(message.channel());
-        List<Message> messages = List.of(message);
-        responses.stream().filter(not(AsyncResponse::isDone)).forEach(response -> response.resume(messages));
+        if (responses != null) {
+            List<Message> messages = List.of(message);
+            responses.stream().filter(not(AsyncResponse::isDone)).forEach(response -> response.resume(messages));
+        }
     }
 }
