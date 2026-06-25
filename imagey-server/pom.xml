@@ -90,7 +90,7 @@
       <version>${project.version}</version>
       <classifier>tests</classifier>
       <scope>test</scope>
-	</dependency>
+    </dependency>
     <dependency>
       <groupId>au.com.dius.pact.provider</groupId>
       <artifactId>junit5</artifactId>
@@ -215,7 +215,7 @@
                     <limit>
                       <counter>BRANCH</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.91</minimum>
+                      <minimum>0.94</minimum>
                     </limit>
                     <limit>
                       <counter>COMPLEXITY</counter>

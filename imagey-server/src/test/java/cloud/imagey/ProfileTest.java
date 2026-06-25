@@ -98,7 +98,7 @@ public class ProfileTest {
         File marysData = new File(rootPath, "mary@imagey.cloud");
         File profileDocumentDir = new File(marysData, "documents/profile");
         assertThat(new File(profileDocumentDir, "meta-data")).exists();
-        assertThat(new File(profileDocumentDir, "contents/profile")).exists(); // the actual content
+        assertThat(new File(profileDocumentDir, "files/profile")).exists(); // the actual content
     }
 
     @Test

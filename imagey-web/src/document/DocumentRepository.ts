@@ -48,6 +48,20 @@ export const documentRepository = {
     return resolve(response, () => Promise.resolve());
   },
 
+  loadDocumentMetadata: async (
+    email: string,
+    documentId: string,
+  ): Promise<DocumentMetadata> => {
+    const response = await fetch(`/users/${email}/documents/${documentId}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+    });
+    return resolve(response, () => response.json());
+  },
+
   loadDocuments: async (email: string): Promise<DocumentMetadata[]> => {
     const response = await fetch("/users/" + email + "/documents", {
       method: "GET",
@@ -62,14 +76,11 @@ export const documentRepository = {
   loadKey: async (
     email: string,
     documentId: string,
+    shareEmail?: string,
   ): Promise<{ issuer: string; kid: string; sharedKey: string }> => {
+    const targetEmail = shareEmail ?? email;
     const response = await fetch(
-      "/users/" +
-        email +
-        "/documents/" +
-        documentId +
-        "/encrypted-shared-keys/" +
-        email,
+      "/users/" + email + "/documents/" + documentId + "/keys/" + targetEmail,
       {
         method: "GET",
         headers: {
@@ -85,7 +96,7 @@ export const documentRepository = {
     documentId: string,
     contentId: string,
   ): Promise<ArrayBuffer> => {
-    const path = `/users/${email}/documents/${documentId}/contents/${contentId}`;
+    const path = `/users/${email}/documents/${documentId}/files/${contentId}`;
     const cachedValue = cache.get(path);
     if (cachedValue) {
       return cachedValue;
@@ -100,6 +111,25 @@ export const documentRepository = {
     const content = await resolve(response, () => response.arrayBuffer());
     cache.set(path, content);
     return content;
+  },
+  storeSharedKey: async (
+    email: string,
+    documentId: string,
+    shareEmail: string,
+    key: { issuer: string; kid: string; sharedKey: string },
+  ): Promise<void> => {
+    const response = await fetch(
+      "/users/" + email + "/documents/" + documentId + "/keys/" + shareEmail,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(key),
+        credentials: "same-origin",
+      },
+    );
+    return resolve(response, () => Promise.resolve());
   },
 };
 

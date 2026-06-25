@@ -29,7 +29,9 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
@@ -40,6 +42,7 @@ import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -51,6 +54,9 @@ public class ProfileResource {
 
     @Inject
     private DocumentRepository documentRepository;
+
+    @Context
+    private SecurityContext securityContext;
 
     @PUT
     @RolesAllowed("owner")
@@ -96,6 +102,7 @@ public class ProfileResource {
     @RolesAllowed({"owner", "contact", "contact-request"})
     @Produces(jakarta.ws.rs.core.MediaType.APPLICATION_JSON)
     public DocumentMetadata getProfileMetadata(@PathParam("email") User user) throws IOException {
-        return documentRepository.findMetadata(user, PROFILE_ID);
+        Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
+        return documentRepository.findMetadata(user, PROFILE_ID, callerEmail);
     }
 }

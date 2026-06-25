@@ -5,7 +5,7 @@ import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import ImageComponent from "../components/ImageComponent";
+import ImageList from "../components/ImageList";
 import UploadPanel from "../activity/UploadPanel";
 
 export default function Images() {
@@ -55,7 +55,7 @@ export default function Images() {
             }
           />
         ) : (
-          documents.map((document) => <ImageComponent image={document} />)
+          <ImageList documents={documents} />
         )}
       </div>
     </main>

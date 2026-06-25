@@ -16,9 +16,6 @@
  */
 package cloud.imagey;
 
-import static java.lang.Integer.MAX_VALUE;
-import static java.util.Arrays.stream;
-import static java.util.Set.of;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.entity;
 import static jakarta.ws.rs.client.Entity.json;
@@ -26,6 +23,9 @@ import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM_TYPE;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static java.lang.Integer.MAX_VALUE;
+import static java.util.Arrays.stream;
+import static java.util.Set.of;
 import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,6 +52,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -66,6 +67,8 @@ public class DocumentTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private DocumentRepository documentRepository;
 
     @Test
     @DisplayName("Store document")
@@ -85,7 +88,6 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/")
             .path(documentId)
-            .path("meta-data")
             .request()
             .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
@@ -100,7 +102,7 @@ public class DocumentTest {
                 .target("http://localhost:" + config.getHttpPort())
                 .path("users/mary@imagey.cloud/documents/")
                 .path(documentId)
-                .path("contents")
+                .path("files")
                 .path(documentId)
                 .request()
                 .header("Origin", "https://secure-doc.store")
@@ -111,7 +113,7 @@ public class DocumentTest {
                 .target("http://localhost:" + config.getHttpPort())
                 .path("users/mary@imagey.cloud/documents/")
                 .path(documentId)
-                .path("contents")
+                .path("files")
                 .path(smallImageId)
                 .request().header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
@@ -121,7 +123,7 @@ public class DocumentTest {
                 .target("http://localhost:" + config.getHttpPort())
                 .path("users/mary@imagey.cloud/documents/")
                 .path(documentId)
-                .path("contents")
+                .path("files")
                 .path(previewImageId)
                 .request()
                 .header("Origin", "https://secure-doc.store")
@@ -132,7 +134,7 @@ public class DocumentTest {
                 .target("http://localhost:" + config.getHttpPort())
                 .path("users/mary@imagey.cloud/documents/")
                 .path(documentId)
-                .path("encrypted-shared-keys/mary@imagey.cloud")
+                .path("keys/mary@imagey.cloud")
                 .request()
                 .header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
@@ -151,7 +153,6 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents")
             .path(documentId)
-            .path("meta-data")
             .request()
             .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
@@ -165,7 +166,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/")
             .path(documentId)
-            .path("contents")
+            .path("files")
             .path(documentId)
             .request()
             .header("Origin", "https://secure-doc.store")
@@ -175,7 +176,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/")
             .path(documentId)
-            .path("contents")
+            .path("files")
             .path(smallImageId)
             .request()
             .header("Origin", "https://secure-doc.store")
@@ -185,7 +186,7 @@ public class DocumentTest {
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/")
             .path(documentId)
-            .path("contents")
+            .path("files")
             .path(previewImageId)
             .request()
             .header("Origin", "https://secure-doc.store")
@@ -194,6 +195,58 @@ public class DocumentTest {
         assertThat(actualDocumentContent).isEqualTo(documentContent);
         assertThat(actualSmallImageContent).isEqualTo(smallContent);
         assertThat(actualPreviewImageContent).isEqualTo(previewContent);
+
+        // Share with Joe
+        Token joeToken = tokenService.generateToken(new User(new Email("joe@imagey.cloud")), MAX_VALUE);
+        String joeSharedKey = "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"joes-shared-key\"}";
+        response = newClient()
+                .target("http://localhost:" + config.getHttpPort())
+                .path("users/mary@imagey.cloud/documents/")
+                .path(documentId)
+                .path("keys/joe@imagey.cloud")
+                .request()
+                .header("Origin", "https://secure-doc.store")
+                .header("Cookie", "token=" + token.token()) // Mary's token to PUT the key
+                .put(entity(joeSharedKey, APPLICATION_JSON_TYPE));
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+
+        // Joe reads metadata
+        Map<String, Object> joeMetadata = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents")
+            .path(documentId)
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .header("Cookie", "token=" + joeToken.token())
+            .get(new GenericType<Map<String, Object>>() { });
+        assertThat(joeMetadata).contains(
+            entry("documentId", documentId),
+            entry("encryptedData", "dummy-encrypted-data"));
+
+        // Joe reads content
+        byte[] joeReadContent = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents/")
+            .path(documentId)
+            .path("files")
+            .path(documentId)
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .header("Cookie", "token=" + joeToken.token())
+            .get(byte[].class);
+        assertThat(joeReadContent).isEqualTo(documentContent);
+
+        // Joe reads his shared key
+        Map<String, Object> joesKeyResult = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents/")
+            .path(documentId)
+            .path("keys/joe@imagey.cloud")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .header("Cookie", "token=" + joeToken.token())
+            .get(new GenericType<Map<String, Object>>() { });
+        assertThat(joesKeyResult).contains(entry("sharedKey", "joes-shared-key"));
     }
 
     @Test
@@ -284,7 +337,7 @@ public class DocumentTest {
         Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/contents/non-existent-content")
+            .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/non-existent-content")
             .request()
             .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
@@ -298,7 +351,7 @@ public class DocumentTest {
         Token token = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/encrypted-shared-keys/unknown@imagey.cloud")
+            .path("users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/unknown@imagey.cloud")
             .request()
             .header("Origin", "https://secure-doc.store")
             .header("Cookie", "token=" + token.token())
@@ -344,6 +397,44 @@ public class DocumentTest {
             .post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+    }
+
+    @BeforeEach
+    @Test
+    void testHasSharedKey() throws Exception {
+        cloud.imagey.domain.user.User mary = new cloud.imagey.domain.user.User(
+            new cloud.imagey.domain.mail.Email("mary@imagey.cloud"));
+        cloud.imagey.domain.mail.Email unknown = new cloud.imagey.domain.mail.Email("unknown@imagey.cloud");
+        cloud.imagey.domain.document.DocumentId docId = new cloud.imagey.domain.document.DocumentId(
+            "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3");
+
+        java.io.File keyFile = new java.io.File(rootPath
+            + "/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/"
+            + "encrypted-shared.key");
+        keyFile.getParentFile().mkdirs();
+        java.nio.file.Files.writeString(keyFile.toPath(), "{}");
+
+        assertThat(documentRepository.hasSharedKey(mary, docId, mary.email())).isTrue();
+        assertThat(documentRepository.hasSharedKey(mary, docId, unknown)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Load documents when document home does not exist")
+    public void testFindMetadataWithoutDocumentHome() throws IOException {
+        File data = new File(rootPath);
+        if (data.exists()) {
+            org.apache.commons.io.FileUtils.deleteDirectory(data);
+        }
+
+        List<Map<String, Object>> metadata = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/documents")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .header("Cookie", "token=" + tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE).token())
+            .get(new GenericType<List<Map<String, Object>>>() { });
+
+        assertThat(metadata).isEmpty();
     }
 
     @BeforeEach

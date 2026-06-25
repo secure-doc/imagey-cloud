@@ -168,7 +168,7 @@ test("load existing profile with picture", async ({ page }) => {
     .uponReceiving("a request of mary to get her profile picture key")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary@imagey.cloud",
+      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/keys/mary@imagey.cloud",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -180,7 +180,7 @@ test("load existing profile with picture", async ({ page }) => {
         kid: "0",
         sharedKey: fs
           .readFileSync(
-            "./tests/images/encrypted/profile-pic-doc-id/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+            "./tests/images/encrypted/profile-pic-doc-id/keys/mary@imagey.cloud/encrypted-shared.key",
             "utf8",
           )
           .trim(),
@@ -192,7 +192,7 @@ test("load existing profile with picture", async ({ page }) => {
     .uponReceiving("a request of mary to get her profile picture")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -201,7 +201,7 @@ test("load existing profile with picture", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "./tests/images/encrypted/profile-pic-doc-id/contents/profile-pic-doc-id",
+        "./tests/images/encrypted/profile-pic-doc-id/files/profile-pic-doc-id",
       ),
     );
 
@@ -210,7 +210,7 @@ test("load existing profile with picture", async ({ page }) => {
     .uponReceiving("a request of mary to get her profile content")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/profile/contents/profile",
+      "/users/mary@imagey.cloud/documents/profile/files/profile",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -219,7 +219,7 @@ test("load existing profile with picture", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "./tests/images/encrypted/profile/contents/profile",
+        "./tests/images/encrypted/profile/files/profile",
       ),
     );
 
@@ -246,13 +246,13 @@ test("load existing profile with picture", async ({ page }) => {
     });
 
     await page.route(
-      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary*imagey.cloud",
+      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/keys/mary*imagey.cloud",
       async (route) => {
         if (route.request().method() === "GET") {
           const response = await route.fetch({
             url:
               mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary@imagey.cloud",
+              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/keys/mary@imagey.cloud",
             headers: route.request().headers(),
           });
           await route.fulfill({ response });
@@ -263,13 +263,13 @@ test("load existing profile with picture", async ({ page }) => {
     );
 
     await page.route(
-      "**/users/mary*imagey.cloud/documents/profile/contents/profile",
+      "**/users/mary*imagey.cloud/documents/profile/files/profile",
       async (route) => {
         if (route.request().method() === "GET") {
           const response = await route.fetch({
             url:
               mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile/contents/profile",
+              "/users/mary@imagey.cloud/documents/profile/files/profile",
             headers: route.request().headers(),
           });
           await route.fulfill({ response });
@@ -280,13 +280,13 @@ test("load existing profile with picture", async ({ page }) => {
     );
 
     await page.route(
-      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
       async (route) => {
         if (route.request().method() === "GET") {
           const response = await route.fetch({
             url:
               mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/contents/profile-pic-doc-id",
+              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
             headers: route.request().headers(),
           });
           await route.fulfill({ response });

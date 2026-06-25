@@ -129,4 +129,23 @@ public class AcmeChallengeTest {
             forceDelete(file);
         }
     }
+
+    @Test
+    void dontAllowDots() throws IOException, MessagingException {
+        // Given
+        File file = new File(challengePath, "test-challenge");
+        FileUtils.write(file, "test-content", Charset.forName("UTF-8"));
+
+        // When
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path(".well-known/acme-challenge")
+            .path("test.challenge")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .get();
+
+        // Then
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+    }
 }

@@ -106,6 +106,20 @@ public class RegistrationTest {
     }
 
     @Test
+    @DisplayName("Initial Registration with disallowed domain fails")
+    public void initialRegistrationDisallowedDomain() throws IOException {
+        // Given
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/joe@imagey.cloud/verifications")
+            .request().header("Origin", "https://evil.com")
+            .post(json(""));
+
+        // Then we expect failure because evil.com is not an allowed domain
+        assertThat(response.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
+    }
+
+    @Test
     @DisplayName("Registration is successfull")
     public void registration() throws IOException, MessagingException {
         // Given

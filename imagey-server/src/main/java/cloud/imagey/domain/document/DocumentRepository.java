@@ -75,7 +75,7 @@ public class DocumentRepository extends AbstractFileRepository {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
-        File contentsFolder = new File(documentFolder, "contents");
+        File contentsFolder = new File(documentFolder, "files");
         if (!contentsFolder.exists()) {
             mkdir(contentsFolder);
         }
@@ -87,7 +87,7 @@ public class DocumentRepository extends AbstractFileRepository {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
-        File contentsFolder = new File(documentFolder, "contents");
+        File contentsFolder = new File(documentFolder, "files");
         File contentFile = new File(contentsFolder, contentId.id());
         if (!contentFile.exists()) {
             return empty();
@@ -104,18 +104,18 @@ public class DocumentRepository extends AbstractFileRepository {
         return Stream.of(documentHome.list())
             .sorted()
             .map(DocumentId::new)
-            .map(id -> findMetadata(user, id))
+            .map(id -> findMetadata(user, id, user.email()))
             .toList();
     }
 
-    public DocumentMetadata findMetadata(User user, DocumentId documentId) {
+    public DocumentMetadata findMetadata(User user, DocumentId documentId, Email callerEmail) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         File metadataFile = new File(documentFolder, "meta-data");
         DocumentMetadata metadata = create().fromJson(readFileToString(metadataFile), DocumentMetadata.class);
 
-        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, user.email()).orElseThrow();
+        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, callerEmail).orElse(null);
         return new DocumentMetadata(
             documentId,
             metadata.smallImageId(),
@@ -129,7 +129,7 @@ public class DocumentRepository extends AbstractFileRepository {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
-        File sharedKeysFolder = new File(documentFolder, "shared-keys");
+        File sharedKeysFolder = new File(documentFolder, "keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
         File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
         if (!sharedKey.exists()) {
@@ -142,9 +142,19 @@ public class DocumentRepository extends AbstractFileRepository {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
-        File sharedKeysFolder = new File(documentFolder, "shared-keys");
+        File sharedKeysFolder = new File(documentFolder, "keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
         createNewFileWithContent(sharedKeyFolder, "encrypted-shared.key", create().toJson(key));
+    }
+
+    public boolean hasSharedKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        File sharedKeysFolder = new File(documentFolder, "keys");
+        File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
+        File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
+        return sharedKey.exists();
     }
 
     private File getUserHome(User user) {

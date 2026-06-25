@@ -42,10 +42,12 @@ import javax.crypto.spec.SecretKeySpec;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.validation.ValidationException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.Curve;
@@ -62,7 +64,6 @@ import cloud.imagey.domain.user.UserRepository;
 public class ChallengeService {
 
     private static final Logger LOG = LogManager.getLogger(ChallengeService.class);
-    private static final int EXPIRATION_MINUTES = 5;
     private static final int AES_KEY_LENGTH = 32;
     private static final int IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
@@ -71,6 +72,9 @@ public class ChallengeService {
     private UserRepository userRepository;
     @Inject
     private DeviceRepository deviceRepository;
+    @Inject
+    @ConfigProperty(name = "challenge.expiration.minutes", defaultValue = "5")
+    private Provider<Integer> expirationMinutes;
 
     private final Map<DeviceId, ChallengeContext> challenges = new ConcurrentHashMap<>();
 
@@ -87,7 +91,7 @@ public class ChallengeService {
                 .build();
 
             String nonce = UUID.randomUUID().toString();
-            Instant expiresAt = Instant.now().plus(EXPIRATION_MINUTES, ChronoUnit.MINUTES);
+            Instant expiresAt = Instant.now().plus(expirationMinutes.get(), ChronoUnit.MINUTES);
 
             challenges.put(deviceId, new ChallengeContext(nonce, jwk, expiresAt));
 

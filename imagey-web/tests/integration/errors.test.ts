@@ -81,7 +81,7 @@ test("document loading error", async ({ page }) => {
           encryptedData:
             "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
           sharedKey: fs.readFileSync(
-            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key",
             "utf8",
           ),
         },
@@ -91,7 +91,7 @@ test("document loading error", async ({ page }) => {
 
   // Mock document content failure
   await page.route(
-    "**/users/mary*imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/contents/*",
+    "**/users/mary*imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/*",
     async (route) => {
       await route.fulfill({
         status: 500,
@@ -311,7 +311,7 @@ test("load existing profile error handling", async ({ page }) => {
 
   // Mock profile shared-key 500 error
   await page.route(
-    "**/users/mary*imagey.cloud/documents/profile/encrypted-shared-keys/mary*imagey.cloud",
+    "**/users/mary*imagey.cloud/documents/profile/keys/mary*imagey.cloud",
     async (route) => {
       await route.fulfill({
         status: 500,
@@ -330,7 +330,7 @@ test("load existing profile error handling", async ({ page }) => {
   await settingsLink.click();
 
   const responsePromise = page.waitForResponse(
-    "**/users/mary@imagey.cloud/documents/profile/encrypted-shared-keys/mary*",
+    "**/users/mary@imagey.cloud/documents/profile/keys/mary*",
   );
   const profileLink = page
     .getByRole("heading", { name: "Profile", exact: true })
@@ -958,14 +958,14 @@ test("profile picture load error", async ({ page }) => {
   });
 
   await page.route(
-    "**/users/mary*imagey.cloud/documents/profile/contents/profile",
+    "**/users/mary*imagey.cloud/documents/profile/files/profile",
     async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
           status: 200,
           headers: { "Access-Control-Allow-Origin": "*" },
           body: fs.readFileSync(
-            "./tests/images/encrypted/profile/contents/profile",
+            "./tests/images/encrypted/profile/files/profile",
           ),
         });
       } else {
@@ -976,7 +976,7 @@ test("profile picture load error", async ({ page }) => {
 
   // Mock failure for the profile picture
   await page.route(
-    "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary*imagey.cloud",
+    "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/keys/mary*imagey.cloud",
     async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({

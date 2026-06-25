@@ -87,43 +87,41 @@ export const documentService = {
         publicKey,
         privateKey,
       );
-
-      let name = metadata.name;
-      let previewImageId = metadata.previewImageId;
-      let type = metadata.type;
-
-      if (metadata.encryptedData) {
-        const encryptedPayloadBuffer = cryptoService.base64ToArrayBuffer(
-          metadata.encryptedData,
-        );
-        const decryptedPayloadBuffer = await cryptoService.decryptDocument(
-          decryptedDocumentKey,
-          encryptedPayloadBuffer,
-        );
-        const payloadText = new TextDecoder().decode(decryptedPayloadBuffer);
-        const payload = JSON.parse(payloadText);
-        name = payload.name;
-        previewImageId = payload.previewImageId;
-        type = payload.type;
-      }
-
-      const encryptedContent: ArrayBuffer =
-        await documentRepository.loadContent(
-          user,
+      return await decryptDocumentContent(user, metadata, decryptedDocumentKey);
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      documentId: metadata.documentId,
+      name: metadata.name ?? "Encrypted Document",
+    };
+  },
+  loadSharedDocument: async (
+    owner: string,
+    metadata: DocumentMetadata,
+    chatKey: JsonWebKey,
+    recipient: string,
+  ): Promise<Document> => {
+    try {
+      const encryptedDocumentKey =
+        metadata.sharedKey ??
+        (await documentRepository.loadKey(
+          owner,
           metadata.documentId,
-          previewImageId ?? metadata.documentId,
-        );
+          recipient,
+        ));
 
-      const decryptedContent = await cryptoService.decryptDocument(
-        decryptedDocumentKey,
-        encryptedContent,
+      const docKeyStr = await cryptoService.decryptMessage(
+        encryptedDocumentKey.sharedKey,
+        chatKey,
       );
-      return {
-        content: decryptedContent,
-        documentId: metadata.documentId,
-        name: name!,
-        type: type,
-      };
+      const decryptedDocumentKey = JSON.parse(docKeyStr) as JsonWebKey;
+
+      return await decryptDocumentContent(
+        owner,
+        metadata,
+        decryptedDocumentKey,
+      );
     } catch (e) {
       console.error(e);
     }
@@ -149,4 +147,82 @@ export const documentService = {
       ),
     );
   },
+  shareDocument: async (
+    user: string,
+    documentId: string,
+    contactEmail: string,
+    userPublicKey: JsonWebKey,
+    userPrivateKey: JsonWebKey,
+    chatKey: JsonWebKey,
+  ): Promise<void> => {
+    const encryptedDocumentKey = await documentRepository.loadKey(
+      user,
+      documentId,
+    );
+    const decryptedDocumentKey = await cryptoService.decryptKey(
+      encryptedDocumentKey.sharedKey,
+      userPublicKey,
+      userPrivateKey,
+    );
+
+    const docKeyStr = JSON.stringify(decryptedDocumentKey);
+    const newEncryptedDocumentKeyString = await cryptoService.encryptMessage(
+      docKeyStr,
+      chatKey,
+    );
+
+    const newEncryptedDocumentKey = {
+      issuer: user,
+      kid: "0",
+      sharedKey: newEncryptedDocumentKeyString,
+    };
+    await documentRepository.storeSharedKey(
+      user,
+      documentId,
+      contactEmail,
+      newEncryptedDocumentKey,
+    );
+  },
 };
+
+async function decryptDocumentContent(
+  owner: string,
+  metadata: DocumentMetadata,
+  decryptedDocumentKey: JsonWebKey,
+): Promise<Document> {
+  let name = metadata.name;
+  let previewImageId = metadata.previewImageId;
+  let type = metadata.type;
+
+  if (metadata.encryptedData) {
+    const encryptedPayloadBuffer = cryptoService.base64ToArrayBuffer(
+      metadata.encryptedData,
+    );
+    const decryptedPayloadBuffer = await cryptoService.decryptDocument(
+      decryptedDocumentKey,
+      encryptedPayloadBuffer,
+    );
+    const payloadText = new TextDecoder().decode(decryptedPayloadBuffer);
+    const payload = JSON.parse(payloadText);
+    name = payload.name;
+    previewImageId = payload.previewImageId;
+    type = payload.type;
+  }
+
+  const encryptedContent: ArrayBuffer = await documentRepository.loadContent(
+    owner,
+    metadata.documentId,
+    previewImageId ?? metadata.documentId,
+  );
+
+  const decryptedContent = await cryptoService.decryptDocument(
+    decryptedDocumentKey,
+    encryptedContent,
+  );
+  return {
+    content: decryptedContent,
+    documentId: metadata.documentId,
+    name: name!,
+    type: type,
+  };
+}
