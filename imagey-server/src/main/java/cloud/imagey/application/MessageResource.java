@@ -18,6 +18,7 @@ package cloud.imagey.application;
 
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.TEXT_PLAIN;
+import static java.lang.Math.min;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -30,6 +31,8 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -37,6 +40,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -88,13 +92,16 @@ public class MessageResource {
         @PathParam("email") User receiver,
         @PathParam("contact") User sender,
         @QueryParam("sinceId") MessageId sinceId,
+        @HeaderParam("Prefer") Prefer prefer,
         @Suspended AsyncResponse asyncResponse) {
 
-        asyncResponse.setTimeout(pollingTimeoutSeconds, SECONDS);
-        asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.ok(emptyList()).build()));
+        long timeout = min(pollingTimeoutSeconds, ofNullable(prefer).map(Prefer::timeout).orElse(0L));
 
         List<Message> messages = messageRepository.fetchMessages(receiver, sender, Optional.ofNullable(sinceId));
-        if (messages.isEmpty()) {
+        if (messages.isEmpty() && timeout > 0) {
+            asyncResponse.setTimeout(timeout, SECONDS);
+            asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.ok(emptyList()).build()));
+
             Channel channel = new Channel(sender.email().address() + ":" + receiver.email().address());
             waitingRequests.computeIfAbsent(channel, c -> new ConcurrentLinkedQueue<>()).add(asyncResponse);
         } else {
@@ -105,5 +112,19 @@ public class MessageResource {
     public void sendMessage(@Observes Message message) {
         ofNullable(waitingRequests.remove(message.channel())).ifPresent(responses
             -> responses.stream().filter(not(AsyncResponse::isDone)).forEach(response -> response.resume(List.of(message))));
+    }
+
+    public record Prefer(String value) {
+        long timeout() {
+            Matcher matcher = Pattern.compile("wait=(\\d+)").matcher(value);
+            if (matcher.find()) {
+                try {
+                    return Long.parseLong(matcher.group(1));
+                } catch (NumberFormatException e) {
+                    // ignore
+                }
+            }
+            return 0;
+        }
     }
 }

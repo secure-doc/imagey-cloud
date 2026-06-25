@@ -23,6 +23,7 @@ export function usePolling(
             contactEmail,
             sinceId,
             sharedKey,
+            sinceId === undefined ? 0 : 30, // wait=0 for initial load, wait=30 for long polling
           );
 
           if (newMessages.length > 0 && mounted) {

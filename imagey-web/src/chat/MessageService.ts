@@ -8,11 +8,13 @@ export const messageService = {
     contactEmail: string,
     sinceId: string | undefined,
     sharedKey: JsonWebKey,
+    wait?: number,
   ): Promise<Message[]> => {
     const newMessages = await messageRepository.receiveMessages(
       userEmail,
       contactEmail,
       sinceId,
+      wait,
     );
 
     if (!newMessages || newMessages.length === 0) {
