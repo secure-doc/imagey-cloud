@@ -25,14 +25,20 @@ export const messageRepository = {
     receiverEmail: string,
     senderEmail: string,
     sinceId?: string,
+    wait?: number,
   ): Promise<Message[]> => {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (wait !== undefined && wait > 0) {
+      headers["Prefer"] = `wait=${wait}`;
+    }
+
     const response = await fetch(
       `/users/${receiverEmail}/contacts/${senderEmail}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
       {
         method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
+        headers,
         credentials: "same-origin",
       },
     );

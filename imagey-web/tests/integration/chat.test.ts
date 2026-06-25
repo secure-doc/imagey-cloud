@@ -63,6 +63,7 @@ test("view chat and send message", async ({ page }) => {
       "/users/mary@imagey.cloud/contacts/laura@imagey.cloud/messages",
       (r) => {
         r.query({ sinceId: "msg-123" });
+        r.headers({ Prefer: "wait=30" });
       },
     )
     .willRespondWith(200, (r) => r.jsonBody([]));

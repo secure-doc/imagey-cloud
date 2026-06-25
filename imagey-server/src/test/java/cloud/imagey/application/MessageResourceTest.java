@@ -162,6 +162,7 @@ public class MessageResourceTest {
     void receiveMessagesLongPolling() throws Exception {
         // Start long polling
         Future<List<Message>> futureMessages = receiverClient.path("contacts/sender@example.com/messages")
+            .header("Prefer", "wait=30")
             .async()
             .get(new GenericType<List<Message>>() { });
 

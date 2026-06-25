@@ -8,7 +8,7 @@ export default function AppBar() {
   const { actionIcons, backButtonVisible } = useContext(ActionBarContext);
 
   return (
-    <header className="primary-container" style={{ gridArea: "top" }}>
+    <header className="primary-container fixed" style={{ gridArea: "top" }}>
       <nav>
         {backButtonVisible ? <BackButton /> : <MenuButton />}
         <h6 className="center-align max">{getAppName()}</h6>

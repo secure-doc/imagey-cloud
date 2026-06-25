@@ -31,7 +31,14 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   }, [messages]);
 
   return (
-    <main className="flex column max">
+    <main
+      className="max"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "calc(100vh - 144px)",
+      }}
+    >
       <h5 className="center-align vertical-margin">{contactEmail}</h5>
       {messages === undefined || sharedKey === undefined ? (
         <div className="max flex center-align middle-align">
@@ -39,7 +46,15 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
         </div>
       ) : (
         <>
-          <div className="scroll max flex column padding space">
+          <div
+            className="scroll padding"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              flexGrow: 1,
+              gap: "0.5rem",
+            }}
+          >
             {messages.map((m) => (
               <div
                 key={m.id}

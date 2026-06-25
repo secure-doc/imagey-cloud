@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router";
+import { NavLink } from "react-router";
 import { useActionIcons } from "../contexts/ActionBarContext";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
 import { useAuthentication } from "../contexts/AuthenticationContext";
@@ -14,7 +14,6 @@ export default function Chats() {
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
-  const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<Contact[]>();
   const [contacts, setContacts] = useState<Contact[]>();
@@ -101,19 +100,17 @@ export default function Chats() {
             ))}
           {contacts &&
             contacts.map((contact, index) => (
-              <li
-                key={index + (contactRequests ? contactRequests.length : 0)}
-                onClick={() => navigate(`/chats/${contact.email}`)}
-                style={{ cursor: "pointer" }}
-              >
-                <button className="circle transparent">
-                  {contact.email.charAt(0).toLocaleUpperCase()}
-                </button>
-                <div className="max">
-                  <h6 className="small">{contact.email}</h6>
-                  <div>{contact.email}</div>
-                </div>
-                <label>{new Date().toLocaleDateString(i18n.language)}</label>
+              <li key={index + (contactRequests ? contactRequests.length : 0)}>
+                <NavLink to={`/chats/${contact.email}`}>
+                  <button className="circle transparent">
+                    {contact.email.charAt(0).toLocaleUpperCase()}
+                  </button>
+                  <div className="max">
+                    <h6 className="small">{contact.email}</h6>
+                    <div>{contact.email}</div>
+                  </div>
+                  <label>{new Date().toLocaleDateString(i18n.language)}</label>
+                </NavLink>
               </li>
             ))}
         </ul>
