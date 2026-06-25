@@ -59,12 +59,12 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
               <div
                 key={m.id}
                 className={`padding elevate ${
-                  m.isMine
+                  m.sender === user
                     ? "primary top-round left-round"
                     : "surface-container top-round right-round"
                 }`}
                 style={{
-                  alignSelf: m.isMine ? "flex-end" : "flex-start",
+                  alignSelf: m.sender === user ? "flex-end" : "flex-start",
                   maxWidth: "80%",
                   wordWrap: "break-word",
                 }}
