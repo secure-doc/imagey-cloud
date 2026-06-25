@@ -20,7 +20,6 @@ import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 
-
 import java.io.IOException;
 import java.util.List;
 
@@ -35,7 +34,9 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
@@ -58,6 +59,9 @@ public class DocumentResource {
     @Inject
     private DocumentRepository documentRepository;
 
+    @Context
+    private SecurityContext securityContext;
+
     @GET
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
@@ -68,19 +72,20 @@ public class DocumentResource {
     }
 
     @GET
-    @RolesAllowed("owner")
-    @Path("{documentId}/meta-data")
+    @RolesAllowed({"owner", "recipient"})
+    @Path("{documentId}")
     @Produces(APPLICATION_JSON)
     public DocumentMetadata getDocumentMetadata(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId) throws IOException {
 
-        return documentRepository.findMetadata(user, documentId);
+        Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
+        return documentRepository.findMetadata(user, documentId, callerEmail);
     }
 
     @PUT
     @RolesAllowed("owner")
-    @Path("{documentId}/meta-data")
+    @Path("{documentId}")
     @Consumes(APPLICATION_JSON)
     public Response storeDocumentMetadata(
         @PathParam("email") User user,
@@ -92,8 +97,8 @@ public class DocumentResource {
     }
 
     @GET
-    @RolesAllowed("owner")
-    @Path("{documentId}/contents/{contentId}")
+    @RolesAllowed({"owner", "recipient"})
+    @Path("{documentId}/files/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public DocumentContent getDocumentContent(
         @PathParam("email") User user,
@@ -105,7 +110,7 @@ public class DocumentResource {
 
     @PUT
     @RolesAllowed("owner")
-    @Path("{documentId}/contents/{contentId}")
+    @Path("{documentId}/files/{contentId}")
     @Consumes(APPLICATION_OCTET_STREAM)
     public Response storeDocumentContent(
         @PathParam("email") User user,
@@ -118,8 +123,8 @@ public class DocumentResource {
     }
 
     @GET
-    @RolesAllowed("owner")
-    @Path("{documentId}/encrypted-shared-keys/{share-email}")
+    @RolesAllowed({"owner", "recipient"})
+    @Path("{documentId}/keys/{share-email}")
     @Produces(APPLICATION_JSON)
     public EncryptedSharedKey getSharedKey(
         @PathParam("email") User user,
@@ -132,7 +137,7 @@ public class DocumentResource {
 
     @PUT
     @RolesAllowed("owner")
-    @Path("{documentId}/encrypted-shared-keys/{share-email}")
+    @Path("{documentId}/keys/{share-email}")
     @Consumes(APPLICATION_JSON)
     public Response storeSharedKey(
         @PathParam("email") User user,

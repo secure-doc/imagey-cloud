@@ -63,4 +63,17 @@ public class FrontendFilterTest {
         assertThat(response.getHeaderString("Cache-Control")).contains("no-cache", "no-store", "must-revalidate");
         assertThat(response.getHeaderString("Pragma")).isEqualTo("no-cache");
     }
+
+    @Test
+    public void serveRoot() throws IOException {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("/")
+            .request()
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(response.getHeaderString("Cache-Control")).contains("no-cache", "no-store", "must-revalidate");
+        assertThat(response.getHeaderString("Pragma")).isEqualTo("no-cache");
+    }
 }

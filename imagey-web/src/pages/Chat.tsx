@@ -5,6 +5,7 @@ import { contactService } from "../contact/ContactService";
 import { SendMessageForm } from "../chat/SendMessageForm";
 import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
+import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
 
 export default function Chat({ contactEmail }: { contactEmail: string }) {
   const authentication = useAuthentication();
@@ -109,7 +110,23 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
                     wordWrap: "break-word",
                   }}
                 >
-                  {m.content}
+                  {(() => {
+                    if (m.content.startsWith('{"type":"shared-document"')) {
+                      try {
+                        const payload = JSON.parse(m.content);
+                        return (
+                          <SharedDocumentMessage
+                            documentId={payload.documentId}
+                            owner={payload.owner}
+                            chatKey={sharedKey}
+                          />
+                        );
+                      } catch {
+                        return m.content;
+                      }
+                    }
+                    return m.content;
+                  })()}
                 </div>
               ))}
               <div ref={messagesEndRef} />

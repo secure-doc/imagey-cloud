@@ -44,6 +44,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.Status.Family;
 
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
@@ -325,32 +326,7 @@ public class ContactRequestTest {
 
         // When fetching a specific contact status with no file
         Response response = marysClient.path("contact-requests/laura@imagey.cloud").get();
-        // Since getContactStatus is used internally or returns 404/similar if empty,
-        // we just verify that we can call it (or something that depends on it) without crashing
-    }
-
-    private User getMary() {
-        return new User(new Email("mary@imagey.cloud"));
-    }
-
-    private User getLaura() {
-        return new User(new Email("laura@imagey.cloud"));
-    }
-
-    private File getMarysData() {
-        return new File(rootPath, getMary().email().address());
-    }
-
-    private File getLaurasData() {
-        return new File(rootPath, getLaura().email().address());
-    }
-
-    private File getMarysContactRequests() {
-        return new File(getMarysData(), "contact-requests");
-    }
-
-    private File getLaurasContactRequests() {
-        return new File(getLaurasData(), "contact-requests");
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(Family.CLIENT_ERROR);
     }
 
     @Test
@@ -382,6 +358,131 @@ public class ContactRequestTest {
         assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
         File laurasContactFolder = new File(new File(getLaurasData(), "contacts"), getMary().email().address());
         assertThat(laurasContactFolder).exists();
+
+        response = marysClient.path("contacts/laura@imagey.cloud/key").put(json(keys));
+        assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Fetch contact key when key file does not exist")
+    void testGetContactKeyWhenFileDoesNotExist() throws IOException {
+        File contactFolder = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
+        contactFolder.mkdirs(); // folder exists, but no key.json
+
+        Response response = marysClient.path("contacts/laura@imagey.cloud/key").get();
+
+        // The method getContactKey returns empty(), which mapped by ContactResource results in 404 NOT_FOUND
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Find contacts when contactsHome is a file instead of directory")
+    void testFindContactsWhenContactsHomeIsFile() throws IOException {
+        File marysContacts = new File(getMarysData(), "contacts");
+        if (marysContacts.exists()) {
+            org.apache.commons.io.FileUtils.deleteDirectory(marysContacts);
+        }
+        marysContacts.getParentFile().mkdirs();
+        marysContacts.createNewFile(); // create as a file instead of directory
+
+        List<String> contacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
+        assertThat(contacts).isEmpty();
+
+        marysContacts.delete();
+    }
+
+    @Test
+    @DisplayName("Accept a second contact")
+    public void acceptSecondContact() throws IOException {
+        // Setup laura as a contact for mary
+        File marysContacts = new File(getMarysData(), "contacts");
+        marysContacts.mkdirs();
+        File lauraFolder = new File(marysContacts, "laura@imagey.cloud");
+        lauraFolder.mkdirs();
+
+        // Now mary accepts joe
+        User joe = new User(new Email("joe@imagey.cloud"));
+        TestClient joesClient = path -> newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path(joe.email().address()).path(path)
+            .request().header("Origin", "https://secure-doc.store")
+            .cookie(new Cookie("token", tokenService.generateToken(joe, MAX_VALUE).token()));
+
+        // Joe sends request to mary
+        joesClient.path("contact-requests").post(json(of("email", "mary@imagey.cloud")));
+
+        // Mary accepts joe
+        Response contactRequestAccepted = marysClient.path("contacts/joe@imagey.cloud").put(json("""
+            {
+                "userKey": {
+                    "issuer": "mary@imagey.cloud",
+                    "kid": "0",
+                    "sharedKey": "public-shared-key"
+                },
+                "contactKey": {
+                    "issuer": "mary@imagey.cloud",
+                    "kid": "0",
+                    "sharedKey": "public-shared-key"
+                }
+            }
+            """));
+        assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+    }
+
+    @Test
+    @DisplayName("Cannot invite a user from a disallowed domain")
+    public void inviteDisallowedDomain() throws IOException {
+        // use an unknown origin
+        Response requestResponse = marysClient.path("contact-requests")
+            .header("Origin", "https://evil.com")
+            .post(json(of("email", "joe@imagey.cloud")));
+
+        // Allowed domains are defined in application.properties or DomainName.
+        // Typically imagey.cloud is allowed. If evil.com is rejected, we expect a 4xx error.
+        // Actually UserService / ContactService throws IllegalArgumentException or returns false.
+        // Let's assert it's a BAD_REQUEST or whatever maps from IllegalArgumentException
+        assertThat(requestResponse.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
+    }
+
+    @Test
+    @DisplayName("Cannot reissue key for a user who is not a contact")
+    public void interactWithNonContact() throws IOException {
+        // Mary tries to reissue keys for Laura, but Laura is not a contact yet
+        ContactKeys keys = new ContactKeys(
+            new EncryptedSharedKey("m", "1", "k1"),
+            new EncryptedSharedKey("l", "1", "k2")
+        );
+
+        // the endpoint /contacts/{email}/key handles reissue
+        Response response = marysClient.path("contacts/laura@imagey.cloud/key").put(json(keys));
+
+        // Since she's not a contact, ContactService.reissueKey throws Exception or returns false.
+        // The resource maps it to 400 or 404 or 403.
+        assertThat(response.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
+    }
+
+    private User getMary() {
+        return new User(new Email("mary@imagey.cloud"));
+    }
+
+    private User getLaura() {
+        return new User(new Email("laura@imagey.cloud"));
+    }
+
+    private File getMarysData() {
+        return new File(rootPath, getMary().email().address());
+    }
+
+    private File getLaurasData() {
+        return new File(rootPath, getLaura().email().address());
+    }
+
+    private File getMarysContactRequests() {
+        return new File(getMarysData(), "contact-requests");
+    }
+
+    private File getLaurasContactRequests() {
+        return new File(getLaurasData(), "contact-requests");
     }
 
     public interface TestClient {

@@ -27,6 +27,7 @@ import static jakarta.ws.rs.Priorities.AUTHENTICATION;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -37,6 +38,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.Provider;
 
@@ -44,6 +46,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import cloud.imagey.domain.chat.ContactRepository;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
@@ -62,6 +66,8 @@ public class RolesFilter implements ContainerRequestFilter {
     @Inject
     private ContactRepository contactRepository;
     @Inject
+    private DocumentRepository documentRepository;
+    @Inject
     private HttpServletRequest request;
 
     @Override
@@ -72,7 +78,19 @@ public class RolesFilter implements ContainerRequestFilter {
     }
 
     private User extractUser(UriInfo uriInfo) {
-        return new User(new Email(uriInfo.getPathSegments().get(0).getPath()));
+        List<PathSegment> segments = uriInfo.getPathSegments();
+        if (segments.isEmpty()) {
+            return null;
+        }
+        return new User(new Email(segments.get(0).getPath()));
+    }
+
+    private Optional<DocumentId> extractDocumentId(UriInfo uriInfo) {
+        List<PathSegment> segments = uriInfo.getPathSegments();
+        if (segments.size() > 2 && segments.get(1).getPath().equals("documents")) {
+            return of(new DocumentId(segments.get(2).getPath()));
+        }
+        return empty();
     }
 
     private void setupPrincipal(ContainerRequestContext requestContext, Optional<DecodedToken> decodedToken) {
@@ -86,22 +104,25 @@ public class RolesFilter implements ContainerRequestFilter {
         User user = extractUser(requestContext.getUriInfo());
         String principalName = decodedToken.get().jwt().getSubject();
         requestContext.setSecurityContext(forPrincipal(principalName,
-            (role) -> getRole(new User(new Email(principalName)), user).map(role::equals).isPresent()));
+            (role) -> hasRole(new User(new Email(principalName)), user, requestContext.getUriInfo(), role)));
         Supplier<Principal> principalSupplier = requestContext.getSecurityContext()::getUserPrincipal;
         request.setAttribute(Principal.class.getName() + ".supplier", principalSupplier);
     }
 
-    private Optional<String> getRole(User currentPrincipal, User contextUser) {
-        if (currentPrincipal.equals(contextUser)) {
-            return of("owner");
-        } else if (contactRepository.isContact(contextUser, currentPrincipal)) {
-            return of("contact");
-        } else if (contactRepository.getContactStatus(contextUser, currentPrincipal)
-            .filter(status -> EnumSet.of(INVITATION_SENT, INVITATION_RECEIVED).contains(status))
-            .isPresent()) {
-            return of("contact-request");
-        } else {
-            return empty();
+    private boolean hasRole(User currentPrincipal, User contextUser, UriInfo uriInfo, String role) {
+        if ("owner".equals(role)) {
+            return currentPrincipal.equals(contextUser);
+        } else if ("contact".equals(role)) {
+            return contactRepository.isContact(contextUser, currentPrincipal);
+        } else if ("contact-request".equals(role)) {
+            return contactRepository.getContactStatus(contextUser, currentPrincipal)
+                .filter(status -> EnumSet.of(INVITATION_SENT, INVITATION_RECEIVED).contains(status))
+                .isPresent();
+        } else if ("recipient".equals(role)) {
+            return extractDocumentId(uriInfo)
+                .map(docId -> documentRepository.hasSharedKey(contextUser, docId, currentPrincipal.email()))
+                .orElse(false);
         }
+        return false;
     }
 }

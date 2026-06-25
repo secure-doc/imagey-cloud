@@ -57,6 +57,7 @@ import org.junit.jupiter.api.Test;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
 
+import cloud.imagey.domain.authentication.ChallengeService;
 import cloud.imagey.domain.authentication.ChallengeService.ChallengeResponse;
 import cloud.imagey.domain.authentication.ChallengeSignature;
 
@@ -69,6 +70,9 @@ public class ChallengeResourceTest {
     @Inject
     @ConfigProperty(name = "root.path")
     private String rootPath;
+
+    @Inject
+    private ChallengeService challengeService;
 
     private KeyPair clientKeyPair;
     private String clientJwkString;
@@ -248,6 +252,56 @@ public class ChallengeResourceTest {
             .header("Origin", "https://secure-doc.store")
             .post(json(new ChallengeSignature(signatureBase64)))) {
             assertThat(verifyResponse.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+        }
+    }
+
+    @Test
+    @DisplayName("VerifyChallenge fails for expired challenge")
+    void verifyChallengeExpired() throws Exception {
+        System.setProperty("challenge.expiration.minutes", "-1");
+        try {
+            ChallengeResponse challenge;
+            try (Response createResponse = newClient()
+                .target("http://localhost:" + config.getHttpPort())
+                .path("users/mary@imagey.cloud/devices/known-device/challenges")
+                .request()
+                .header("Origin", "https://secure-doc.store")
+                .post(json(""))) {
+                assertThat(createResponse.getStatus()).isEqualTo(CREATED.getStatusCode());
+                challenge = createResponse.readEntity(ChallengeResponse.class);
+            }
+
+            // Sign it with valid signature
+            ECKey serverEphemeralKey = ECKey.parse(challenge.ephemeralPublicKey());
+            PublicKey serverPubKey = serverEphemeralKey.toPublicKey();
+            KeyAgreement ka = KeyAgreement.getInstance("ECDH");
+            ka.init(clientKeyPair.getPrivate());
+            ka.doPhase(serverPubKey, true);
+            byte[] sharedSecret = ka.generateSecret();
+            byte[] aesKeyBytes = Arrays.copyOf(sharedSecret, 32);
+            SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
+            byte[] iv = new byte[12];
+            new SecureRandom().nextBytes(iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            GCMParameterSpec spec = new GCMParameterSpec(128, iv);
+            cipher.init(Cipher.ENCRYPT_MODE, aesKey, spec);
+            byte[] nonceBytes = challenge.nonce().getBytes(StandardCharsets.UTF_8);
+            byte[] ciphertext = cipher.doFinal(nonceBytes);
+            byte[] combined = new byte[iv.length + ciphertext.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+            String signatureBase64 = Base64.getEncoder().encodeToString(combined);
+
+            try (Response verifyResponse = newClient()
+                .target("http://localhost:" + config.getHttpPort())
+                .path("users/mary@imagey.cloud/devices/known-device/authentications")
+                .request()
+                .header("Origin", "https://secure-doc.store")
+                .post(json(new ChallengeSignature(signatureBase64)))) {
+                assertThat(verifyResponse.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+            }
+        } finally {
+            System.clearProperty("challenge.expiration.minutes");
         }
     }
 

@@ -25,6 +25,7 @@ export default function ImageComponent({
         alt={image.name}
         loading="lazy"
         className={className}
+        style={{ objectFit: "cover" }}
       />
     );
   } else {

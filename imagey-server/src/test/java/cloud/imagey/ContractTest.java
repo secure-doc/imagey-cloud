@@ -94,10 +94,61 @@ public class ContractTest {
         context.verifyInteraction();
     }
 
+    void joeExists() throws IOException {
+        File joesData = new File(rootPath, "joe@imagey.cloud");
+        joesData.mkdirs();
+        File contacts = new File(joesData, "contacts");
+        contacts.mkdirs();
+
+        File devices = new File(joesData, "devices");
+        devices.mkdirs();
+
+        File device = new File(devices, "2d9e9f58-2f39-408a-b3d7-e66e6a431b45");
+        device.mkdirs();
+
+        File joesPublicKeys = new File(joesData, "public-keys");
+        joesPublicKeys.mkdirs();
+        File joesPublicKey = new File(joesPublicKeys, "0.json");
+        copyURLToFile(ContractTest.class.getResource("/data/mary@imagey.cloud/public-keys/0.json"), joesPublicKey);
+
+        File publicKeys = new File(device, "public-keys");
+        publicKeys.mkdirs();
+        File publicKey = new File(publicKeys, "0.json");
+        copyURLToFile(ContractTest.class.getResource(
+            "/data/mary@imagey.cloud/devices/1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c/public-keys/0.json"),
+            publicKey);
+
+        File privateKeys = new File(device, "private-keys");
+        privateKeys.mkdirs();
+        File privateKey = new File(privateKeys, "0.json");
+        copyURLToFile(ContractTest.class.getResource(
+            "/data/mary@imagey.cloud/devices/1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c/private-keys/0.json"),
+            privateKey);
+    }
+
+    @State("joe is logged in")
+    void joeIsLoggedIn() throws URISyntaxException, IOException {
+        tokenState = VALID_TOKEN;
+        user = null;
+
+        joeExists();
+
+        // As the frontend tests map most legacy states to 'joe is logged in',
+        // we must set up the data for Mary and Alice as well.
+        maryHasUploadedDocument();
+        maryHasChatWithAlice();
+        aliceExists();
+        aliceHasChatWithMary();
+        aRequestToReceiveMessagesWithSharedDoc();
+        aRequestToLoadSharedKeyAsRecipient();
+        setupMarysSecondDevice();
+    }
+
     @State("User is unauthenticated")
     void unauthenticated() throws URISyntaxException, IOException {
         user = null;
         tokenState = NO_TOKEN;
+        joeExists();
     }
 
     @State("marys second device registered")
@@ -105,6 +156,10 @@ public class ContractTest {
         tokenState = VALID_TOKEN;
         user = new User(new Email("mary@imagey.cloud"));
 
+        setupMarysSecondDevice();
+    }
+
+    private void setupMarysSecondDevice() throws IOException {
         File marysData = new File(rootPath, "mary@imagey.cloud");
 
         File marysInvitationsIncoming = new File(new File(marysData, "invitations"), "incoming");
@@ -248,17 +303,87 @@ public class ContractTest {
         deleteQuietly(getMarysContactRequestOfLaura());
     }
 
+    private File getAlicesData() {
+        return new File(rootPath, "alice@imagey.cloud");
+    }
+
+    @State("Alice exists")
+    void aliceExists() throws IOException {
+        File aliceDevices = new File(getAlicesData(), "devices");
+        File device = new File(aliceDevices, "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c");
+        File privateKeys = new File(device, "private-keys");
+        privateKeys.mkdirs();
+        writeStringToFile(new File(privateKeys, "0.json"),
+            "{\"kid\":\"0\",\"encryptingDeviceId\":\"1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c\",\"key\":\""
+            + "Xn3EJRWvHA+Y+2wDyoM/ICeuPIHL8T2t3KXBQBfmw3ZUt60ROTOLWU6iXwlDWRTDi/"
+            + "kYXj29cY7lHE3yse6mneYSZLipfVxi5JYyi/Ocqx3bc/8fjuhKs1RnMMyvKJa2XoVf"
+            + "5G02gHdOvt4Eoh13nNfEXbzbqyrXybZPxOiKw7ozyMU8+7PIHSLrPtA9cprS1Mju8a"
+            + "us1FEtdD9hFXWFJ2nz8d3PhLu+sRdmRafIZNksou8hlcKxBuS+aEvQ02KXPcGP5muG"
+            + "PHBYRLHbq+Ilw5RGF1Id2Z8HFdENPXijLjzy6V/zSsYrUfIxdT0p6sE=\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        File publicKeys = new File(device, "public-keys");
+        publicKeys.mkdirs();
+        writeStringToFile(new File(publicKeys, "0.json"),
+            "{\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\",\"x\":\"O1aGIpmfLo"
+            + "-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4\",\"y\":\"ySJAF_0XeBWOrL-jboQvxy644ViT"
+            + "d0FDgp-pSCP3ONU\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @State("Alice has a chat with mary")
+    void aliceHasChatWithMary() throws IOException {
+        File aliceContacts = new File(getAlicesData(), "contacts");
+        File maryChat = new File(aliceContacts, "mary@imagey.cloud");
+        maryChat.mkdirs();
+        writeStringToFile(new File(maryChat, "key.json"),
+            "{\"issuer\":\"alice@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
+            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
+            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
+        messagesDir.mkdirs();
+        File messageFile = new File(messagesDir, "msg-123.json");
+        writeStringToFile(messageFile,
+            "{\"id\":\"msg-123\",\"sender\":\"mary@imagey.cloud\",\"channel\":\"mary@imagey.cloud:alice@imagey.cloud\","
+            + "\"content\":\"HW8URzE9G7o/muIVmhdpPBTsmui7mlYyDmx5+d2l28tcQbJV2FXPf3e/jgZYP2Qpj70kqN7H\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @State("Alice has received a message from Mary with shared doc")
+    void aRequestToReceiveMessagesWithSharedDoc() throws IOException {
+        File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
+        messagesDir.mkdirs();
+        File messageFile = new File(messagesDir, "msg-999.json");
+        writeStringToFile(messageFile,
+            "{\"id\":\"msg-999\",\"sender\":\"mary@imagey.cloud\",\"channel\":\"mary@imagey.cloud:alice@imagey.cloud\","
+            + "\"content\":\"aeCDPI47cicIa11xsEcrIoJ61HTdQzttLFprdqPYP1eayYPs8/65ktZ0DxZgs6+MSOxeCpqTZGFerRWze9Az"
+            + "CjaKpBJGq12foAZlbFfp56WzzAMeFg8JpT8bD/AYh6VBEa77Ipl2BLSpE5Jlszr45nDLQTzg8J3pb3EQiD8TpcndgU1Zyuc=\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @State("Mary has shared a document with alice")
+    void aRequestToLoadSharedKeyAsRecipient() throws IOException, URISyntaxException {
+        maryHasUploadedDocument(); // ensures bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3 exists
+        File sharedKeyDir = new File(getMarysDocuments(), "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/alice@imagey.cloud");
+        sharedKeyDir.mkdirs();
+        File sharedKeyFile = new File(sharedKeyDir, "encrypted-shared.key");
+        writeStringToFile(sharedKeyFile,
+            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"lezn+6YMgHCKigQhu4DcXQMJiyF9z"
+            + "RVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07"
+            + "geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR"
+            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
+    }
+
 
 
     private Optional<Token> generateToken(HttpRequest request) {
-        Optional<User> extractedUser = extractUser(request);
         if (tokenState == NO_TOKEN) {
-            if (extractedUser.filter(this::userExists).isPresent()) {
-                tokenState = VALID_TOKEN;
-            } else {
-                return empty();
-            }
+            return empty();
         }
+        Optional<User> extractedUser = extractUser(request);
         long validity = tokenState == VALID_TOKEN ? ONE_DAY : -1;
         return extractedUser.map(u -> tokenService.generateToken(u, validity));
     }
