@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+import static jakarta.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
@@ -24,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.UUID;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -42,6 +42,10 @@ public class MessageRepository extends AbstractFileRepository {
     private String rootPath;
 
     Message persist(User receiver, User sender, MessageContent encryptedContent) throws IOException {
+        MessageId id = new MessageId();
+        Message message = new Message(sender, encryptedContent);
+        String jsonContent = create().toJson(message);
+
         File receiverHome = new File(rootPath, receiver.email().address());
         if (!receiverHome.exists()) {
             mkdir(receiverHome);
@@ -54,14 +58,27 @@ public class MessageRepository extends AbstractFileRepository {
         if (!senderFolder.exists()) {
             mkdir(senderFolder);
         }
-        String id = System.currentTimeMillis() + "-" + UUID.randomUUID().toString();
-        File messageFile = new File(senderFolder, id + ".msg");
-        write(messageFile, encryptedContent.value(), UTF_8, false);
-        return new Message(
-            new MessageId(id),
-            sender,
-            new Channel(sender.email().address() + ":" + receiver.email().address()),
-            encryptedContent);
+        File messageFile = new File(senderFolder, id.value() + ".json");
+        write(messageFile, jsonContent, UTF_8, false);
+
+        File senderHome = new File(rootPath, sender.email().address());
+        if (!senderHome.exists()) {
+            mkdir(senderHome);
+        }
+        File senderMessagesHome = new File(senderHome, "messages");
+        if (!senderMessagesHome.exists()) {
+            mkdir(senderMessagesHome);
+        }
+        File receiverFolder = new File(senderMessagesHome, receiver.email().address());
+        if (!receiverFolder.exists()) {
+            mkdir(receiverFolder);
+        }
+        File senderMessageFile = new File(receiverFolder, id.value() + ".json");
+        write(senderMessageFile, jsonContent, UTF_8, false);
+
+        return new Message(sender, encryptedContent)
+            .withId(id)
+            .inChannel(new Channel(sender.email().address() + ":" + receiver.email().address()));
     }
 
     public List<Message> fetchMessages(User receiver, User sender, java.util.Optional<MessageId> sinceId) {
@@ -71,17 +88,13 @@ public class MessageRepository extends AbstractFileRepository {
 
         List<Message> messages = new ArrayList<>();
         if (senderFolder.exists() && senderFolder.isDirectory()) {
-            File[] files = senderFolder.listFiles((dir, name) -> name.endsWith(".msg"));
+            File[] files = senderFolder.listFiles((dir, name) -> name.endsWith(".json"));
             Arrays.sort(files, Comparator.comparing(File::getName));
             for (File file : files) {
-                String id = file.getName().replace(".msg", "");
+                String id = file.getName().replace(".json", "");
                 if (sinceId.isEmpty() || new MessageId(id).compareTo(sinceId.get()) > 0) {
-                    String content = readFileToString(file);
-                    messages.add(new Message(
-                        new MessageId(id),
-                        sender,
-                        new Channel(sender.email().address() + ":" + receiver.email().address()),
-                        new MessageContent(content)));
+                    Message message = create().fromJson(readFileToString(file), Message.class);
+                    messages.add(message.withId(new MessageId(id)));
                 }
             }
         }

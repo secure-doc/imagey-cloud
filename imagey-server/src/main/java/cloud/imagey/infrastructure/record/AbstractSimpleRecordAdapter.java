@@ -67,6 +67,9 @@ public class AbstractSimpleRecordAdapter<R extends Record, S> implements JsonbAd
 
     @Override
     public R adaptFromJson(S object) throws Exception {
+        if (object == null) {
+            return null;
+        }
         Object result = object;
         for (Constructor<?> constructor: recordConstructors) {
             result = constructor.newInstance(result);

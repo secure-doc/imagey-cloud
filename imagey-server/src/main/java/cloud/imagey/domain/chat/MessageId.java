@@ -16,6 +16,8 @@
  */
 package cloud.imagey.domain.chat;
 
+import java.util.UUID;
+
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
 import cloud.imagey.domain.chat.MessageId.Adapter;
@@ -23,6 +25,10 @@ import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
 @JsonbTypeAdapter(Adapter.class)
 public record MessageId(String value) implements Comparable<MessageId> {
+
+    protected MessageId() {
+        this(System.currentTimeMillis() + "-" + UUID.randomUUID().toString());
+    }
 
     @Override
     public int compareTo(MessageId o) {

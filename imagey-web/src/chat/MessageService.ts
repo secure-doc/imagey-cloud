@@ -24,8 +24,9 @@ export const messageService = {
     return await Promise.all(
       newMessages.map(async (m) => ({
         id: m.id,
+        sender: m.sender,
         content: await cryptoService.decryptMessage(m.content, sharedKey),
-        isMine: false,
+        isMine: m.sender === userEmail,
       })),
     );
   },
@@ -48,8 +49,8 @@ export const messageService = {
 
     return {
       id: Date.now().toString() + "-" + Math.random().toString(),
+      sender: userEmail,
       content: content,
-      isMine: true,
     };
   },
 };

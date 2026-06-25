@@ -16,9 +16,13 @@
  */
 package cloud.imagey.domain.chat;
 
+import static java.util.Optional.ofNullable;
+
+import jakarta.json.bind.annotation.JsonbCreator;
 import jakarta.json.bind.annotation.JsonbProperty;
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 public record Message(
@@ -26,4 +30,29 @@ public record Message(
     @JsonbProperty("sender") @JsonbTypeAdapter(User.Adapter.class) User sender,
     @JsonbProperty("channel") @JsonbTypeAdapter(Channel.Adapter.class) Channel channel,
     @JsonbProperty("content") @JsonbTypeAdapter(MessageContent.Adapter.class) MessageContent content) {
+
+    @JsonbCreator
+    public Message(
+        @JsonbProperty("id") String messageId,
+        @JsonbProperty("sender") String sender,
+        @JsonbProperty("channel") String channel,
+        @JsonbProperty("content") String content) {
+
+        this(ofNullable(messageId).map(MessageId::new).orElse(null),
+            new User(new Email(sender)),
+            ofNullable(channel).map(Channel::new).orElse(null),
+            new MessageContent(content));
+    }
+
+    protected Message(User sender, MessageContent content) {
+        this(null, sender, null, content);
+    }
+
+    public Message withId(MessageId messageId) {
+        return new Message(messageId, sender, channel, content);
+    }
+
+    public Message inChannel(Channel messageChannel) {
+        return new Message(id, sender, messageChannel, content);
+    }
 }
