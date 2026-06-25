@@ -68,7 +68,7 @@ public class DocumentResource {
     }
 
     @GET
-    @RolesAllowed("owner")
+    @RolesAllowed({"owner", "contact"})
     @Path("{documentId}/meta-data")
     @Produces(APPLICATION_JSON)
     public DocumentMetadata getDocumentMetadata(
@@ -92,7 +92,7 @@ public class DocumentResource {
     }
 
     @GET
-    @RolesAllowed("owner")
+    @RolesAllowed({"owner", "contact"})
     @Path("{documentId}/contents/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public DocumentContent getDocumentContent(
@@ -118,7 +118,7 @@ public class DocumentResource {
     }
 
     @GET
-    @RolesAllowed("owner")
+    @RolesAllowed({"owner", "contact"})
     @Path("{documentId}/encrypted-shared-keys/{share-email}")
     @Produces(APPLICATION_JSON)
     public EncryptedSharedKey getSharedKey(

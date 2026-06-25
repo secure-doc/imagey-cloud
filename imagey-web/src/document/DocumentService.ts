@@ -149,4 +149,38 @@ export const documentService = {
       ),
     );
   },
+  shareDocument: async (
+    user: string,
+    documentId: string,
+    contactEmail: string,
+    userPublicKey: JsonWebKey,
+    userPrivateKey: JsonWebKey,
+    contactPublicKey: JsonWebKey,
+  ): Promise<void> => {
+    const encryptedDocumentKey = await documentRepository.loadKey(
+      user,
+      documentId,
+    );
+    const decryptedDocumentKey = await cryptoService.decryptKey(
+      encryptedDocumentKey.sharedKey,
+      userPublicKey,
+      userPrivateKey,
+    );
+    const newEncryptedDocumentKeyString = await cryptoService.encryptKey(
+      decryptedDocumentKey,
+      contactPublicKey,
+      userPrivateKey,
+    );
+    const newEncryptedDocumentKey = {
+      issuer: user,
+      kid: "0",
+      sharedKey: newEncryptedDocumentKeyString,
+    };
+    await documentRepository.storeSharedKey(
+      user,
+      documentId,
+      contactEmail,
+      newEncryptedDocumentKey,
+    );
+  },
 };
