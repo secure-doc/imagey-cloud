@@ -16,16 +16,17 @@
  */
 package cloud.imagey;
 
-import static java.lang.Integer.MAX_VALUE;
-import static java.util.Map.of;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
+import static java.util.Map.entry;
+import static java.util.Map.of;
 import static jakarta.ws.rs.core.Response.Status.CONFLICT;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static java.lang.Integer.MAX_VALUE;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
+import java.util.Map;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.client.Invocation.Builder;
@@ -71,7 +73,6 @@ public class ContactRequestTest {
     private Cookie laurasCookie;
     private TestClient marysClient;
     private TestClient laurasClient;
-
 
     @BeforeEach
     void initializeState() throws URISyntaxException, IOException {
@@ -153,7 +154,7 @@ public class ContactRequestTest {
         // mary cannot accept the request
         Response contactRequestNotAccepted = marysClient.path("contacts/laura@imagey.cloud").put(json("""
                 {
-                    "userKey": {"key": "public-shared-key"}, "contactKey": {"key": "contact-shared-key"}
+                    "key": "public-shared-key", "invitationKey": "contact-shared-key"
                 }
             """));
         assertThat(contactRequestNotAccepted.getStatus()).isEqualTo(CONFLICT.getStatusCode());
@@ -181,10 +182,11 @@ public class ContactRequestTest {
 
         // Verify getContactKeys endpoint
         Response keysResponse = laurasClient.path("contacts/mary@imagey.cloud/key").get();
-        assertThat(keysResponse.getStatus()).isEqualTo(OK.getStatusCode());
+        Map<String, Object> key = keysResponse.readEntity(new GenericType<Map<String, Object>>() { });
+        assertThat(key).containsExactly(entry("key", "public-shared-key"));
 
         // Verify updateContactKey endpoint
-        Response updateKeyResponse = laurasClient.path("contacts/mary@imagey.cloud/key").put(json(of("key", "new-public-shared-key")));
+        Response updateKeyResponse = marysClient.path("contacts/laura@imagey.cloud/key").put(json("{\"key\":\"new-public-shared-key\"}"));
         assertThat(updateKeyResponse.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
 
         File marysContactRequestsFolder = getMarysContactRequests();
