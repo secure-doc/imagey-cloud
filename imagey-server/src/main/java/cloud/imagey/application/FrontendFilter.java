@@ -43,8 +43,16 @@ public class FrontendFilter extends HttpFilter {
         String path = request.getRequestURI().substring(request.getContextPath().length());
 
         if (isBackendOrStatic(path)) {
+            if (path.equals("/") || path.equals("/index.html")) {
+                response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                response.setHeader("Pragma", "no-cache");
+                response.setDateHeader("Expires", 0);
+            }
             chain.doFilter(request, response);
         } else {
+            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            response.setHeader("Pragma", "no-cache");
+            response.setDateHeader("Expires", 0);
             request.getRequestDispatcher("/index.html").forward(request, response);
         }
     }
