@@ -9,6 +9,9 @@ import { Contact } from "../contact/Contact";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
+import PushNotificationPrompt from "../device/PushNotificationPrompt";
+import { pushSubscriptionService } from "../device/PushSubscriptionService";
+import { deviceRepository } from "../device/DeviceRepository";
 
 export default function Chats() {
   const { i18n } = useTranslation();
@@ -16,6 +19,7 @@ export default function Chats() {
   const user = authentication.user;
   const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPushPromptOpen, setIsPushPromptOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<Contact[]>();
   const [contacts, setContacts] = useState<Contact[]>();
 
@@ -49,6 +53,9 @@ export default function Chats() {
       try {
         await contactRepository.sendContactRequest(user, email);
         setIsDialogOpen(false);
+        if (await pushSubscriptionService.isPushSupported()) {
+          setIsPushPromptOpen(true);
+        }
       } catch (error) {
         console.error("Failed to send contact request", error);
       }
@@ -74,7 +81,7 @@ export default function Chats() {
                   <AcceptInvitationButton
                     user={user}
                     contact={contactRequest.email}
-                    onAccepted={() => {
+                    onAccepted={async () => {
                       setContactRequests((contactRequests) =>
                         contactRequests?.filter(
                           (request) => request.email !== contactRequest.email,
@@ -83,6 +90,9 @@ export default function Chats() {
                       setContacts((contacts) =>
                         contacts?.concat(contactRequest),
                       );
+                      if (await pushSubscriptionService.isPushSupported()) {
+                        setIsPushPromptOpen(true);
+                      }
                     }}
                   />
                   <DeclineInvitationButton
@@ -125,6 +135,20 @@ export default function Chats() {
         <ContactRequestDialog
           onConfirm={handleContactRequest}
           onCancel={() => setIsDialogOpen(false)}
+        />
+      )}
+      {isPushPromptOpen && (
+        <PushNotificationPrompt
+          onConfirm={() => {
+            setIsPushPromptOpen(false);
+            if (user) {
+              const deviceId = deviceRepository.loadDeviceId(user);
+              if (deviceId) {
+                pushSubscriptionService.setupPushSubscription(user, deviceId);
+              }
+            }
+          }}
+          onCancel={() => setIsPushPromptOpen(false)}
         />
       )}
     </main>

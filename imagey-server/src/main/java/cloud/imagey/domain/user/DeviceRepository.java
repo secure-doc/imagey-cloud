@@ -37,6 +37,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.push.PushSubscription;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
@@ -105,6 +106,29 @@ public class DeviceRepository extends AbstractFileRepository {
             LOG.info("Recovery key loaded");
             return recoveryKey;
         }
+    }
+
+    public void storePushSubscription(User user, DeviceId deviceId, PushSubscription subscription) throws IOException {
+        File deviceDirectory = new File(new File(getUserHome(user), "devices"), deviceId.id());
+        String json = create().toJson(subscription);
+        createNewFileWithContent(deviceDirectory, "push-subscription.json", json);
+    }
+
+    public Optional<PushSubscription> loadPushSubscription(User user, DeviceId deviceId) {
+        File subscriptionFile = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "push-subscription.json");
+        if (!subscriptionFile.exists()) {
+            return empty();
+        } else {
+            return of(create().fromJson(readFileToString(subscriptionFile), PushSubscription.class));
+        }
+    }
+
+    public List<PushSubscription> loadPushSubscriptions(User user) {
+        return loadDevices(user).stream()
+                .map(deviceId -> loadPushSubscription(user, deviceId))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .toList();
     }
 
     private File getUserHome(User user) {

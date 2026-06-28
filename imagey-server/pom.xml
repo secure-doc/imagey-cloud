@@ -70,6 +70,11 @@
       <artifactId>jakarta.validation-api</artifactId>
       <version>3.1.1</version>
     </dependency>
+    <dependency>
+      <groupId>nl.martijndwars</groupId>
+      <artifactId>web-push</artifactId>
+      <version>5.1.1</version>
+    </dependency>
 
     <dependency>
       <groupId>org.junit.jupiter</groupId>
