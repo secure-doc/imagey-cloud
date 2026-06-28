@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="TRACE">
+  <Properties>
+    <Property name="name">imagey-server</Property>
+  </Properties>
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="[%d{HH:mm:ss.SSS}][%highlight{%-5level}][%15.15t][%30.30logger] %msg%n"/>
+    </Console>
+    <RollingFile name="DailyLogFile" fileName="logs/${name}.log"
+                 filePattern="logs/${name}-%d{yyyy-MM-dd}-%i.log.gz">
+      <PatternLayout pattern="[%d{HH:mm:ss.SSS}][%-5level][%15.15t][%30.30logger] %msg%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy />
+        <SizeBasedTriggeringPolicy size="50 MB"/>
+      </Policies>
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <!-- Unser eigener Code auf DEBUG -->
+    <Logger name="cloud.imagey" level="DEBUG" />
+    
+    <!-- Das JAX-RS / Web-Framework auf DEBUG (hier passiert vermutlich der Fehler) -->
+    <Logger name="org.apache.cxf" level="DEBUG" />
+    <Logger name="org.apache.meecrowave" level="DEBUG" />
+
+    <Root level="INFO">
+      <!--<AppenderRef ref="Console"/>-->
+      <AppenderRef ref="DailyLogFile"/>
+    </Root>
+  </Loggers>
+</Configuration>
