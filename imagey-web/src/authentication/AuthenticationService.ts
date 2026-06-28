@@ -5,9 +5,13 @@ import { deviceRepository } from "../device/DeviceRepository";
 import { authenticationRepository } from "./AuthenticationRepository";
 import { cryptoService } from "./CryptoService";
 
+import { ResponseError } from "./ResponseError";
+
 export enum RegistrationResult {
   RegistrationStarted,
   AuthenticationStarted,
+  ServiceUnavailable,
+  Error,
 }
 
 export const authenticationService = {
@@ -47,9 +51,12 @@ export const authenticationService = {
         ? Promise.resolve(RegistrationResult.RegistrationStarted)
         : response.status === 202
           ? Promise.resolve(RegistrationResult.AuthenticationStarted)
-          : Promise.reject();
-    } catch {
-      return Promise.reject();
+          : Promise.reject(RegistrationResult.Error);
+    } catch (e) {
+      if (e === ResponseError.SERVICE_UNAVAILABLE) {
+        return Promise.resolve(RegistrationResult.ServiceUnavailable);
+      }
+      return Promise.resolve(RegistrationResult.Error);
     }
   },
   requestChallenge: async (

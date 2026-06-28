@@ -214,7 +214,9 @@ async function resolve(response: Response): Promise<Response> {
       ? Promise.reject(ResponseError.UNAUTHORIZED)
       : response.status === 403
         ? Promise.reject(ResponseError.FORBIDDEN)
-        : response.status == 404
+        : response.status === 404
           ? Promise.reject(ResponseError.NOT_FOUND)
-          : Promise.reject(ResponseError.UNKNOWN);
+          : response.status === 503
+            ? Promise.reject(ResponseError.SERVICE_UNAVAILABLE)
+            : Promise.reject(ResponseError.UNKNOWN);
 }

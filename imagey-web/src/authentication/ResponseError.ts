@@ -2,5 +2,6 @@ export enum ResponseError {
   UNAUTHORIZED,
   FORBIDDEN,
   NOT_FOUND,
+  SERVICE_UNAVAILABLE,
   UNKNOWN,
 }
