@@ -35,7 +35,7 @@ public class EmailExceptionMapper implements ExceptionMapper<EmailException> {
 
     @Override
     public Response toResponse(EmailException exception) {
-        LOG.warn("Mail server is currently unavailable.", exception);
+        LOG.error("Mail server is currently unavailable.", exception);
         return Response.status(TEMPORARILY_NOT_AVAILABLE).build();
     }
 }
