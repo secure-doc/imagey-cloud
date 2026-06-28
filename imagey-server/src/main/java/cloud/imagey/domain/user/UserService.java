@@ -26,6 +26,8 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.ValidationException;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
@@ -41,6 +43,7 @@ import cloud.imagey.domain.token.TokenService;
 @ApplicationScoped
 public class UserService {
 
+    private static final Logger LOG = LogManager.getLogger(UserService.class);
     @Inject
     private TokenService tokenService;
     @Inject
@@ -68,6 +71,7 @@ public class UserService {
     private EmailBody registrationBody;
 
     public AuthenticationStatus startAuthenticationProcess(User user) {
+        LOG.info("authentiation starting...");
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL: " + domain.value());
@@ -75,6 +79,7 @@ public class UserService {
 
         Token token = tokenService.generateToken(user, ONE_DAY);
         if (userRepository.exists(user)) {
+            LOG.info("User exists");
             String link = domain.value() + "/authentications/" + token.token();
             mailService.send(user.email(), new EmailTemplate(
                 new Email("login@" + domain.getHost()),
@@ -83,6 +88,7 @@ public class UserService {
             ).formatted(domain.getAppName(), link));
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
+            LOG.info("User does not exist, starting registration...");
             String link = domain.value() + "/registrations/" + token.token();
             mailService.send(user.email(), new EmailTemplate(
                 new Email("verification@" + domain.getHost()),
