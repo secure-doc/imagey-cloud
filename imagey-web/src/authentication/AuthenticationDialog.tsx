@@ -35,6 +35,20 @@ export default function AuthenticationDialog({
         </dialog>
       );
 
+    case RegistrationResult.ServiceUnavailable:
+      return (
+        <dialog className="surface-bright" open>
+          {t("Mail server is currently unavailable")}
+        </dialog>
+      );
+
+    case RegistrationResult.Error:
+      return (
+        <dialog className="surface-bright" open>
+          {t("An error occurred during authentication")}
+        </dialog>
+      );
+
     default:
       return (
         <dialog className="surface-bright" open>

@@ -21,6 +21,9 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import cloud.imagey.domain.mail.EmailException;
 
 @Provider
@@ -28,9 +31,11 @@ import cloud.imagey.domain.mail.EmailException;
 public class EmailExceptionMapper implements ExceptionMapper<EmailException> {
 
     private static final int TEMPORARILY_NOT_AVAILABLE = 503;
+    private static final Logger LOG = LogManager.getLogger(EmailExceptionMapper.class);
 
     @Override
     public Response toResponse(EmailException exception) {
+        LOG.warn("Mail server is currently unavailable.", exception);
         return Response.status(TEMPORARILY_NOT_AVAILABLE).build();
     }
 }
