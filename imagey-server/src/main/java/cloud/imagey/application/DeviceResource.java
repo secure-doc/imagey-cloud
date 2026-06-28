@@ -137,4 +137,17 @@ public class DeviceResource {
         LOG.info("Loading device recovery key");
         return deviceRepository.loadDeviceRecoveryKey(user, deviceId).orElseThrow(NotFoundException::new);
     }
+
+    @POST
+    @RolesAllowed("owner")
+    @Path("{deviceId}/subscriptions")
+    @Consumes(APPLICATION_JSON)
+    public Response storePushSubscription(
+        @PathParam("email") User user,
+        @PathParam("deviceId") DeviceId deviceId,
+        cloud.imagey.domain.push.PushSubscription subscription) throws IOException {
+
+        deviceRepository.storePushSubscription(user, deviceId, subscription);
+        return Response.ok().build();
+    }
 }
