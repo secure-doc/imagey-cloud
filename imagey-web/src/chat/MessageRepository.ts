@@ -5,7 +5,7 @@ export const messageRepository = {
     senderEmail: string,
     contactEmail: string,
     encryptedContent: string,
-  ): Promise<void> => {
+  ): Promise<string> => {
     const response = await fetch(
       `/users/${senderEmail}/contacts/${contactEmail}/messages`,
       {
@@ -20,6 +20,12 @@ export const messageRepository = {
     if (!response.ok) {
       throw new Error("Failed to send message");
     }
+    const location = response.headers.get("Location");
+    if (!location) {
+      throw new Error("No Location header returned");
+    }
+    const parts = location.split("/");
+    return parts[parts.length - 1];
   },
   receiveMessages: async (
     receiverEmail: string,

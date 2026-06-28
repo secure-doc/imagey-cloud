@@ -48,7 +48,9 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.container.AsyncResponse;
 import jakarta.ws.rs.container.Suspended;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -79,10 +81,11 @@ public class MessageResource {
     public Response sendMessage(
         @PathParam("email") User sender,
         @PathParam("contact") User contact,
-        MessageContent messageContent) throws IOException {
+        MessageContent messageContent,
+        @Context UriInfo uriInfo) throws IOException {
 
-        messageService.sendMessage(sender, contact, messageContent);
-        return Response.ok().build();
+        Message message = messageService.sendMessage(sender, contact, messageContent);
+        return Response.created(uriInfo.getAbsolutePathBuilder().path(message.id().value()).build()).build();
     }
 
     @GET

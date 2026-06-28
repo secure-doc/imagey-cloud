@@ -80,7 +80,13 @@ test("view chat and send message", async ({ page }) => {
         });
       },
     )
-    .willRespondWith(200);
+    .willRespondWith(201, (r) => {
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/mary@imagey.cloud/contacts/laura@imagey.cloud/messages/msg-1234",
+        ),
+      });
+    });
 
   await builder.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);

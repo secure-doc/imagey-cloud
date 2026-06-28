@@ -18,7 +18,7 @@ package cloud.imagey.application;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.text;
-import static jakarta.ws.rs.core.Response.Status.OK;
+import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -109,7 +109,8 @@ public class MessageResourceTest {
         // Send a message
         Response response = senderClient.path("contacts/receiver@example.com/messages")
             .post(text("encrypted-content"));
-        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+        assertThat(response.getLocation().toString()).matches(".*/users/sender@example.com/contacts/receiver@example.com/messages/.*");
 
         // Receive the message
         List<Message> messages = receiverClient.path("contacts/sender@example.com/messages")
@@ -124,7 +125,7 @@ public class MessageResourceTest {
         // Send first message
         Response firstMessage = senderClient.path("contacts/receiver@example.com/messages")
             .post(text("first-content"));
-        assertThat(firstMessage.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(firstMessage.getStatus()).isEqualTo(CREATED.getStatusCode());
 
         // Wait a bit to ensure the timestamp in MessageId differs
         Thread.sleep(10);
@@ -132,7 +133,7 @@ public class MessageResourceTest {
         // Send second message
         Response secondMessage = senderClient.path("contacts/receiver@example.com/messages")
             .post(text("second-content"));
-        assertThat(secondMessage.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(secondMessage.getStatus()).isEqualTo(CREATED.getStatusCode());
 
         // Receive all messages
         List<Message> allMessages = receiverClient.path("contacts/sender@example.com/messages")
@@ -172,7 +173,7 @@ public class MessageResourceTest {
         // Send a message
         Response response = senderClient.path("contacts/receiver@example.com/messages")
             .post(text("delayed-content"));
-        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
 
         // Get the response
         List<Message> messages = futureMessages.get();
