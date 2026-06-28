@@ -503,3 +503,383 @@ test("existing user recovery key 500 error falls back to password dialog", async
   const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
 });
+
+test("device activation error handling", async ({ page }) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: [],
+      });
+    },
+  );
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+
+  // Mock finding devices to include a new unactivated device
+  await page.route("**/users/mary*imagey.cloud/devices", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [TestData.mary.devices[0].deviceId, "new-unactivated-device"],
+    });
+  });
+
+  // Mock fetching public key for new device
+  await page.route(
+    "**/users/mary*imagey.cloud/devices/new-unactivated-device/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[1].publicDeviceKey,
+      });
+    },
+  );
+
+  // Mock activation failure
+  await page.route(
+    "**/users/mary*imagey.cloud/devices/new-unactivated-device/private-keys/",
+    async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 500,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        });
+      } else {
+        await route.fallback();
+      }
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("heading", { name: "Devices" }).click();
+
+  await page.getByText("new-unactivated-device").first().click();
+  await page.getByRole("button", { name: "Confirm" }).click();
+
+  await expect(page.getByText("Error activating device")).toBeVisible({
+    timeout: 5000,
+  });
+});
+
+test("profile load 500 error", async ({ page }) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: [],
+      });
+    },
+  );
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+
+  await page.route("**/users/mary*imagey.cloud/profile", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("heading", { name: "Profile" }).first().click();
+
+  await expect(page.getByText("mary@imagey.cloud")).toBeVisible();
+});
+
+test("profile save 500 error", async ({ page }) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: [],
+      });
+    },
+  );
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+
+  await page.route("**/users/mary*imagey.cloud/profile", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    } else if (route.request().method() === "PUT") {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("heading", { name: "Profile" }).first().click();
+
+  const editNameButton = page.locator("button:has(i:text('edit'))").first();
+  await editNameButton.click();
+  const nameInput = page.getByLabel("Name");
+  await nameInput.fill("Mary Doe");
+
+  const saveButton = page.getByRole("button", { name: "Save" });
+  await saveButton.click();
+
+  await expect(page.getByText("Mary Doe")).toBeVisible();
+  await expect(saveButton).toBeEnabled();
+});
+
+test("send message missing location header", async ({ page }) => {
+  await page.route(
+    "**/users/mary*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary*imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contact-requests",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: [],
+      });
+    },
+  );
+  await page.route("**/users/mary*imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+
+  await page.route("**/users/mary*imagey.cloud/contacts", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: ["laura@imagey.cloud"],
+    });
+  });
+  await page.route(
+    "**/users/laura*imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.laura.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contacts/laura*imagey.cloud/key",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: { invitationKey: TestData.mary.chats![0].encryptedSharedKey },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary*imagey.cloud/contacts/laura*imagey.cloud/messages*",
+    async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          headers: { "Access-Control-Allow-Origin": "*" },
+          json: [],
+        });
+      } else if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        });
+      } else {
+        await route.fallback();
+      }
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  await page.getByRole("link", { name: "Chats" }).first().click();
+  await page.getByText("laura@imagey.cloud").first().click();
+
+  const input = page.getByPlaceholder("Type a message");
+  await input.fill("This should fail due to missing location");
+  await page.getByRole("button", { name: "send" }).click();
+
+  await expect(input).toHaveValue("This should fail due to missing location");
+});

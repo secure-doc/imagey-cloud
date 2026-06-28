@@ -41,14 +41,14 @@ export const messageService = {
       content,
       sharedKey,
     );
-    await messageRepository.sendMessage(
+    const id = await messageRepository.sendMessage(
       userEmail,
       contactEmail,
       encryptedContent,
     );
 
     return {
-      id: Date.now().toString() + "-" + Math.random().toString(),
+      id: id,
       sender: userEmail,
       content: content,
     };

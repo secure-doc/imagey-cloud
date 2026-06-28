@@ -37,8 +37,9 @@ public class MessageService {
     @Inject
     private Event<Message> messageEvent;
 
-    public void sendMessage(User sender, User receiver, MessageContent encryptedContent) throws IOException {
+    public Message sendMessage(User sender, User receiver, MessageContent encryptedContent) throws IOException {
         Message message = messageRepository.persist(receiver, sender, encryptedContent);
         messageEvent.fire(message);
+        return message;
     }
 }

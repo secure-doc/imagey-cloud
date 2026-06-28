@@ -25,8 +25,13 @@ import jakarta.servlet.http.HttpFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 @WebFilter(urlPatterns = "/*", asyncSupported = true)
 public class FrontendFilter extends HttpFilter {
+
+    private static final Logger LOG = LogManager.getLogger(FrontendFilter.class);
 
     private static final String[] PREFIXES = {
         "/users", "/authentications", "/registrations", "/invitations", "/.well-known", "/assets"
@@ -39,7 +44,6 @@ public class FrontendFilter extends HttpFilter {
     @Override
     protected void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-
         String path = request.getRequestURI().substring(request.getContextPath().length());
 
         if (isBackendOrStatic(path)) {

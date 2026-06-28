@@ -162,6 +162,14 @@ public class ContractTest {
         deleteQuietly(new File(getMarysData(), "contact-requests"));
     }
 
+    @State("mary has no documents")
+    void maryHasNoDocuments() throws IOException {
+        File marysDocuments = getMarysDocuments();
+        if (marysDocuments.exists()) {
+            deleteQuietly(marysDocuments);
+        }
+    }
+
     @State("Mary has a chat with alice")
     void maryHasChatWithAlice() throws IOException {
         File marysContacts = new File(getMarysData(), "contacts");
