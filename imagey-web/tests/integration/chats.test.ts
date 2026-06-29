@@ -71,8 +71,16 @@ test("accept open invitations", async ({ page }) => {
         });
         // We don't exact-match the encrypted key because it changes dynamically
         r.jsonBody({
-          key: MatchersV3.like("dummy-encrypted-key"),
-          invitationKey: MatchersV3.like("dummy-encrypted-key"),
+          userKey: MatchersV3.like({
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey: "dummy-encrypted-key",
+          }),
+          contactKey: MatchersV3.like({
+            issuer: "bill@imagey.cloud",
+            kid: "0",
+            sharedKey: "dummy-encrypted-key",
+          }),
         });
       },
     )

@@ -176,7 +176,12 @@ public class ContractTest {
         deleteQuietly(marysContacts);
         File aliceChat = new File(marysContacts, "alice@imagey.cloud");
         aliceChat.mkdirs();
-        writeStringToFile(new File(aliceChat, "invitation-key.enc"), "dummy-encrypted-key", java.nio.charset.StandardCharsets.UTF_8);
+        writeStringToFile(new File(aliceChat, "key.json"),
+            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
+            + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
+            + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
+            + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
     }
 
     @State("Mary has a chat with bill")
@@ -185,7 +190,12 @@ public class ContractTest {
         deleteQuietly(marysContacts);
         File billChat = new File(marysContacts, "bill@imagey.cloud");
         billChat.mkdirs();
-        writeStringToFile(new File(billChat, "invitation-key.enc"), "dummy-encrypted-key", java.nio.charset.StandardCharsets.UTF_8);
+        writeStringToFile(new File(billChat, "key.json"),
+            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
+            + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
+            + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
+            + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
+            java.nio.charset.StandardCharsets.UTF_8);
     }
     @State("marys second device unlocked")
     void marysSecondDeviceUnlocked() throws URISyntaxException, IOException {

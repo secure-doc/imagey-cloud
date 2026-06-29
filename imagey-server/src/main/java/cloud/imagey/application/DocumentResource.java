@@ -127,7 +127,7 @@ public class DocumentResource {
         @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
 
         return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
-                .map(EncryptedSharedKey::key)
+                .map(EncryptedSharedKey::sharedKey)
                 .orElseThrow(NotFoundException::new);
     }
 
@@ -141,7 +141,7 @@ public class DocumentResource {
         @PathParam("share-email") Email userTheDocumentIsSharedWith,
         String key) throws IOException {
 
-        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, new EncryptedSharedKey(key));
+        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, new EncryptedSharedKey(null, "0", key));
         return Response.ok().build();
     }
 
@@ -160,13 +160,13 @@ public class DocumentResource {
     public Response uploadDocument(
         @PathParam("email") User user,
         @Multipart("metadata") DocumentMetadata metadata,
-        @Multipart("sharedKey") EncryptedSharedKey sharedKey,
+        @Multipart("sharedKey") String sharedKey,
         @Multipart("content") DocumentContent content,
         @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
         @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
             throws IOException {
 
-        documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
+        documentRepository.persist(user, metadata.documentId(), user.email(), new EncryptedSharedKey(null, "0", sharedKey));
         documentRepository.persist(user, metadata);
         documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
 

@@ -261,3 +261,75 @@ test("polling fails gracefully", async ({ page }) => {
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
+
+test("decryption error shows reissue dialog", async ({ page }) => {
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+
+  const builder = await prepareMarysChat(
+    "alice@imagey.cloud",
+    " for decryption error",
+    false, // pass invalidKey
+  );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request to receive messages for decryption error")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/contacts/alice@imagey.cloud/messages",
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  provider
+    .addInteraction()
+    .given("Mary has a chat with alice")
+    .uponReceiving("a request to reissue key")
+    .withRequest(
+      "PUT",
+      "/users/mary@imagey.cloud/contacts/alice@imagey.cloud/key",
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({
+          userKey: {
+            issuer: MatchersV3.like("mary@imagey.cloud"),
+            kid: MatchersV3.like("0"),
+            sharedKey: MatchersV3.like("dummy-key"),
+          },
+          contactKey: {
+            issuer: MatchersV3.like("alice@imagey.cloud"),
+            kid: MatchersV3.like("0"),
+            sharedKey: MatchersV3.like("dummy-key"),
+          },
+        });
+      },
+    )
+    .willRespondWith(204);
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    const aliceContact = page.getByText("alice@imagey.cloud").first();
+    await expect(aliceContact).toBeVisible();
+    await aliceContact.click();
+
+    // Dialog should appear
+    await expect(
+      page.getByRole("heading", { name: "Decryption Error" }),
+    ).toBeVisible();
+
+    // Click Re-Issue
+    await page.getByRole("button", { name: "Re-Issue" }).click();
+
+    // Dialog should disappear
+    await expect(
+      page.getByRole("heading", { name: "Decryption Error" }),
+    ).toBeHidden();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});

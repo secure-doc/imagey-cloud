@@ -9,38 +9,68 @@ export const contactService = {
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
-    const encryptedKeys = await contactRepository.getSharedContactKeys(
+    const myKeyEntry = await contactRepository.getSharedContactKey(
       userEmail,
       contactEmail,
     );
-    let decryptedKey;
-
-    if (encryptedKeys.invitationKey) {
-      const contactPublicKey =
-        await authenticationRepository.loadPublicMainKey(contactEmail);
-      decryptedKey = await cryptoService.decryptKey(
-        encryptedKeys.invitationKey,
-        contactPublicKey,
-        privateKey,
-      );
-      const encryptedKey = await cryptoService.encryptKey(
-        decryptedKey,
-        publicKey,
-        privateKey,
-      );
-      await contactRepository.updateContactKey(
-        userEmail,
-        contactEmail,
-        encryptedKey,
-      );
-    } else {
-      decryptedKey = await cryptoService.decryptKey(
-        encryptedKeys.key,
-        publicKey,
-        privateKey,
-      );
+    if (!myKeyEntry) {
+      throw new Error("Shared key not found");
     }
 
-    return decryptedKey;
+    try {
+      return await cryptoService.decryptKey(
+        myKeyEntry.sharedKey,
+        publicKey,
+        privateKey,
+      );
+    } catch (e) {
+      console.warn("Decryption failed, attempting fallback", e);
+      try {
+        const contactPublicKey =
+          await authenticationRepository.loadPublicMainKey(contactEmail);
+        return await cryptoService.decryptKey(
+          myKeyEntry.sharedKey,
+          contactPublicKey,
+          privateKey,
+        );
+      } catch (fallbackError) {
+        console.error("Fallback decryption failed", fallbackError);
+      }
+    }
+
+    throw new Error("Could not decrypt shared key");
+  },
+  reissueKey: async (
+    userEmail: string,
+    contactEmail: string,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+  ): Promise<JsonWebKey> => {
+    const contactPublicKey =
+      await authenticationRepository.loadPublicMainKey(contactEmail);
+    const sharedKey = await cryptoService.generateSymmetricKey();
+    const contactEncryptedSharedKey = await cryptoService.encryptKey(
+      sharedKey,
+      contactPublicKey,
+      privateKey,
+    );
+    const myEncryptedSharedKey = await cryptoService.encryptKey(
+      sharedKey,
+      publicKey,
+      privateKey,
+    );
+    await contactRepository.reissueContactKey(userEmail, contactEmail, {
+      userKey: {
+        issuer: userEmail,
+        kid: "0",
+        sharedKey: myEncryptedSharedKey,
+      },
+      contactKey: {
+        issuer: contactEmail,
+        kid: "0",
+        sharedKey: contactEncryptedSharedKey,
+      },
+    });
+    return sharedKey;
   },
 };
