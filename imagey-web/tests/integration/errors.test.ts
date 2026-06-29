@@ -846,7 +846,11 @@ test("send message missing location header", async ({ page }) => {
       await route.fulfill({
         status: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
-        json: { invitationKey: TestData.mary.chats![0].encryptedSharedKey },
+        json: {
+          issuer: "mary@imagey.cloud",
+          kid: "0",
+          sharedKey: TestData.mary.chats[0].encryptedSharedKey,
+        },
       });
     },
   );

@@ -111,17 +111,21 @@ public class ContactResource {
     @RolesAllowed("owner")
     @Path("{email}/contacts/{contact}/key")
     @Produces(APPLICATION_JSON)
-    public ContactKeys getContactKeys(@PathParam("email") User user, @PathParam("contact") User contact) {
-        return contactRepository.getContactKeys(user, contact).orElseThrow(NotFoundException::new);
+    public EncryptedSharedKey getContactKey(@PathParam("email") User user, @PathParam("contact") User contact) {
+        return contactRepository.getContactKey(user, contact).orElseThrow(NotFoundException::new);
     }
+
+
 
     @PUT
     @RolesAllowed("owner")
     @Path("{email}/contacts/{contact}/key")
-    @Produces(APPLICATION_JSON)
-    public void updateContactKey(@PathParam("email") User user, @PathParam("contact") User contact, EncryptedSharedKey key)
-            throws IOException {
+    @Consumes(APPLICATION_JSON)
+    public void reissueContactKey(
+        @PathParam("email") User user,
+        @PathParam("contact") User contact,
+        ContactKeys keys) throws IOException {
 
-        contactRepository.updateContactKey(user, contact, key);
+        contactService.reissueKey(user, contact, keys);
     }
 }

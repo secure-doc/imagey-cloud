@@ -25,6 +25,15 @@ Every user identity is backed by a two-tiered asymmetric key architecture (ECDH 
 4. Using its Private Device Key, it derives the ECDH shared secret to decrypt the **Private Main Key**.
 5. The decrypted Private Main Key is then kept in memory to encrypt and decrypt document shares.
 
+### D. Adding a New Device (Activation)
+When the user logs in from a *new* device, it must be activated by an *existing* unlocked device:
+1. The new device generates a Device Key-Pair and stores the password-encrypted Private Device Key locally. It uploads its Public Device Key.
+2. The user uses an existing unlocked device to view pending devices.
+3. The unlocked device fetches the new device's Public Device Key.
+4. The unlocked device encrypts the Private Main Key using the new device's Public Device Key.
+5. The newly encrypted Private Main Key is uploaded to the backend, tied to the new device ID.
+6. The new device can now fetch this blob and decrypt it using its own Private Device Key.
+
 ## 2. Document Encryption
 
 Documents and their associated metadata are encrypted using symmetric cryptography for performance and size efficiency.
@@ -51,6 +60,18 @@ When an authorized user wants to access a document:
 2. **Derive Shared Secret:** The recipient uses their own **Private Key** and the sender's **Public Key** to perform the ECDH key agreement. Because ECDH is symmetric in its derivation, this produces the exact same shared secret that the sender generated.
 3. **Unwrap Document Key:** The client uses the shared secret to decrypt their `encrypted-shared.key` via **AES-GCM**, recovering the symmetric Document Key.
 4. **Decrypt Content:** Finally, the client uses the Document Key to decrypt the Base64 metadata JSON and the actual document binaries for display.
+
+## 5. Contact Requests and Chat
+
+To allow users to exchange messages, a secure shared key is established when a contact request is accepted.
+
+1. **Send Request:** User A sends a contact request to User B.
+2. **Accept Request:** User B accepts the request. User B fetches User A's Public Main Key.
+3. **Generate Key:** User B generates a symmetric Shared Contact Key (AES-GCM 256-bit).
+4. **Encrypt Key for Contact:** User B encrypts this Shared Contact Key using an ECDH shared secret derived from User A's Public Main Key and User B's Private Main Key.
+5. **Encrypt Key for Self:** User B also encrypts the Shared Contact Key using their own Public and Private Main Keys.
+6. **Store Keys:** The keys are sent to the backend in a JSON payload that explicitly tracks which user and key ID (`kid`) was used to encrypt it (e.g., `{ "user": "A", "kid": "0", "sharedKey": "..." }`).
+7. **Direct Communication:** Both users now possess a secure shared key for direct chat.
 
 ## Cryptographic Primitives Summary
 

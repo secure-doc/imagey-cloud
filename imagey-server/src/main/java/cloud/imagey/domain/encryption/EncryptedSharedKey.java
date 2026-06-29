@@ -16,5 +16,5 @@
  */
 package cloud.imagey.domain.encryption;
 
-public record EncryptedSharedKey(String key) {
+public record EncryptedSharedKey(String issuer, String kid, String sharedKey) {
 }

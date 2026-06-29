@@ -33,6 +33,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
@@ -103,12 +104,8 @@ public class ContactService {
 
     public void acceptInvitation(User user, User contact, ContactKeys keys) throws IOException {
         if (contactRepository.getContactStatus(user, contact).filter(INVITATION_RECEIVED::equals).isPresent()) {
-            contactRepository.persist(user, contact, keys.key());
-            if (keys.invitationKey() != null) {
-                contactRepository.persist(contact, user, keys.invitationKey());
-            } else {
-                contactRepository.persist(contact, user, keys.key());
-            }
+            contactRepository.persist(user, contact, keys.userKey());
+            contactRepository.persist(contact, user, keys.contactKey());
         } else {
             throw new ResourceConflictException("Contact request rejected");
         }
@@ -117,5 +114,12 @@ public class ContactService {
     public void declineInvitation(User user, User requestor) throws IOException {
         contactRepository.persist(user, requestor, ContactStatus.DENIAL_SENT);
         contactRepository.persist(requestor, user, ContactStatus.DENIAL_RECEIVED);
+    }
+
+    public void reissueKey(User user, User contact, ContactKeys keys) throws IOException {
+        if (!contactRepository.isContact(user, contact)) {
+            throw new ResourceConflictException("Not a contact");
+        }
+        contactRepository.reissueKey(user, contact, keys);
     }
 }

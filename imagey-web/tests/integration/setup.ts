@@ -696,6 +696,7 @@ export async function prepareMarysEmptyContactRequests() {
 export async function prepareMarysChat(
   contactEmail: string,
   suffix: string = "",
+  validKey: boolean = true,
 ) {
   const chat = TestData.mary.chats!.find(
     (c) => c.contactEmail === contactEmail,
@@ -704,7 +705,9 @@ export async function prepareMarysChat(
 
   let builder = provider.addInteraction();
   if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(`Mary has a chat with ${contactName}`);
+    builder = builder.given(
+      `Mary has a chat with ${contactEmail.split("@")[0]}`,
+    );
   }
 
   builder
@@ -720,7 +723,9 @@ export async function prepareMarysChat(
 
   builder = provider.addInteraction();
   if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(`Mary has a chat with ${contactName}`);
+    builder = builder.given(
+      `Mary has a chat with ${contactEmail.split("@")[0]}`,
+    );
   }
 
   builder
@@ -728,30 +733,17 @@ export async function prepareMarysChat(
     .withRequest("GET", `/users/mary@imagey.cloud/contacts/${contactEmail}/key`)
     .willRespondWith(200, (r) =>
       r.jsonBody({
-        invitationKey: Matchers.string(chat.encryptedSharedKey),
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: Matchers.string(validKey ? chat.encryptedSharedKey : "AAAA"),
       }),
     );
 
   builder = provider.addInteraction();
   if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(`Mary has a chat with ${contactName}`);
-  }
-
-  builder
-    .uponReceiving(`a request to store the updated key${suffix}`)
-    .withRequest(
-      "PUT",
-      `/users/mary@imagey.cloud/contacts/${contactEmail}/key`,
-      (r) => {
-        r.headers({ "Content-Type": "application/json" });
-        r.jsonBody({ key: Matchers.like("dummy-key") });
-      },
-    )
-    .willRespondWith(204);
-
-  builder = provider.addInteraction();
-  if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(`Mary has a chat with ${contactName}`);
+    builder = builder.given(
+      `Mary has a chat with ${contactEmail.split("@")[0]}`,
+    );
   }
 
   builder
@@ -763,7 +755,9 @@ export async function prepareMarysChat(
 
   builder = provider.addInteraction();
   if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(`Mary has a chat with ${contactName}`);
+    builder = builder.given(
+      `Mary has a chat with ${contactEmail.split("@")[0]}`,
+    );
   }
 
   return builder

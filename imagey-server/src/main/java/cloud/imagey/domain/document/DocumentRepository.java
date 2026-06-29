@@ -121,7 +121,7 @@ public class DocumentRepository extends AbstractFileRepository {
             metadata.smallImageId(),
             metadata.previewImageId(),
             metadata.encryptedData(),
-            sharedKey.key()
+            sharedKey.sharedKey()
         );
     }
 
@@ -135,7 +135,7 @@ public class DocumentRepository extends AbstractFileRepository {
         if (!sharedKey.exists()) {
             return empty();
         }
-        return of(new EncryptedSharedKey(readFileToString(sharedKey)));
+        return of(new EncryptedSharedKey(null, "0", readFileToString(sharedKey)));
     }
 
     public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedSharedKey key) throws IOException {
@@ -144,7 +144,7 @@ public class DocumentRepository extends AbstractFileRepository {
         File documentFolder = new File(documentHome, documentId.id());
         File sharedKeysFolder = new File(documentFolder, "shared-keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        createNewFileWithContent(sharedKeyFolder, "encrypted-shared.key", key.key());
+        createNewFileWithContent(sharedKeyFolder, "encrypted-shared.key", key.sharedKey());
     }
 
     private File getUserHome(User user) {

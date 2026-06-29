@@ -12,6 +12,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
 
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
+  const [keyError, setKeyError] = useState(false);
   const { messages, setMessages } = usePolling(user, contactEmail, sharedKey);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -22,9 +23,33 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
     if (contactEmail && publicKey && privateKey) {
       contactService
         .loadSharedKey(user, contactEmail, publicKey, privateKey)
-        .then((decryptedKey) => setSharedKey(decryptedKey));
+        .then((decryptedKey) => {
+          setSharedKey(decryptedKey);
+          setKeyError(false);
+        })
+        .catch((e) => {
+          console.error(e);
+          setKeyError(true);
+        });
     }
   }, [user, contactEmail, publicKey, privateKey]);
+
+  const handleReissue = async () => {
+    if (contactEmail && publicKey && privateKey) {
+      try {
+        const newSharedKey = await contactService.reissueKey(
+          user,
+          contactEmail,
+          publicKey,
+          privateKey,
+        );
+        setSharedKey(newSharedKey);
+        setKeyError(false);
+      } catch (e) {
+        console.error("Failed to reissue key:", e);
+      }
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -40,6 +65,22 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
       }}
     >
       <h5 className="center-align vertical-margin">{contactEmail}</h5>
+      {keyError && (
+        <dialog className="modal active" open>
+          <h5>Decryption Error</h5>
+          <div>
+            There was an error decrypting the messages. This may be because the
+            keys have changed. You can try to re-issue the keys, but all
+            previous messages will be lost. Do you want to proceed?
+          </div>
+          <nav className="right-align">
+            <button className="border" onClick={() => setKeyError(false)}>
+              Abbrechen
+            </button>
+            <button onClick={handleReissue}>Re-Issue</button>
+          </nav>
+        </dialog>
+      )}
       {messages === undefined || sharedKey === undefined ? (
         <div className="max flex center-align middle-align">
           <progress className="circle"></progress>

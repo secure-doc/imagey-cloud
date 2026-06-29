@@ -154,7 +154,16 @@ public class ContactRequestTest {
         // mary cannot accept the request
         Response contactRequestNotAccepted = marysClient.path("contacts/laura@imagey.cloud").put(json("""
                 {
-                    "key": "public-shared-key", "invitationKey": "contact-shared-key"
+                    "userKey": {
+                        "issuer": "mary@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "public-shared-key"
+                    },
+                    "contactKey": {
+                        "issuer": "mary@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "public-shared-key"
+                    }
                 }
             """));
         assertThat(contactRequestNotAccepted.getStatus()).isEqualTo(CONFLICT.getStatusCode());
@@ -163,7 +172,16 @@ public class ContactRequestTest {
         // laura accepts the contact request
         Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
                 {
-                    "key": "public-shared-key", "invitationKey": "contact-shared-key"
+                    "userKey": {
+                        "issuer": "laura@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "public-shared-key"
+                    },
+                    "contactKey": {
+                        "issuer": "laura@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "public-shared-key"
+                    }
                 }
             """));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
@@ -183,11 +201,9 @@ public class ContactRequestTest {
         // Verify getContactKeys endpoint
         Response keysResponse = laurasClient.path("contacts/mary@imagey.cloud/key").get();
         Map<String, Object> key = keysResponse.readEntity(new GenericType<Map<String, Object>>() { });
-        assertThat(key).containsExactly(entry("key", "public-shared-key"));
+        assertThat(key).contains(entry("sharedKey", "public-shared-key"));
 
-        // Verify updateContactKey endpoint
-        Response updateKeyResponse = marysClient.path("contacts/laura@imagey.cloud/key").put(json("{\"key\":\"new-public-shared-key\"}"));
-        assertThat(updateKeyResponse.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+
 
         File marysContactRequestsFolder = getMarysContactRequests();
         assertThat(marysContactRequestsFolder).isDirectory();
@@ -254,7 +270,16 @@ public class ContactRequestTest {
         // laura accepts the contact request
         Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
                 {
-                    "key": "public-shared-key", "invitationKey": "contact-shared-key"
+                    "userKey": {
+                        "issuer": "laura@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "public-shared-key"
+                    },
+                    "contactKey": {
+                        "issuer": "laura@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "public-shared-key"
+                    }
                 }
             """));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);

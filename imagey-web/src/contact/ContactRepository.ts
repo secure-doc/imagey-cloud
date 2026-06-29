@@ -67,8 +67,16 @@ export const contactRepository = {
       );
 
       const contactKeys = {
-        key: myEncryptedSharedKey,
-        invitationKey: contactEncryptedSharedKey,
+        userKey: {
+          issuer: userEmail,
+          kid: "0",
+          sharedKey: myEncryptedSharedKey,
+        },
+        contactKey: {
+          issuer: contactEmail,
+          kid: "0",
+          sharedKey: contactEncryptedSharedKey,
+        },
       };
 
       const response = await fetch(
@@ -124,10 +132,10 @@ export const contactRepository = {
     const emails: string[] = await response.json();
     return emails.map((email) => ({ email }));
   },
-  getSharedContactKeys: async (
+  getSharedContactKey: async (
     userEmail: string,
     contactEmail: string,
-  ): Promise<{ key: string; invitationKey: string }> => {
+  ): Promise<{ issuer: string; kid: string; sharedKey: string }> => {
     const response = await fetch(
       `/users/${userEmail}/contacts/${contactEmail}/key`,
       {
@@ -143,27 +151,28 @@ export const contactRepository = {
     }
     return response.json();
   },
-  updateContactKey: async (
+
+  reissueContactKey: async (
     userEmail: string,
     contactEmail: string,
-    contactKey: string,
+    contactKeys: {
+      userKey: { issuer: string; kid: string; sharedKey: string };
+      contactKey: { issuer: string; kid: string; sharedKey: string };
+    },
   ) => {
     const response = await fetch(
       `/users/${userEmail}/contacts/${contactEmail}/key`,
       {
         method: "PUT",
         headers: {
-          Accept: "application/json",
           "Content-Type": "application/json",
         },
         credentials: "same-origin",
-        body: JSON.stringify({
-          key: contactKey,
-        }),
+        body: JSON.stringify(contactKeys),
       },
     );
     if (!response.ok) {
-      throw new Error("Failed to store shared contact key");
+      throw new Error("Failed to reissue contact key");
     }
   },
 };
