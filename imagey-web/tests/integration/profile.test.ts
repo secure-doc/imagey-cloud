@@ -90,8 +90,8 @@ test("edit and save profile", async ({ page }) => {
     await nameInput.fill("Mary Doe");
 
     const fileChooserPromise = page.waitForEvent("filechooser");
-    const changePictureButton = page.getByRole("button", {
-      name: "Change Picture",
+    const changePictureButton = page.locator("label", {
+      hasText: "Change Picture",
     });
     await expect(changePictureButton).toBeVisible();
     await changePictureButton.click();
@@ -105,8 +105,7 @@ test("edit and save profile", async ({ page }) => {
     const emailInput = page.getByLabel("Email");
     await expect(emailInput).toBeVisible();
     await emailInput.fill("mary.doe@example.com");
-    // Click check to close first email
-    await page.locator("i:text('check')").first().click();
+    await emailInput.press("Enter");
 
     // Cover email removal
     await addEmailButton.click();

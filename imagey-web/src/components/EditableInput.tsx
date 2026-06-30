@@ -65,13 +65,12 @@ export default function EditableInput({
             {value ? (
               value
             ) : (
-              <span style={{ opacity: 0.6 }}>{fallbackValue || label}</span>
+              <span className="medium-opacity">{fallbackValue || label}</span>
             )}
           </div>
           <button
-            className="circle transparent"
+            className="circle transparent small-margin left-margin"
             onClick={() => setIsEditing(true)}
-            style={{ marginLeft: "8px" }}
           >
             <i>edit</i>
           </button>

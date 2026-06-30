@@ -41,16 +41,21 @@ export function SendMessageForm({
   };
 
   return (
-    <form onSubmit={handleSend} className="row padding">
-      <input
-        className="field border max"
-        value={inputMessage}
-        onChange={(e) => setInputMessage(e.target.value)}
-        placeholder={t("Type a message")}
-      />
-      <button type="submit" className="primary circle">
-        <i>send</i>
-      </button>
+    <form onSubmit={handleSend} className="padding surface-container no-margin">
+      <nav>
+        <div className="field label border round max no-margin">
+          <input
+            id="chat-input"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder=" "
+          />
+          <label htmlFor="chat-input">{t("Type a message")}</label>
+        </div>
+        <button type="submit" className="circle transparent">
+          <i>send</i>
+        </button>
+      </nav>
     </form>
   );
 }

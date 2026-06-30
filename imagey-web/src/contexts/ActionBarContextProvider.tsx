@@ -8,6 +8,7 @@ export function ActionBarContextProvider({
 }) {
   const [actionIcons, setActionIcons] = useState<JSX.Element[]>([]);
   const [backButtonVisible, setBackButtonVisible] = useState<boolean>(false);
+  const [title, setTitle] = useState<string | undefined>();
   return (
     <ActionBarContext.Provider
       value={{
@@ -15,6 +16,8 @@ export function ActionBarContextProvider({
         setActionIcons,
         backButtonVisible,
         setBackButtonVisible,
+        title,
+        setTitle,
       }}
     >
       {children}

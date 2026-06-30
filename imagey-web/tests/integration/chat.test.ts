@@ -109,7 +109,7 @@ test("view chat and send message", async ({ page }) => {
     await expect(page.getByText("Hello Mary, this is Laura!")).toBeVisible();
 
     // Send a message
-    const input = page.getByPlaceholder("Type a message");
+    const input = page.getByLabel("Type a message");
     await input.fill("Hi Laura, nice to chat!");
     await page.getByRole("button", { name: "send" }).click();
 
@@ -146,7 +146,7 @@ test("send empty message does not submit", async ({ page }) => {
       page.getByRole("heading", { name: "alice@imagey.cloud" }),
     ).toBeVisible();
 
-    const input = page.getByPlaceholder("Type a message");
+    const input = page.getByLabel("Type a message");
 
     // Try to send an empty message
     await input.fill("   ");
@@ -201,7 +201,7 @@ test("send message fails and restores input", async ({ page }) => {
       page.getByRole("heading", { name: "alice@imagey.cloud" }),
     ).toBeVisible();
 
-    const input = page.getByPlaceholder("Type a message");
+    const input = page.getByLabel("Type a message");
 
     await input.fill("This will fail");
     await page.getByRole("button", { name: "send" }).click();
@@ -254,7 +254,7 @@ test("polling fails gracefully", async ({ page }) => {
     await page.waitForTimeout(500);
 
     // The chat UI should still be there, just without messages
-    const input = page.getByPlaceholder("Type a message");
+    const input = page.getByLabel("Type a message");
     await expect(input).toBeVisible();
 
     await page.unrouteAll({ behavior: "ignoreErrors" });

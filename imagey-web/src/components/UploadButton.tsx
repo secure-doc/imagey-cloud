@@ -69,7 +69,7 @@ export default function UploadButton({
         type="file"
         name="images"
         accept="image/*"
-        style={{ display: "none" }}
+        hidden
         onChange={(e) => {
           if (e.target.files) {
             handleUpload(Array.from(e.target.files));

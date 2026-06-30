@@ -11,6 +11,20 @@ import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
 
 export default function Chats() {
+  return (
+    <main>
+      <ChatsList />
+    </main>
+  );
+}
+
+export function ChatsList({
+  className,
+  activeContactEmail,
+}: {
+  className?: string;
+  activeContactEmail?: string;
+}) {
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
@@ -55,7 +69,16 @@ export default function Chats() {
   };
 
   return (
-    <main>
+    <section
+      className={
+        className ? className + " col scroll s12 m4 l4" : "col scroll s12 m4 l4"
+      }
+      style={
+        activeContactEmail
+          ? { borderRight: "1px solid var(--surface-variant)" }
+          : undefined
+      }
+    >
       {(contacts && contacts.length > 0) ||
       (contactRequests && contactRequests.length > 0) ? (
         <ul className="list border">
@@ -101,7 +124,12 @@ export default function Chats() {
           {contacts &&
             contacts.map((contact, index) => (
               <li key={index + (contactRequests ? contactRequests.length : 0)}>
-                <NavLink to={`/chats/${contact.email}`}>
+                <NavLink
+                  to={`/chats/${contact.email}`}
+                  className={({ isActive }) =>
+                    isActive ? "active surface-variant" : ""
+                  }
+                >
                   <button className="circle transparent">
                     {contact.email.charAt(0).toLocaleUpperCase()}
                   </button>
@@ -124,6 +152,6 @@ export default function Chats() {
           onCancel={() => setIsDialogOpen(false)}
         />
       )}
-    </main>
+    </section>
   );
 }

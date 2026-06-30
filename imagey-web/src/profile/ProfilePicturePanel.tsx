@@ -27,41 +27,24 @@ export default function ProfilePicturePanel({
           <img
             src={pictureUrl}
             alt="Avatar"
-            className="circle"
-            style={{
-              width: 120,
-              height: 120,
-              objectFit: "cover",
-              margin: "0 auto",
-            }}
+            className="circle responsive small"
           />
         ) : (
-          <div
-            className="circle surface center-align middle-align"
-            style={{ width: 120, height: 120, margin: "0 auto" }}
-          >
+          <div className="circle surface center-align middle-align responsive small">
             <i className="extra">person</i>
           </div>
         )}
       </div>
       <div className="space"></div>
-      <button className="border round">
+      <label className="button border round">
         <span>{t("Change Picture")}</span>
         <input
           type="file"
           accept="image/*"
+          hidden
           onChange={handlePictureChange}
-          style={{
-            position: "absolute",
-            opacity: 0,
-            left: 0,
-            top: 0,
-            width: "100%",
-            height: "100%",
-            cursor: "pointer",
-          }}
         />
-      </button>
+      </label>
     </div>
   );
 }
