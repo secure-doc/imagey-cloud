@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import { useBackButton } from "../contexts/ActionBarContext";
+import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { contactService } from "../contact/ContactService";
 import { SendMessageForm } from "../chat/SendMessageForm";
 import { usePolling } from "../chat/messageHooks";
+import { ChatsList } from "./Chats";
 
 export default function Chat({ contactEmail }: { contactEmail: string }) {
   const authentication = useAuthentication();
@@ -18,6 +19,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useBackButton();
+  useTitle(contactEmail);
 
   useEffect(() => {
     if (contactEmail && publicKey && privateKey) {
@@ -56,80 +58,78 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   }, [messages]);
 
   return (
-    <main
-      className="max"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "calc(100vh - 144px)",
-      }}
-    >
-      <h5 className="center-align vertical-margin">{contactEmail}</h5>
-      {keyError && (
-        <dialog className="modal active" open>
-          <h5>Decryption Error</h5>
-          <div>
-            There was an error decrypting the messages. This may be because the
-            keys have changed. You can try to re-issue the keys, but all
-            previous messages will be lost. Do you want to proceed?
+    <main className="grid no-margin no-space no-padding">
+      <ChatsList className="m l" activeContactEmail={contactEmail} />
+      <div
+        className="col s12 m8 l8 vertical"
+        style={{
+          height: "calc(100vh - 64px)",
+        }}
+      >
+        {keyError && (
+          <dialog className="modal active" open>
+            <h5>Decryption Error</h5>
+            <div>
+              There was an error decrypting the messages. This may be because
+              the keys have changed. You can try to re-issue the keys, but all
+              previous messages will be lost. Do you want to proceed?
+            </div>
+            <nav className="right-align">
+              <button className="border" onClick={() => setKeyError(false)}>
+                Abbrechen
+              </button>
+              <button onClick={handleReissue}>Re-Issue</button>
+            </nav>
+          </dialog>
+        )}
+        {messages === undefined || sharedKey === undefined ? (
+          <div className="max flex center-align middle-align">
+            <progress className="circle"></progress>
           </div>
-          <nav className="right-align">
-            <button className="border" onClick={() => setKeyError(false)}>
-              Abbrechen
-            </button>
-            <button onClick={handleReissue}>Re-Issue</button>
-          </nav>
-        </dialog>
-      )}
-      {messages === undefined || sharedKey === undefined ? (
-        <div className="max flex center-align middle-align">
-          <progress className="circle"></progress>
-        </div>
-      ) : (
-        <>
-          <div
-            className="scroll padding"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              flexGrow: 1,
-              gap: "0.5rem",
-            }}
-          >
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                className={`padding elevate ${
-                  m.sender === user
-                    ? "primary top-round left-round"
-                    : "surface-container top-round right-round"
-                }`}
-                style={{
-                  alignSelf: m.sender === user ? "flex-end" : "flex-start",
-                  maxWidth: "80%",
-                  wordWrap: "break-word",
-                }}
-              >
-                {m.content}
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-          {user && contactEmail && (
-            <>
-              <hr className="divider" />
-              <SendMessageForm
-                userEmail={user}
-                contactEmail={contactEmail}
-                sharedKey={sharedKey}
-                onMessageSent={(newMessage) =>
-                  setMessages((prev) => [...(prev ?? []), newMessage])
-                }
-              />
-            </>
-          )}
-        </>
-      )}
+        ) : (
+          <>
+            <div
+              className="scroll padding vertical"
+              style={{
+                flexGrow: 1,
+                gap: "0.5rem",
+              }}
+            >
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`padding elevate ${
+                    m.sender === user
+                      ? "primary top-round left-round"
+                      : "surface-container top-round right-round"
+                  }`}
+                  style={{
+                    alignSelf: m.sender === user ? "flex-end" : "flex-start",
+                    maxWidth: "80%",
+                    wordWrap: "break-word",
+                  }}
+                >
+                  {m.content}
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+            {user && contactEmail && (
+              <>
+                <hr className="divider" />
+                <SendMessageForm
+                  userEmail={user}
+                  contactEmail={contactEmail}
+                  sharedKey={sharedKey}
+                  onMessageSent={(newMessage) =>
+                    setMessages((prev) => [...(prev ?? []), newMessage])
+                  }
+                />
+              </>
+            )}
+          </>
+        )}
+      </div>
     </main>
   );
 }

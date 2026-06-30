@@ -5,12 +5,16 @@ interface ActionIconsState {
   setActionIcons: (icons: JSX.Element[]) => void;
   backButtonVisible: boolean;
   setBackButtonVisible: (backButtonVisible: boolean) => void;
+  title?: string;
+  setTitle: (title?: string) => void;
 }
 export const ActionBarContext = createContext<ActionIconsState>({
   actionIcons: [],
   setActionIcons: () => {},
   backButtonVisible: false,
   setBackButtonVisible: () => {},
+  title: undefined,
+  setTitle: () => {},
 });
 
 export function useActionIcons(icons: JSX.Element[]) {
@@ -20,5 +24,16 @@ export function useActionIcons(icons: JSX.Element[]) {
 
 export function useBackButton() {
   const { setBackButtonVisible } = useContext(ActionBarContext);
-  useEffect(() => setBackButtonVisible(true), [setBackButtonVisible]);
+  useEffect(() => {
+    setBackButtonVisible(true);
+    return () => setBackButtonVisible(false);
+  }, [setBackButtonVisible]);
+}
+
+export function useTitle(title?: string) {
+  const { setTitle } = useContext(ActionBarContext);
+  useEffect(() => {
+    setTitle(title);
+    return () => setTitle(undefined);
+  }, [setTitle, title]);
 }

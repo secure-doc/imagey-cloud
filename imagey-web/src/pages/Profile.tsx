@@ -24,29 +24,25 @@ export default function Profile() {
   useEffect(() => {
     const loadProfile = async () => {
       setLoading(true);
-      try {
-        const p = await profileService.loadProfile(
-          auth.user,
-          auth.keyPairs.mainKeyPair.publicKey,
-          auth.keyPairs.mainKeyPair.privateKey,
-        );
-        if (p) {
-          setProfile(p);
-          if (p.profilePictureId) {
-            const doc = await documentService.loadDocument(
-              auth.user,
-              { documentId: p.profilePictureId, name: "avatar.jpg" },
-              auth.keyPairs.mainKeyPair.publicKey,
-              auth.keyPairs.mainKeyPair.privateKey,
-            );
-            if (doc.content) {
-              const blob = new Blob([doc.content]);
-              setPicture(blob);
-            }
+      const p = await profileService.loadProfile(
+        auth.user,
+        auth.keyPairs.mainKeyPair.publicKey,
+        auth.keyPairs.mainKeyPair.privateKey,
+      );
+      if (p) {
+        setProfile(p);
+        if (p.profilePictureId) {
+          const doc = await documentService.loadDocument(
+            auth.user,
+            { documentId: p.profilePictureId, name: "avatar.jpg" },
+            auth.keyPairs.mainKeyPair.publicKey,
+            auth.keyPairs.mainKeyPair.privateKey,
+          );
+          if (doc.content) {
+            const blob = new Blob([doc.content]);
+            setPicture(blob);
           }
         }
-      } catch (e) {
-        console.error(e);
       }
       setLoading(false);
     };

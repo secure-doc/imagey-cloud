@@ -5,13 +5,14 @@ import BackButton from "./BackButton";
 import { getAppName } from "../utils/appName";
 
 export default function AppBar() {
-  const { actionIcons, backButtonVisible } = useContext(ActionBarContext);
+  const { actionIcons, backButtonVisible, title } =
+    useContext(ActionBarContext);
 
   return (
     <header className="primary-container fixed" style={{ gridArea: "top" }}>
       <nav>
         {backButtonVisible ? <BackButton /> : <MenuButton />}
-        <h6 className="center-align max">{getAppName()}</h6>
+        <h6 className="center-align max">{title ?? getAppName()}</h6>
         {actionIcons}
       </nav>
     </header>

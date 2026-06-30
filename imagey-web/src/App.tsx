@@ -4,7 +4,7 @@ import "beercss";
 import "material-dynamic-colors";
 import AuthenticationComponent from "./authentication/AuthenticationComponent";
 import { ActionBarContextProvider } from "./contexts/ActionBarContextProvider";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Route, Routes, Outlet } from "react-router";
 import Navigation from "./components/Navigation";
 import Images from "./pages/Images";
 import Image from "./pages/Image";
@@ -26,6 +26,15 @@ import { useParams } from "react-router";
 function ChatRoute() {
   const { contactEmail } = useParams();
   return contactEmail ? <Chat contactEmail={contactEmail} /> : null;
+}
+
+function BottomNavLayout() {
+  return (
+    <>
+      <Outlet />
+      <Navigation className="bottom s" />
+    </>
+  );
 }
 
 function App() {
@@ -75,21 +84,22 @@ function App() {
           <Navigation className="left max l" />
           <Navigation className="left m" />
           <Routes>
-            <Route path="/" element={<Activities />} />
-            <Route path="images">
-              <Route index element={<Images />} />
-              <Route path=":id" element={<Image />} />
+            <Route element={<BottomNavLayout />}>
+              <Route path="/" element={<Activities />} />
+              <Route path="images">
+                <Route index element={<Images />} />
+                <Route path=":id" element={<Image />} />
+              </Route>
+              <Route path="chats" element={<Chats />} />
+              <Route path="settings">
+                <Route index element={<Settings />} />
+                <Route path="profile" element={user && <Profile />} />
+                <Route path="devices" element={user && <Devices />} />
+              </Route>
             </Route>
-            <Route path="chats" element={<Chats />} />
             <Route path="chats/:contactEmail" element={<ChatRoute />} />
-            <Route path="settings">
-              <Route index element={<Settings />} />
-              <Route path="profile" element={user && <Profile />} />
-              <Route path="devices" element={user && <Devices />} />
-            </Route>
           </Routes>
           <aside></aside>
-          <Navigation className="bottom s" />
         </BrowserRouter>
       </ActionBarContextProvider>
     </AuthenticationContext.Provider>

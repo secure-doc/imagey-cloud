@@ -4,8 +4,8 @@
   "extension": [".js", ".ts", ".jsx", ".tsx"],
   "all": true,
   "check-coverage": true,
-  "branches": 86,
+  "branches": 89,
   "lines": 95,
   "statements": 95,
-  "functions": 94
+  "functions": 95
 }

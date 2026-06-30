@@ -14,28 +14,19 @@ export default function Panel({
   return (
     <div className={className}>
       <article
-        className="no-padding border"
-        style={{ display: "flex", flexDirection: "column", height: "100%" }}
+        className="no-padding border vertical"
+        style={{ height: "100%" }}
       >
         {typeof image === "string" ? (
-          <img
-            className="responsive small"
-            src={image}
-            style={{ objectFit: "cover" }}
-          />
+          <img className="responsive small" src={image} />
         ) : (
           image
         )}
-        <div
-          className="padding"
-          style={{ display: "flex", flexDirection: "column", flexGrow: 1 }}
-        >
+        <div className="padding vertical" style={{ flexGrow: 1 }}>
           <h5 className="max truncate center-align">{title}</h5>
           {children}
           {actions && (
-            <nav className="center-align" style={{ marginTop: "auto" }}>
-              {actions}
-            </nav>
+            <nav className="center-align auto-margin top-margin">{actions}</nav>
           )}
         </div>
       </article>

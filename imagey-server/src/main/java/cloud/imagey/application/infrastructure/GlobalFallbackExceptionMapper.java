@@ -39,7 +39,7 @@ public class GlobalFallbackExceptionMapper implements ExceptionMapper<Throwable>
         if (exception instanceof WebApplicationException wae) {
             return wae.getResponse();
         }
-        LOG.error("Unerwarteter Fehler VOR der Ressourcen-Ausführung", exception);
+        LOG.error("Unexpected error", exception);
         return status(INTERNAL_SERVER_ERROR).entity("Internal error").build();
     }
 }
