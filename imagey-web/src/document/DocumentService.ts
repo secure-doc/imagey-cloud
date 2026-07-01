@@ -20,11 +20,16 @@ export const documentService = {
       documentId: documentId,
     };
     const documentKey = await cryptoService.generateSymmetricKey();
-    const encryptedDocumentKey = await cryptoService.encryptKey(
+    const encryptedDocumentKeyString = await cryptoService.encryptKey(
       documentKey,
       publicKey,
       privateKey,
     );
+    const encryptedDocumentKey = {
+      issuer: email,
+      kid: "0",
+      sharedKey: encryptedDocumentKeyString,
+    };
 
     if (imageService.isImage(file.type)) {
       const scaledImages = await imageService.scale(file);
@@ -78,7 +83,7 @@ export const documentService = {
         metadata.sharedKey ??
         (await documentRepository.loadKey(user, metadata.documentId));
       const decryptedDocumentKey = await cryptoService.decryptKey(
-        encryptedDocumentKey,
+        encryptedDocumentKey.sharedKey,
         publicKey,
         privateKey,
       );

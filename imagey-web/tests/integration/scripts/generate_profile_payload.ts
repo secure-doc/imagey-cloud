@@ -58,13 +58,11 @@ async function generateProfile() {
   combinedKey.set(new Uint8Array(encryptedKeyBytes), 12);
   const sharedKeyBase64 = Buffer.from(combinedKey.buffer).toString("base64");
 
-  const exportedPubKey = await crypto.subtle.exportKey(
-    "jwk",
-    tempKeyPair.publicKey,
-  );
+  await (crypto as Crypto).subtle.exportKey("jwk", tempKeyPair.publicKey);
   const finalSharedKey = JSON.stringify({
-    encryptingPublicKey: exportedPubKey,
-    key: sharedKeyBase64,
+    issuer: "mary@imagey.cloud",
+    kid: "0",
+    sharedKey: sharedKeyBase64,
   });
 
   const ivData = crypto.getRandomValues(new Uint8Array(12));

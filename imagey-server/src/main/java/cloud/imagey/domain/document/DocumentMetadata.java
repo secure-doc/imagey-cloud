@@ -19,12 +19,14 @@ package cloud.imagey.domain.document;
 import jakarta.json.bind.annotation.JsonbCreator;
 import jakarta.json.bind.annotation.JsonbProperty;
 
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
+
 public record DocumentMetadata(
     @JsonbProperty("documentId") DocumentId documentId,
     @JsonbProperty("smallImageId") DocumentId smallImageId,
     @JsonbProperty("previewImageId") DocumentId previewImageId,
     @JsonbProperty("encryptedData") String encryptedData,
-    @JsonbProperty("sharedKey") String sharedKey) {
+    @JsonbProperty("sharedKey") EncryptedSharedKey sharedKey) {
 
     @JsonbCreator
     public DocumentMetadata(
@@ -32,7 +34,7 @@ public record DocumentMetadata(
         @JsonbProperty("smallImageId") String smallImageId,
         @JsonbProperty("previewImageId") String previewImageId,
         @JsonbProperty("encryptedData") String encryptedData,
-        @JsonbProperty("sharedKey") String sharedKey) {
+        @JsonbProperty("sharedKey") EncryptedSharedKey sharedKey) {
 
         this(
             documentId != null ? new DocumentId(documentId) : null,

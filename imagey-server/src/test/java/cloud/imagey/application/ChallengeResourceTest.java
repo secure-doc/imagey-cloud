@@ -166,6 +166,19 @@ public class ChallengeResourceTest {
     }
 
     @Test
+    @DisplayName("VerifyChallenge fails when no challenge was created")
+    void verifyChallengeWithoutChallenge() {
+        try (Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/authentications")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(json(new ChallengeSignature("invalid-signature")))) {
+            assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+        }
+    }
+
+    @Test
     @DisplayName("VerifyChallenge fails for invalid signature")
     void verifyChallengeInvalidSignature() {
         try (Response createResponse = newClient()
@@ -182,8 +195,59 @@ public class ChallengeResourceTest {
             .path("users/mary@imagey.cloud/devices/known-device/authentications")
             .request()
             .header("Origin", "https://secure-doc.store")
-            .post(json(new ChallengeSignature("invalid-signature")))) {
+            .post(json(new ChallengeSignature("aW52YWxpZC1zaWduYXR1cmU=")))) {
             assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+        }
+    }
+
+    @Test
+    @DisplayName("VerifyChallenge fails for wrong nonce")
+    void verifyChallengeWrongNonce() throws Exception {
+        ChallengeResponse challenge;
+        try (Response createResponse = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/challenges")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(json(""))) {
+            assertThat(createResponse.getStatus()).isEqualTo(CREATED.getStatusCode());
+            challenge = createResponse.readEntity(ChallengeResponse.class);
+        }
+
+        ECKey serverEphemeralKey = ECKey.parse(challenge.ephemeralPublicKey());
+        java.security.PublicKey serverPubKey = serverEphemeralKey.toPublicKey();
+
+        javax.crypto.KeyAgreement ka = javax.crypto.KeyAgreement.getInstance("ECDH");
+        ka.init(clientKeyPair.getPrivate());
+        ka.doPhase(serverPubKey, true);
+        byte[] sharedSecret = ka.generateSecret();
+
+        byte[] aesKeyBytes = java.util.Arrays.copyOf(sharedSecret, 32);
+        javax.crypto.SecretKey aesKey = new javax.crypto.spec.SecretKeySpec(aesKeyBytes, "AES");
+
+        byte[] iv = new byte[12];
+        new java.security.SecureRandom().nextBytes(iv);
+
+        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        javax.crypto.spec.GCMParameterSpec spec = new javax.crypto.spec.GCMParameterSpec(128, iv);
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, aesKey, spec);
+
+        byte[] wrongNonceBytes = "wrong-nonce".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] ciphertext = cipher.doFinal(wrongNonceBytes);
+
+        byte[] combined = new byte[iv.length + ciphertext.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+
+        String signatureBase64 = java.util.Base64.getEncoder().encodeToString(combined);
+
+        try (Response verifyResponse = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/authentications")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(json(new ChallengeSignature(signatureBase64)))) {
+            assertThat(verifyResponse.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
         }
     }
 

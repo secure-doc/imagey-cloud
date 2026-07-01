@@ -22,9 +22,9 @@ import static java.util.Set.of;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.entity;
 import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM_TYPE;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
-import static jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static org.apache.commons.io.FileUtils.deleteDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
@@ -78,7 +78,7 @@ public class DocumentTest {
         byte[] documentContent = new byte[] {123, -108, 98, 27, -126, 65};
         byte[] smallContent = new byte[] {123, -108};
         byte[] previewContent = new byte[] {123, -108, 98, 27};
-        String sharedKey = "alkdjföalsdjkföa";
+        String sharedKey = "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"alkdjföalsdjkföa\"}";
 
         // When
         Response response = newClient()
@@ -136,7 +136,7 @@ public class DocumentTest {
                 .request()
                 .header("Origin", "https://secure-doc.store")
                 .header("Cookie", "token=" + token.token())
-                .put(entity(sharedKey, TEXT_PLAIN_TYPE));
+                .put(entity(sharedKey, APPLICATION_JSON_TYPE));
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
 
         // Then
@@ -160,7 +160,7 @@ public class DocumentTest {
         assertThat(metadata).contains(
             entry("documentId", documentId),
             entry("encryptedData", "dummy-encrypted-data"),
-            entry("sharedKey", sharedKey));
+            entry("sharedKey", Map.of("issuer", "mary@imagey.cloud", "kid", "0", "sharedKey", "alkdjföalsdjkföa")));
         byte[] actualDocumentContent = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users/mary@imagey.cloud/documents/")
@@ -206,8 +206,8 @@ public class DocumentTest {
         metadataHeaders.putSingle("Content-Disposition", "form-data; name=\"metadata\"; filename=\"metadata.json\"");
         metadataHeaders.putSingle("Content-Type", "application/json");
         MetadataMap<String, String> sharedKeyHeaders = new MetadataMap<>();
-        sharedKeyHeaders.putSingle("Content-Disposition", "form-data; name=\"sharedKey\"; filename=\"sharedKey.txt\"");
-        sharedKeyHeaders.putSingle("Content-Type", "text/plain");
+        sharedKeyHeaders.putSingle("Content-Disposition", "form-data; name=\"sharedKey\"; filename=\"sharedKey.json\"");
+        sharedKeyHeaders.putSingle("Content-Type", "application/json");
         MetadataMap<String, String> contentHeaders = new MetadataMap<>();
         contentHeaders.putSingle("Content-Disposition", "form-data; name=\"content\"; filename=\"content.bin\"");
         contentHeaders.putSingle("Content-Type", "application/octet-stream");
@@ -219,7 +219,13 @@ public class DocumentTest {
                     "encryptedData": "dummy-encrypted-data"
                 }
             """.formatted(documentId)),
-            new Attachment(sharedKeyHeaders, "dummy-shared-key"),
+            new Attachment(sharedKeyHeaders, """
+                {
+                    "issuer":"mary@imagey.cloud",
+                    "kid":"0",
+                    "sharedKey":"dummy-shared-key"
+                }
+            """),
             new Attachment(contentHeaders, new byte[] {1, 2, 3})
         );
 
@@ -251,7 +257,9 @@ public class DocumentTest {
             """.formatted(documentId)),
             new Attachment("sharedKey", "application/json", """
                 {
-                    "key": "dummy-shared-key"
+                    "issuer":"mary@imagey.cloud",
+                    "kid":"0",
+                    "sharedKey":"dummy-shared-key"
                 }
             """),
             new Attachment("content", "application/octet-stream", new byte[] {1, 2, 3}),
@@ -317,7 +325,13 @@ public class DocumentTest {
                     "encryptedData": "dummy-encrypted-data"
                 }
             """.formatted(documentId)),
-            new Attachment("sharedKey", "text/plain", "dummy-shared-key"),
+            new Attachment("sharedKey", "application/json", """
+                {
+                    "issuer":"mary@imagey.cloud",
+                    "kid":"0",
+                    "sharedKey":"dummy-shared-key"
+                }
+            """),
             new Attachment("content", "application/octet-stream", new byte[] {1, 2, 3})
         );
 

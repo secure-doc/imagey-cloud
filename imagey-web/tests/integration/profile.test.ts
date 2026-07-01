@@ -171,14 +171,20 @@ test("load existing profile with picture", async ({ page }) => {
       "/users/mary@imagey.cloud/documents/profile-pic-doc-id/encrypted-shared-keys/mary@imagey.cloud",
       (r) =>
         r.headers({
-          Accept: "text/plain",
+          Accept: "application/json",
         }),
     )
     .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "text/plain",
-        "./tests/images/encrypted/profile-pic-doc-id/shared-keys/mary@imagey.cloud/encrypted-shared.key",
-      ),
+      r.jsonBody({
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: fs
+          .readFileSync(
+            "./tests/images/encrypted/profile-pic-doc-id/shared-keys/mary@imagey.cloud/encrypted-shared.key",
+            "utf8",
+          )
+          .trim(),
+      }),
     );
 
   provider

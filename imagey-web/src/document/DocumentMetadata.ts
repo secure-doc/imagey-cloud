@@ -6,5 +6,5 @@ export default interface DocumentMetadata {
   smallImageId?: string;
   previewImageId?: string;
   encryptedData?: string;
-  sharedKey?: string;
+  sharedKey?: { issuer: string; kid: string; sharedKey: string };
 }

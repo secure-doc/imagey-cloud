@@ -110,9 +110,15 @@ function createMultipartPayload(documentId: string): Buffer {
     ),
     metadata,
     Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"; filename="encrypted-shared.key"\r\nContent-Type: text/plain\r\n\r\n`,
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"; filename="sharedKey.json"\r\nContent-Type: application/json\r\n\r\n`,
     ),
-    sharedKey,
+    Buffer.from(
+      JSON.stringify({
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: sharedKey.toString(),
+      }),
+    ),
     Buffer.from(
       `\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="${documentId}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
     ),
@@ -157,7 +163,7 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
         } else {
           // For PUT (profile update), we just use a static mock payload because the actual payload is dynamically encrypted
           postData = Buffer.from(
-            `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{ "documentId": "profile" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"\r\n\r\nencrypted-key\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="profile.json"\r\nContent-Type: application/octet-stream\r\n\r\ncontent\r\n--${boundary}--\r\n`,
+            `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{ "documentId": "profile" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"\r\n\r\n{ "issuer": "mary@imagey.cloud", "kid": "0", "sharedKey": "encrypted-key" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="profile.json"\r\nContent-Type: application/octet-stream\r\n\r\ncontent\r\n--${boundary}--\r\n`,
           );
         }
       }
@@ -350,10 +356,19 @@ export async function prepareMarysDocuments() {
           previewImageId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
           encryptedData:
             "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
-          sharedKey: fs.readFileSync(
-            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/shared-keys/mary@imagey.cloud/encrypted-shared.key",
-            "utf8",
-          ),
+          sharedKey: {
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey: fs
+              .readFileSync(
+                path.resolve(
+                  process.cwd(),
+                  `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
+                ),
+                "utf8",
+              )
+              .trim(),
+          },
         },
         {
           documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
@@ -361,24 +376,41 @@ export async function prepareMarysDocuments() {
           previewImageId: "f232a44d-6396-42bb-9196-f0013d46ded5",
           encryptedData:
             "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
-          sharedKey: fs.readFileSync(
-            "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/shared-keys/mary@imagey.cloud/encrypted-shared.key",
-            "utf8",
-          ),
+          sharedKey: {
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey: fs
+              .readFileSync(
+                path.resolve(
+                  process.cwd(),
+                  `tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
+                ),
+                "utf8",
+              )
+              .trim(),
+          },
         },
         {
           documentId: "profile",
           encryptedData:
             "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
-          sharedKey:
-            "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+          sharedKey: {
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey:
+              "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+          },
         },
         {
           documentId: "profile-pic-doc-id",
           encryptedData:
             "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
-          sharedKey:
-            "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+          sharedKey: {
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey:
+              "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+          },
         },
       ]),
     );
@@ -543,14 +575,20 @@ documentId === TestData.mary.documents[0].documentId
       }),
       (r) =>
         r.headers({
-          Accept: "text/plain",
+          Accept: "application/json",
         }),
     )
     .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "text/plain",
-        `./tests/images/encrypted/${documentId}/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
-      ),
+      r.jsonBody({
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: fs
+          .readFileSync(
+            `./tests/images/encrypted/${documentId}/shared-keys/mary@imagey.cloud/encrypted-shared.key`,
+            "utf8",
+          )
+          .trim(),
+      }),
     );
 }
 
