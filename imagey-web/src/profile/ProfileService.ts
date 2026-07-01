@@ -49,7 +49,19 @@ export const profileService = {
       "metadata",
       new Blob([JSON.stringify(metadata)], { type: "application/json" }),
     );
-    formData.append("sharedKey", encryptedDocumentKey);
+    formData.append(
+      "sharedKey",
+      new Blob(
+        [
+          JSON.stringify({
+            issuer: email,
+            kid: "0",
+            sharedKey: encryptedDocumentKey,
+          }),
+        ],
+        { type: "application/json" },
+      ),
+    );
     formData.append(
       "content",
       new Blob([encryptedDocuments[0]], { type: "application/octet-stream" }),
