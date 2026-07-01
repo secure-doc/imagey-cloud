@@ -158,8 +158,14 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
         headers["content-type"] = `multipart/form-data; boundary=${boundary}`;
 
         if (request.method() === "POST") {
-          const documentId = expectedUploadDocumentId;
-          postData = createMultipartPayload(documentId);
+          if (expectedUploadDocumentId === "folder") {
+            postData = Buffer.from(
+              `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{ "documentId": "folder" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"\r\n\r\n{ "issuer": "mary@imagey.cloud", "kid": "0", "sharedKey": "encrypted-key" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="folder"\r\nContent-Type: application/octet-stream\r\n\r\n\r\n--${boundary}--\r\n`,
+            );
+          } else {
+            const documentId = expectedUploadDocumentId;
+            postData = createMultipartPayload(documentId);
+          }
         } else {
           // For PUT (profile update), we just use a static mock payload because the actual payload is dynamically encrypted
           postData = Buffer.from(
@@ -590,6 +596,43 @@ documentId === TestData.mary.documents[0].documentId
           .trim(),
       }),
     );
+}
+
+export async function prepareFolderUpload() {
+  expectedUploadDocumentId = "folder";
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get public key for folder creation")
+    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to upload a folder")
+    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
+      r.headers({
+        "Content-Type": Matchers.regex({
+          matcher: "multipart/form-data; boundary=.*",
+          generate: "multipart/form-data; boundary=----WebKitFormBoundary",
+        }),
+      });
+    })
+    .willRespondWith(200);
+
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to patch documents")
+    .withRequest("PATCH", "/users/mary@imagey.cloud/documents", (r) => {
+      r.headers({
+        "Content-Type": "application/json-patch+json",
+      });
+    })
+    .willRespondWith(200);
 }
 
 export async function prepareMarysDevices() {

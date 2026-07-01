@@ -3,4 +3,8 @@ export default interface Document {
   type?: string;
   documentId: string;
   content?: ArrayBuffer;
+  issuer?: string;
+  documentIds?: string[];
+  folderIds?: string[];
+  _metadata?: any; // Internal metadata for patches
 }

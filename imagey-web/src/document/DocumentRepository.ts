@@ -1,5 +1,11 @@
 import DocumentMetadata from "./DocumentMetadata";
 
+export interface DocumentPatchOperation {
+  op: "add" | "replace";
+  path: string;
+  value: DocumentMetadata;
+}
+
 const cache: Map<string, ArrayBuffer> = new Map();
 
 export const documentRepository = {
@@ -57,6 +63,21 @@ export const documentRepository = {
       credentials: "same-origin",
     });
     return resolve(response, () => response.json());
+  },
+
+  patchDocuments: async (
+    email: string,
+    operations: DocumentPatchOperation[],
+  ): Promise<void> => {
+    const response = await fetch(`/users/${email}/documents`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json-patch+json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(operations),
+    });
+    return resolve(response, () => Promise.resolve());
   },
 
   loadKey: async (

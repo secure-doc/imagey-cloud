@@ -32,6 +32,8 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.PATCH;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -88,6 +90,25 @@ public class DocumentResource {
         DocumentMetadata metadata) throws IOException {
 
         documentRepository.persist(user, metadata);
+        return Response.ok().build();
+    }
+
+    @PATCH
+    @RolesAllowed("owner")
+    @Consumes("application/json-patch+json")
+    public Response patchDocuments(
+        @PathParam("email") User user,
+        List<DocumentPatchOperation> operations) throws IOException {
+
+        for (DocumentPatchOperation operation : operations) {
+            if (!"add".equals(operation.op()) && !"replace".equals(operation.op())) {
+                throw new BadRequestException("Only 'add' and 'replace' operations are supported");
+            }
+            if (operation.value() == null) {
+                throw new BadRequestException("Missing 'value' in patch operation");
+            }
+            documentRepository.persist(user, operation.value());
+        }
         return Response.ok().build();
     }
 

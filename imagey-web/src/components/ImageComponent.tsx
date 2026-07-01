@@ -25,6 +25,10 @@ export default function ImageComponent({
         alt={image.name}
         loading="lazy"
         className={className}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("documentId", image.documentId);
+        }}
       />
     );
   } else {
