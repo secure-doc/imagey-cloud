@@ -17,6 +17,7 @@ export default function ProfileSaveButton({
   const { t } = useTranslation();
   const auth = useContext(AuthenticationContext);
   const [saving, setSaving] = useState<boolean>(false);
+  const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -41,6 +42,8 @@ export default function ProfileSaveButton({
         auth.keyPairs.mainKeyPair.privateKey,
       );
       onProfileChange(profileToSave);
+      setShowSnackbar(true);
+      setTimeout(() => setShowSnackbar(false), 3000);
     } catch (e) {
       console.error(e);
     }
@@ -48,9 +51,15 @@ export default function ProfileSaveButton({
   };
 
   return (
-    <button className="primary round" onClick={handleSave} disabled={saving}>
-      {saving ? <progress className="circle small"></progress> : <i>save</i>}
-      <span>{t("Save")}</span>
-    </button>
+    <>
+      <button className="primary round" onClick={handleSave} disabled={saving}>
+        {saving ? <progress className="circle small"></progress> : <i>save</i>}
+        <span>{t("Save")}</span>
+      </button>
+      <div className={`snackbar ${showSnackbar ? "active" : ""}`}>
+        <i>check</i>
+        <span>{t("Profile saved")}</span>
+      </div>
+    </>
   );
 }

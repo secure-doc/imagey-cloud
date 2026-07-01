@@ -41,7 +41,7 @@ export default function EditableInput({
               autoFocus
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              onBlur={handleClose}
+              onBlur={() => setTimeout(handleClose, 200)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleClose();
               }}

@@ -88,6 +88,7 @@ test("edit and save profile", async ({ page }) => {
     const nameInput = page.getByLabel("Name");
     await expect(nameInput).toBeVisible();
     await nameInput.fill("Mary Doe");
+    await page.locator("i:text('check')").first().click();
 
     const fileChooserPromise = page.waitForEvent("filechooser");
     const changePictureButton = page.locator("label", {
