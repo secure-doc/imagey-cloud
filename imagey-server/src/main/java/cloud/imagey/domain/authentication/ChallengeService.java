@@ -139,8 +139,8 @@ public class ChallengeService {
             if (!context.nonce().equals(decryptedNonce)) {
                 throw new ValidationException("Wrong challenge");
             }
-        } catch (IllegalArgumentException | GeneralSecurityException | ParseException | JOSEException e) {
-            throw new ValidationException(e);
+        } catch (IllegalArgumentException | GeneralSecurityException | ParseException | JOSEException | java.security.ProviderException e) {
+            throw new ValidationException();
         }
     }
 

@@ -47,7 +47,7 @@ public class MultipartMockFilter implements Filter {
                 + "--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"sharedKey\"\r\n"
                 + "Content-Type: application/json\r\n\r\n"
-                + "{\"key\": \"dummy\"}\r\n"
+                + "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"dummy\"}\r\n"
                 + "--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"content\"; filename=\"dummy.txt\"\r\n"
                 + "Content-Type: application/octet-stream\r\n\r\n"

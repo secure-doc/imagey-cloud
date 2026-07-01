@@ -19,7 +19,7 @@ package cloud.imagey.application;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
-import static jakarta.ws.rs.core.MediaType.TEXT_PLAIN;
+
 
 import java.io.IOException;
 import java.util.List;
@@ -120,28 +120,27 @@ public class DocumentResource {
     @GET
     @RolesAllowed("owner")
     @Path("{documentId}/encrypted-shared-keys/{share-email}")
-    @Produces(TEXT_PLAIN)
-    public String getSharedKey(
+    @Produces(APPLICATION_JSON)
+    public EncryptedSharedKey getSharedKey(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
 
         return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
-                .map(EncryptedSharedKey::sharedKey)
                 .orElseThrow(NotFoundException::new);
     }
 
     @PUT
     @RolesAllowed("owner")
     @Path("{documentId}/encrypted-shared-keys/{share-email}")
-    @Consumes(TEXT_PLAIN)
+    @Consumes(APPLICATION_JSON)
     public Response storeSharedKey(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("share-email") Email userTheDocumentIsSharedWith,
-        String key) throws IOException {
+        EncryptedSharedKey key) throws IOException {
 
-        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, new EncryptedSharedKey(null, "0", key));
+        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, key);
         return Response.ok().build();
     }
 
@@ -160,13 +159,13 @@ public class DocumentResource {
     public Response uploadDocument(
         @PathParam("email") User user,
         @Multipart("metadata") DocumentMetadata metadata,
-        @Multipart("sharedKey") String sharedKey,
+        @Multipart("sharedKey") EncryptedSharedKey sharedKey,
         @Multipart("content") DocumentContent content,
         @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
         @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
             throws IOException {
 
-        documentRepository.persist(user, metadata.documentId(), user.email(), new EncryptedSharedKey(null, "0", sharedKey));
+        documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
         documentRepository.persist(user, metadata);
         documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
 

@@ -19,6 +19,7 @@ package cloud.imagey.application;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.text;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
+import static jakarta.ws.rs.core.Response.Status.OK;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -179,6 +180,26 @@ public class MessageResourceTest {
         List<Message> messages = futureMessages.get();
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content().value()).isEqualTo("delayed-content");
+    }
+
+    @Test
+    @DisplayName("Prefer header with number format exception falls back to 0 timeout")
+    void testPreferHeaderNumberFormatException() throws Exception {
+        Response response = receiverClient.path("contacts/sender@example.com/messages")
+            .header("Prefer", "wait=999999999999999999999999999999999999999")
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Invalid Prefer header format falls back to 0 timeout")
+    void testInvalidPreferHeaderFormat() throws Exception {
+        Response response = receiverClient.path("contacts/sender@example.com/messages")
+            .header("Prefer", "invalid-prefer-value")
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
     }
 
     public interface TestClient {

@@ -6,7 +6,7 @@ export const documentRepository = {
   uploadDocument: async (
     email: string,
     metadata: DocumentMetadata,
-    sharedKey: string,
+    sharedKey: { issuer: string; kid: string; sharedKey: string },
     content: ArrayBuffer[],
   ) => {
     if (content.length === 0) {
@@ -20,8 +20,8 @@ export const documentRepository = {
     );
     formData.append(
       "sharedKey",
-      new Blob([sharedKey], { type: "text/plain" }),
-      "sharedKey.txt",
+      new Blob([JSON.stringify(sharedKey)], { type: "application/json" }),
+      "sharedKey.json",
     );
     formData.append(
       "content",
@@ -59,7 +59,10 @@ export const documentRepository = {
     return resolve(response, () => response.json());
   },
 
-  loadKey: async (email: string, documentId: string): Promise<string> => {
+  loadKey: async (
+    email: string,
+    documentId: string,
+  ): Promise<{ issuer: string; kid: string; sharedKey: string }> => {
     const response = await fetch(
       "/users/" +
         email +
@@ -70,12 +73,12 @@ export const documentRepository = {
       {
         method: "GET",
         headers: {
-          Accept: "text/plain",
+          Accept: "application/json",
         },
         credentials: "same-origin",
       },
     );
-    return resolve(response, () => response.text());
+    return resolve(response, () => response.json());
   },
   loadContent: async (
     email: string,

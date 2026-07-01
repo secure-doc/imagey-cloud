@@ -18,15 +18,16 @@ package cloud.imagey;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
-import static java.util.Map.entry;
-import static java.util.Map.of;
 import static jakarta.ws.rs.core.Response.Status.CONFLICT;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
+import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static java.lang.Integer.MAX_VALUE;
+import static java.util.Map.entry;
+import static java.util.Map.of;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,6 +53,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.domain.chat.ContactKeys;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -348,6 +351,37 @@ public class ContactRequestTest {
 
     private File getLaurasContactRequests() {
         return new File(getLaurasData(), "contact-requests");
+    }
+
+    @Test
+    @DisplayName("Invalid JSON in key file returns NOT_FOUND")
+    void testGetContactKeyWithInvalidJson() throws IOException {
+        File contactFolder = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
+        contactFolder.mkdirs();
+        java.nio.file.Files.writeString(new File(contactFolder, "key.json").toPath(), "{invalid json");
+
+        Response response = marysClient.path("contacts/laura@imagey.cloud/key").get();
+
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Reissue key creates directory if it doesn't exist")
+    void testReissueKeyCreatesDirectory() throws IOException {
+        File marysContacts = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
+        marysContacts.mkdirs();
+
+        ContactKeys keys = new ContactKeys(
+            new EncryptedSharedKey("m", "1", "k1"),
+            new EncryptedSharedKey("l", "1", "k2")
+        );
+
+        Response response = marysClient.path("contacts/laura@imagey.cloud/key")
+            .put(json(keys));
+
+        assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
+        File laurasContactFolder = new File(new File(getLaurasData(), "contacts"), getMary().email().address());
+        assertThat(laurasContactFolder).exists();
     }
 
     public interface TestClient {
