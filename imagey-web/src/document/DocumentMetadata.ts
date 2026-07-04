@@ -12,4 +12,5 @@ export default interface DocumentMetadata {
     kid: string;
     sharedKey: string;
   };
+  key?: JsonWebKey;
 }

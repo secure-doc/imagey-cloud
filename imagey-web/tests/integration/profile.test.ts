@@ -7,7 +7,7 @@ import {
   loginAsMary,
   prepareMarysLogin,
   prepareMarysContactRequests,
-  prepareMarysDocuments,
+  prepareEmptyMarysDocuments,
   provider,
   runningPactRequests,
   setupMockServer,
@@ -67,7 +67,7 @@ test("edit and save profile", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
   const profileUploadInteraction = await prepareProfileUpload();
 
   // When
@@ -149,7 +149,7 @@ test("load existing profile with picture", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
 
   const profileMockPath = path.join(
     process.cwd(),

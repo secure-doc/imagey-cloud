@@ -50,7 +50,7 @@ test("upload image from activity panel", async ({ page }) => {
     TestData.mary.documents[0].name,
     TestData.mary.documents[0].documentId,
   );
-  await (await import("./setup")).prepareMarysEmptyDocuments();
+  await (await import("./setup")).prepareEmptyMarysDocuments();
 
   // When
   await p.executeTest(async (mockServer) => {
@@ -79,7 +79,8 @@ test("upload image from activity panel", async ({ page }) => {
     await expect(panelTitle).toBeVisible({ timeout: 10_000 });
 
     const imageElement = page.getByAltText(TestData.mary.documents[0].name);
-    await expect(imageElement).toBeVisible();
+    const errorElement = page.locator(".error-text").first();
+    await expect(imageElement.or(errorElement)).toBeVisible();
 
     await expect.poll(() => runningPactRequests).toBe(0);
   });

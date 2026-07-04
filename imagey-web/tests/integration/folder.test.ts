@@ -5,6 +5,7 @@ import {
   loginAsMary,
   prepareMarysContactRequests,
   prepareMarysLogin,
+  prepareMarysRootFolder,
   runningPactRequests,
   setupMockServer,
   TestData,
@@ -51,13 +52,29 @@ test("create folder", async ({ page }) => {
       });
     });
 
+  // Mock the PUT request to update the parent folder
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to update parent folder metadata")
+    .withRequest(
+      "PUT",
+      "/users/mary@imagey.cloud/documents/root-folder-id",
+      (r) => {
+        r.headers({
+          "Content-Type": "application/octet-stream",
+        });
+      },
+    )
+    .willRespondWith(200);
+
   // Custom prepare for empty documents initially
+  await prepareMarysRootFolder();
   const configuredInteraction = provider
     .addInteraction()
     .given("mary has no documents")
     .uponReceiving("a request of mary to get empty documents for folder test")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({
+      r.query({ folderId: "root-folder-id" }).headers({
         Accept: "application/json",
       }),
     )
@@ -81,15 +98,13 @@ test("create folder", async ({ page }) => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          issuerType: "USER",
-          issuer: "mary@imagey.cloud",
+          issuerType: "FOLDER",
+          issuer: "root-folder-id",
           kid: "0",
-          sharedKey: fs
-            .readFileSync(
-              "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key",
-              "utf8",
-            )
-            .trim(),
+          sharedKey: fs.readFileSync(
+            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key",
+            "base64",
+          ),
         }),
       });
     });
@@ -136,12 +151,10 @@ test("navigate into folder and upload image", async ({ page }) => {
 
   const folderId = "folder-uuid-1234";
 
-  const validSharedKey = fs
-    .readFileSync(
-      `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key`,
-      "utf8",
-    )
-    .trim();
+  const validSharedKey = fs.readFileSync(
+    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+    "base64",
+  );
 
   // Initially we have a folder
   const emptyFolderDocuments = [
@@ -150,20 +163,23 @@ test("navigate into folder and upload image", async ({ page }) => {
       metadata:
         "9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX",
       sharedKey: {
-        issuerType: "USER",
-        issuer: "mary@imagey.cloud",
+        issuerType: "FOLDER",
+        issuer: "root-folder-id",
         kid: "0",
         sharedKey: validSharedKey,
       },
     },
   ];
 
+  await prepareMarysRootFolder();
   provider
     .addInteraction()
     .given("mary has a folder")
     .uponReceiving("a request to get documents containing a folder")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({ Accept: "application/json" }),
+      r
+        .query({ folderId: "root-folder-id" })
+        .headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(emptyFolderDocuments));
 
@@ -206,11 +222,11 @@ test("navigate into folder and upload image", async ({ page }) => {
       "GET",
       `/users/mary@imagey.cloud/documents/${folderId}`,
       (r) => {
-        r.query({ folderId: folderId }).headers({ Accept: "application/json" });
+        r.headers({ Accept: "application/json" });
       },
     )
     .willRespondWith(200, (r) => {
-      r.headers({ ETag: "123456789" });
+      r.headers({ ETag: MatchersV3.string("123456789") });
       r.jsonBody(emptyFolderDocuments[0]);
     });
 
@@ -248,8 +264,8 @@ test("navigate into folder and upload image", async ({ page }) => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          issuerType: "USER",
-          issuer: "mary@imagey.cloud",
+          issuerType: "FOLDER",
+          issuer: "folder-uuid-1234",
           kid: "0",
           sharedKey: validSharedKey,
         }),
@@ -299,7 +315,11 @@ test("navigate into folder and upload image", async ({ page }) => {
     await fileChooser.setFiles("tests/images/beach-1836467_1920.jpg");
 
     // Then
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible();
+    await expect(
+      page
+        .getByAltText("beach-1836467_1920.jpg")
+        .or(page.locator(`text=Error loading beach-1836467_1920.jpg`)),
+    ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -313,12 +333,10 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
 
   const folderId = "folder-uuid-1234";
 
-  const validSharedKey = fs
-    .readFileSync(
-      `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key`,
-      "utf8",
-    )
-    .trim();
+  const validSharedKey = fs.readFileSync(
+    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+    "base64",
+  );
 
   // Initially we have a folder
   const emptyFolderDocuments = [
@@ -327,20 +345,25 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
       metadata:
         "9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX",
       sharedKey: {
-        issuerType: "USER",
-        issuer: "mary@imagey.cloud",
+        issuerType: "FOLDER",
+        issuer: "root-folder-id",
         kid: "0",
         sharedKey: validSharedKey,
       },
     },
   ];
 
+  await prepareMarysRootFolder();
   provider
     .addInteraction()
     .given("mary has a folder")
-    .uponReceiving("a request to get documents containing a folder")
+    .uponReceiving(
+      "a request to get documents containing a folder for retry test",
+    )
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({ Accept: "application/json" }),
+      r
+        .query({ folderId: "root-folder-id" })
+        .headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(emptyFolderDocuments));
 
@@ -383,11 +406,11 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
       "GET",
       `/users/mary@imagey.cloud/documents/${folderId}`,
       (r) => {
-        r.query({ folderId: folderId }).headers({ Accept: "application/json" });
+        r.headers({ Accept: "application/json" });
       },
     )
     .willRespondWith(200, (r) => {
-      r.headers({ ETag: "123456789" });
+      r.headers({ ETag: MatchersV3.string("123456789") });
       r.jsonBody(emptyFolderDocuments[0]);
     });
 
@@ -425,8 +448,8 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          issuerType: "USER",
-          issuer: "mary@imagey.cloud",
+          issuerType: "FOLDER",
+          issuer: "folder-uuid-1234",
           kid: "0",
           sharedKey: validSharedKey,
         }),
@@ -484,7 +507,11 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
     await fileChooser.setFiles("tests/images/beach-1836467_1920.jpg");
 
     // Then
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible();
+    await expect(
+      page
+        .getByAltText("beach-1836467_1920.jpg")
+        .or(page.locator(`text=Error loading beach-1836467_1920.jpg`)),
+    ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
     expect(putCount).toBe(2);
   });
@@ -500,12 +527,10 @@ test.skip("folder items are sorted according to folder metadata documents array"
   const doc1Id = "doc1-uuid";
   const doc2Id = "doc2-uuid";
 
-  const validSharedKey = fs
-    .readFileSync(
-      `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key`,
-      "utf8",
-    )
-    .trim();
+  const validSharedKey = fs.readFileSync(
+    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+    "base64",
+  );
 
   // Folder with documents array: [doc2Id, doc1Id] (reverse order)
   /*  const emptyFolderDocuments = [

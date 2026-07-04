@@ -34,8 +34,18 @@ export function SendMessageForm({
   useEffect(() => {
     if (showDialog && !documents && publicKey && privateKey) {
       documentService
-        .loadDocuments(userEmail, publicKey, privateKey)
-        .then((docs) => setDocuments(docs));
+        .getRootFolder(userEmail, publicKey, privateKey)
+        .then((rootFolder) => {
+          return documentService.loadDocuments(
+            userEmail,
+            publicKey,
+            privateKey,
+            rootFolder.documentId,
+            rootFolder.key,
+          );
+        })
+        .then((docs) => setDocuments(docs))
+        .catch(console.error);
     }
   }, [showDialog, documents, userEmail, publicKey, privateKey]);
 
@@ -74,10 +84,8 @@ export function SendMessageForm({
     try {
       await documentService.shareDocument(
         userEmail,
-        document.documentId,
+        document,
         contactEmail,
-        publicKey,
-        privateKey,
         sharedKey,
       );
 

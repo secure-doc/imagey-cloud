@@ -166,7 +166,7 @@ public class DocumentRepositoryTest {
 
         Optional<EncryptedSharedKey> sharedKey = documentRepository.findDocumentKey(folderUser, documentId, lookupEmail);
         assertThat(sharedKey).isPresent();
-        assertThat(sharedKey.get().issuerType()).isEqualTo("FOLDER");
-        assertThat(sharedKey.get().issuer()).isEqualTo("folder123");
+        assertThat(sharedKey.get().issuerType()).isEqualTo("USER");
+        assertThat(sharedKey.get().issuer()).isEqualTo("friend@example.com");
     }
 }

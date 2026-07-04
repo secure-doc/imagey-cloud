@@ -12,6 +12,7 @@ import {
   TestData,
   runningPactRequests,
   prepareMarysDocuments,
+  prepareEmptyMarysDocuments,
   prepareMarysChat,
   prepareAlicesLogin,
   prepareAlicesChat,
@@ -37,7 +38,7 @@ test.afterEach("Clear IndexedDB", async ({ page }) => {
 
 test("view chat and send message", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
 
   await prepareMarysChat("laura@imagey.cloud", " for chat");
 
@@ -136,7 +137,7 @@ test("view chat and send message", async ({ page }) => {
 
 test("send empty message does not submit", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
 
   await prepareMarysChat("alice@imagey.cloud", " for empty chat");
 
@@ -179,8 +180,7 @@ test("send empty message does not submit", async ({ page }) => {
 
 test("send message fails and restores input", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
-
+  await prepareEmptyMarysDocuments();
   await prepareMarysChat("alice@imagey.cloud", " for failing chat");
 
   const builder = provider
@@ -232,7 +232,7 @@ test("send message fails and restores input", async ({ page }) => {
 
 test("polling fails gracefully", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
 
   const builder = await prepareMarysChat(
     "alice@imagey.cloud",
@@ -280,7 +280,7 @@ test("polling fails gracefully", async ({ page }) => {
 
 test("decryption error shows reissue dialog", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
 
   const builder = await prepareMarysChat(
     "alice@imagey.cloud",
@@ -389,31 +389,6 @@ test("share a document in chat", async ({ page }) => {
 
   const documentId = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3";
 
-  // Interaction to load the document key
-  provider
-    .addInteraction()
-    .uponReceiving("a request to get the document key")
-    .withRequest(
-      "GET",
-      `/users/mary@imagey.cloud/documents/${documentId}/keys/mary@imagey.cloud`,
-      (r) => r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: fs
-          .readFileSync(
-            path.resolve(
-              process.cwd(),
-              `tests/images/encrypted/${documentId}/keys/mary@imagey.cloud/encrypted-shared.key`,
-            ),
-            "utf8",
-          )
-          .trim(),
-      }),
-    );
-
   // Interaction to store the shared key
   provider
     .addInteraction()
@@ -443,17 +418,16 @@ test("share a document in chat", async ({ page }) => {
         metadata:
           "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
         sharedKey: {
-          issuer: "mary@imagey.cloud",
+          issuerType: "FOLDER",
+          issuer: "root-folder-id",
           kid: "0",
-          sharedKey: fs
-            .readFileSync(
-              path.resolve(
-                process.cwd(),
-                `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key`,
-              ),
-              "utf8",
-            )
-            .trim(),
+          sharedKey: fs.readFileSync(
+            path.resolve(
+              process.cwd(),
+              `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+            ),
+            "base64",
+          ),
         },
       }),
     );
@@ -567,7 +541,7 @@ test("view shared document from another user", async ({ page }) => {
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
-        issuer: "mary@imagey.cloud",
+        issuer: "alice@imagey.cloud",
         kid: "0",
         sharedKey:
           "lezn+6YMgHCKigQhu4DcXQMJiyF9zRVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8",
@@ -586,7 +560,7 @@ test("view shared document from another user", async ({ page }) => {
         metadata:
           "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
         sharedKey: {
-          issuer: "mary@imagey.cloud",
+          issuer: "alice@imagey.cloud",
           kid: "0",
           sharedKey:
             "lezn+6YMgHCKigQhu4DcXQMJiyF9zRVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8",

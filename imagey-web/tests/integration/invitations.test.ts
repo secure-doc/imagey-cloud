@@ -9,7 +9,7 @@ import {
   TestData,
   prepareMarysContactRequests,
   prepareMarysEmptyContactRequests,
-  prepareMarysDocuments,
+  prepareEmptyMarysDocuments,
   runningPactRequests,
 } from "./setup";
 
@@ -20,7 +20,7 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 test("accept open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
   await prepareMarysContactRequests();
 
   provider
@@ -92,7 +92,7 @@ test("accept open invitations", async ({ page }) => {
 test("decline open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
   await prepareMarysContactRequests();
 
   const builder = provider
@@ -132,7 +132,7 @@ test("decline open invitations", async ({ page }) => {
 test("accept open invitations fails", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
   await prepareMarysContactRequests();
 
   const builder = provider
@@ -186,7 +186,7 @@ test("accept open invitations fails", async ({ page }) => {
 test("decline open invitations fails", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
   const builder = await prepareMarysContactRequests();
 
   await builder.executeTest(async (mockServer) => {
@@ -229,7 +229,7 @@ test("decline open invitations fails", async ({ page }) => {
 test("send contact request", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareMarysDocuments();
+  await prepareEmptyMarysDocuments();
   await prepareMarysEmptyContactRequests();
 
   const builder = provider

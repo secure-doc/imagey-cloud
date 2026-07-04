@@ -159,13 +159,33 @@ public class DocumentRepository extends AbstractFileRepository {
         File sharedKeysFolder = new File(documentFolder, "keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
         File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
+        if (!sharedKey.exists() && userTheDocumentIsSharedWith.address().equals(user.email().address())) {
+            Optional<File> folderKey = findFolderKey(sharedKeysFolder);
+            if (folderKey.isPresent()) {
+                sharedKeyFolder = folderKey.get();
+                sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
+                userTheDocumentIsSharedWith = new Email(sharedKeyFolder.getName());
+            }
+        }
         if (!sharedKey.exists()) {
             return empty();
         }
         String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
-        String issuer = user.email().address();
+        String issuer = userTheDocumentIsSharedWith.address();
         String issuerType = issuer.contains("@") ? "USER" : "FOLDER";
         return of(new EncryptedSharedKey(issuerType, issuer, "0", encodedKey));
+    }
+
+    private Optional<File> findFolderKey(File sharedKeysFolder) {
+        File[] folders = sharedKeysFolder.listFiles(File::isDirectory);
+        if (folders != null) {
+            for (File folder : folders) {
+                if (!folder.getName().contains("@") && new File(folder, "encrypted-shared.key").exists()) {
+                    return of(folder);
+                }
+            }
+        }
+        return empty();
     }
 
     public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedContent key) {

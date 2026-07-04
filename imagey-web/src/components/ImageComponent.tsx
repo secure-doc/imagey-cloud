@@ -37,9 +37,15 @@ export default function ImageComponent({
           privateMainKey,
           image.sharedKey,
         )
-        .then((doc) => setContent(doc.content))
+        .then((doc) => {
+          if (doc.content) {
+            setContent(doc.content);
+          } else {
+            setError(true);
+          }
+        })
         .catch((e) => {
-          console.error(e);
+          console.error("Error loading image content", e);
           setError(true);
         });
     }

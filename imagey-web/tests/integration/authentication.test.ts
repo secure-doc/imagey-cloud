@@ -5,6 +5,7 @@ import {
   inputMarysPassword,
   prepareMarysContactRequests,
   prepareMarysDocuments,
+  prepareEmptyMarysDocuments,
   prepareMarysLogin,
   provider,
   setupMarysDevice,
@@ -250,13 +251,38 @@ test("new user clicks registration link", async ({ page }) => {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of joe to get documents")
+    .uponReceiving("a request of joe to get documents with folderId")
     .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
-      r.headers({
+      r.query({ folderId: Matchers.string("some-uuid") }).headers({
         Accept: "application/json",
       }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of joe to get settings document")
+    .withRequest(
+      "GET",
+      "/users/joe@imagey.cloud/documents/joe@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(404);
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of joe to create root folder")
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        matcher: "/users/joe@imagey\\.cloud/documents/.*",
+        generate: "/users/joe@imagey.cloud/documents/some-uuid",
+      }),
+    )
+    .willRespondWith(200);
 
   await provider
     .addInteraction()
@@ -279,8 +305,8 @@ test("new user clicks registration link", async ({ page }) => {
       const contactsResponse = page.waitForResponse(
         "**/users/joe@imagey.cloud/contacts",
       );
-      const documentsResponse = page.waitForResponse(
-        "**/users/joe@imagey.cloud/documents",
+      const documentsResponse = page.waitForResponse((r) =>
+        r.url().includes("/users/joe@imagey.cloud/documents"),
       );
       const contactRequestsResponse = page.waitForResponse(
         "**/users/joe@imagey.cloud/contact-requests",
@@ -568,6 +594,7 @@ test("existing user authenticates via challenge-response on existing device", as
   page,
 }) => {
   // Given
+  await prepareEmptyMarysDocuments();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -700,16 +727,6 @@ test("existing user authenticates via challenge-response on existing device", as
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
-    .uponReceiving("a request of mary to get documents after challenge")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  await provider
-    .addInteraction()
-    .given("marys second device registered")
-    .given("marys second device unlocked")
     .uponReceiving("a request of mary to get contact requests after challenge")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({ Accept: "application/json" }),
@@ -743,6 +760,8 @@ test("existing user authenticates via challenge-response on existing device", as
 test("existing user authenticates via challenge-response and selects keep me logged in", async ({
   page,
 }) => {
+  // Given
+  await prepareEmptyMarysDocuments();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -896,19 +915,6 @@ test("existing user authenticates via challenge-response and selects keep me log
       "a request of mary to get contacts after challenge with keep me logged in",
     )
     .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  await provider
-    .addInteraction()
-    .given("marys second device registered")
-    .given("marys second device unlocked")
-    .given("mary has no contacts")
-    .uponReceiving(
-      "a request of mary to get documents after challenge with keep me logged in",
-    )
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
