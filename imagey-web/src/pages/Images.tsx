@@ -18,22 +18,23 @@ export default function Images() {
   const privateMainKey = mainKeyPair?.privateKey;
 
   const [documents, setDocuments] = useState<DocumentMetadata[]>();
-  const [folderPath, setFolderPath] = useState<
-    import("../document/Document").default[]
-  >([]);
+  const [folderPath, setFolderPath] =
+    useState<import("../document/Document").default[]>();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
 
   const currentFolder =
-    folderPath.length > 0 ? folderPath[folderPath.length - 1] : undefined;
+    folderPath && folderPath.length > 0
+      ? folderPath[folderPath.length - 1]
+      : undefined;
 
   const actionIcons = useMemo(() => {
     const icons = [];
-    if (currentFolder) {
+    if (folderPath && folderPath.length > 1) {
       icons.push(
         <button
           key="back"
           className="circle transparent"
-          onClick={() => setFolderPath((p) => p.slice(0, -1))}
+          onClick={() => setFolderPath((p) => (p ? p.slice(0, -1) : undefined))}
         >
           <i>arrow_back</i>
         </button>,
@@ -75,24 +76,38 @@ export default function Images() {
       </button>,
     );
     return icons;
-  }, [currentFolder, setFolderPath, setShowCreateFolder, t, setDocuments]);
+  }, [
+    currentFolder,
+    folderPath,
+    setFolderPath,
+    setShowCreateFolder,
+    t,
+    setDocuments,
+  ]);
 
   useActionIcons(actionIcons);
 
   useEffect(() => {
     if (user && publicMainKey && privateMainKey) {
-      setDocuments(undefined);
-      documentService
-        .loadDocuments(
-          user,
-          publicMainKey,
-          privateMainKey,
-          currentFolder?.documentId,
-          currentFolder?.key,
-        )
-        .then((documents) => setDocuments(documents));
+      if (!folderPath) {
+        documentService
+          .getRootFolder(user, publicMainKey, privateMainKey)
+          .then((rootFolder) => setFolderPath([rootFolder]))
+          .catch(console.error);
+      } else {
+        setDocuments(undefined);
+        documentService
+          .loadDocuments(
+            user,
+            publicMainKey,
+            privateMainKey,
+            currentFolder?.documentId,
+            currentFolder?.key,
+          )
+          .then((documents) => setDocuments(documents));
+      }
     }
-  }, [publicMainKey, privateMainKey, user, currentFolder]);
+  }, [publicMainKey, privateMainKey, user, currentFolder, folderPath]);
 
   const folderDocIds = useMemo(() => {
     if (!currentFolder || !currentFolder.documents) return null;
@@ -130,7 +145,7 @@ export default function Images() {
         />
       )}
       <div className="column scroll">
-        {!sortedDocuments ? (
+        {!folderPath || !sortedDocuments ? (
           t("Loading images")
         ) : sortedDocuments.length === 0 ? (
           <UploadPanel
@@ -159,7 +174,7 @@ export default function Images() {
                     currentFolder?.key,
                   )
                   .then((folderDoc) => {
-                    setFolderPath((p) => [...p, folderDoc]);
+                    setFolderPath((p) => [...(p || []), folderDoc]);
                   })
                   .catch(console.error);
               }

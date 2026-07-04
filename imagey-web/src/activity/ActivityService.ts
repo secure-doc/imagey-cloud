@@ -15,10 +15,17 @@ export const activityService = {
     keyPair: JsonWebKeyPair,
   ): Promise<Activity[]> => {
     const contactRequests = await contactRepository.getContactRequests(user);
+    const rootFolder = await documentService.getRootFolder(
+      user,
+      keyPair.publicKey,
+      keyPair.privateKey,
+    );
     const images = await documentService.loadDocuments(
       user,
       keyPair.publicKey,
       keyPair.privateKey,
+      rootFolder.documentId,
+      rootFolder.key,
     );
 
     const activities: Activity[] = [

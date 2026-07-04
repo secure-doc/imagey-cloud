@@ -60,13 +60,8 @@ public class ContactRepository extends AbstractFileRepository {
     public void persist(User user, User contact, EncryptedSharedKey key) {
         File userHome = getUserHome(user);
         File contactHome = new File(userHome, "contacts");
-        if (!contactHome.exists()) {
-            contactHome.mkdirs();
-        }
         File contactFolder = new File(contactHome, contact.email().address());
-        if (!contactFolder.exists()) {
-            mkdir(contactFolder);
-        }
+        contactFolder.mkdirs();
         File keyFile = new File(contactFolder, "key.json");
         writeStringToFile(keyFile, create().toJson(key), UTF_8, false);
 

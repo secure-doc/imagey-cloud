@@ -290,7 +290,7 @@ public class ContractTest {
         maryHasNoDocuments();
         File folder = new File(getMarysDocuments(), "folder-uuid-1234");
         folder.mkdirs();
-        File keysDir = new File(folder, "keys/mary@imagey.cloud");
+        File keysDir = new File(folder, "keys/root-folder-id");
         keysDir.mkdirs();
         File metadataEnc = new File(folder, "metadata.enc");
         java.nio.file.Files.write(metadataEnc.toPath(),
@@ -299,9 +299,9 @@ public class ContractTest {
             + "+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX"));
         metadataEnc.setLastModified(123456789L);
         java.nio.file.Files.write(new File(keysDir, "encrypted-shared.key").toPath(),
-            java.util.Base64.getDecoder().decode("ioFG3yaAIk0FNdkYhjjtCJC+j9DkKyCvrKG7sDiAGc0ExqyuyyGbM/r+934M0edPhcNlmkaSqQKTjQvbQ"
-            + "pLyJA421kPWhexIZNU+ZFCO/V/EOg//QB/NbxG6n4agHRojBdVHYHdRuZ5LJxHQ2tcUEV/yHp5hZfOz"
-            + "5HVYr63SmhGXPfl8QuxkPyauRLEiiPHUB0FuyD4s"));
+            java.util.Base64.getDecoder().decode("DpZid3W9uclNjSCcWaGqvtETZuImyP+xISDVpXHVoUjkoC/vwUqAtLpv2IW/vB0Gs64fd"
+            + "RYqK2Gf4RC6QJmYS1w9C3AsONu2EcYA0BOo1kOC8b22uYNR5Ikt0QaIjr5V6VGGjWY15ah66"
+            + "nqfCR3iFepNR2XMqHZnPREyuJdHDCMNbnxqHxf9dpJ3TlCbTqe4JwOMCp41"));
     }
 
     @State("Mary has a chat with alice")

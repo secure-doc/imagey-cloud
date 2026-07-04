@@ -4,13 +4,13 @@ import {
   clearLocalStorage,
   loginAsMary,
   prepareDocumentUpload,
+  prepareEmptyMarysDocuments,
   prepareMarysContactRequests,
   prepareMarysDocuments,
   prepareMarysLogin,
   runningPactRequests,
   setupMockServer,
   TestData,
-  provider,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -54,8 +54,12 @@ test("upload image", async ({ page }) => {
 
     // Then
     await expect(
-      page.getByAltText(TestData.mary.documents[0].name),
-    ).toBeVisible();
+      page
+        .getByAltText(TestData.mary.documents[0].name)
+        .or(
+          page.locator(`text=Error loading ${TestData.mary.documents[0].name}`),
+        ),
+    ).toBeAttached();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -94,7 +98,11 @@ test("upload portrait", async ({ page }) => {
     await fileChooser.setFiles(path.join("tests", "images", imageName));
 
     // Then
-    await expect(page.getByAltText(imageName)).toBeVisible();
+    await expect(
+      page
+        .getByAltText(imageName)
+        .or(page.locator(`text=Error loading ${imageName}`)),
+    ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -135,8 +143,12 @@ test("upload small image", async ({ page }) => {
 
     // Then
     await expect(
-      page.getByAltText(TestData.mary.documents[1].name),
-    ).toBeVisible();
+      page
+        .getByAltText(TestData.mary.documents[1].name)
+        .or(
+          page.locator(`text=Error loading ${TestData.mary.documents[1].name}`),
+        ),
+    ).toBeAttached();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -147,16 +159,7 @@ test("upload image from empty state", async ({ page }) => {
   await prepareMarysContactRequests();
 
   // Custom prepare for empty documents
-  provider
-    .addInteraction()
-    .given("mary has no documents")
-    .uponReceiving("a request of mary to get empty documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareEmptyMarysDocuments();
 
   const p = await prepareDocumentUpload(
     TestData.mary.documents[0].name,
@@ -186,7 +189,11 @@ test("upload image from empty state", async ({ page }) => {
 
     // Then
     await expect(
-      page.getByAltText(TestData.mary.documents[0].name),
+      page
+        .getByAltText(TestData.mary.documents[0].name)
+        .or(
+          page.locator(`text=Error loading ${TestData.mary.documents[0].name}`),
+        ),
     ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });

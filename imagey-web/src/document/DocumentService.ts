@@ -35,19 +35,20 @@ export const documentService = {
   ): Promise<DocumentMetadata> => {
     const buffers: ArrayBuffer[] =
       file.size > 0 ? [await file.arrayBuffer()] : [];
+    const documentKey = await cryptoService.generateSymmetricKey();
     const documentMetadata: DocumentMetadata = {
       documentId: "",
       name: file.name,
       type: file.type,
       size: file.size,
+      key: documentKey,
     };
-    const documentKey = await cryptoService.generateSymmetricKey();
 
     let encryptedDocumentKeyString: string;
     let issuer: string;
     let issuerType: string;
 
-    if (parentFolderId && parentFolderKey) {
+    if (parentFolderId && parentFolderId !== email && parentFolderKey) {
       encryptedDocumentKeyString = await cryptoService.encryptMessage(
         JSON.stringify(documentKey),
         parentFolderKey,
@@ -106,7 +107,7 @@ export const documentService = {
 
     documentMetadata.documentId = documentId;
 
-    if (parentFolderId && parentFolderKey) {
+    if (parentFolderId && parentFolderId !== email && parentFolderKey) {
       await documentService.addDocumentToFolder(
         email,
         parentFolderId,
@@ -115,6 +116,154 @@ export const documentService = {
       );
     }
     return documentMetadata;
+  },
+
+  getRootFolder: async (
+    user: string,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+  ): Promise<Document> => {
+    let settingsDocMetadata;
+    try {
+      settingsDocMetadata = (
+        await documentRepository.loadDocumentMetadata(user, user)
+      ).metadata;
+    } catch {
+      // Doesn't exist yet
+    }
+
+    let rootFolderId: string | undefined = undefined;
+    let decryptedSettingsKey: JsonWebKey | undefined = undefined;
+
+    if (settingsDocMetadata) {
+      const encryptedDocumentKey =
+        settingsDocMetadata.sharedKey ??
+        (await documentRepository.loadKey(user, user));
+
+      decryptedSettingsKey = await cryptoService.decryptKey(
+        encryptedDocumentKey.sharedKey,
+        publicKey,
+        privateKey,
+      );
+
+      if (settingsDocMetadata.metadata) {
+        const decryptedMetadataBuffer = await cryptoService.decryptDocument(
+          decryptedSettingsKey,
+          cryptoService.base64ToArrayBuffer(settingsDocMetadata.metadata),
+        );
+        const metadataJson = new TextDecoder().decode(decryptedMetadataBuffer);
+        const payload = JSON.parse(metadataJson);
+        rootFolderId = payload.documents;
+      }
+    }
+
+    if (!rootFolderId || !decryptedSettingsKey) {
+      decryptedSettingsKey = await cryptoService.generateSymmetricKey();
+      const rootFolderKey = await cryptoService.generateSymmetricKey();
+      rootFolderId = cryptoService.generateUuid();
+
+      const rootFolderPayload = JSON.stringify({
+        name: "Images",
+        type: "Folder",
+        documents: [],
+      });
+      const rootFolderPayloadBuffer = new TextEncoder().encode(
+        rootFolderPayload,
+      ).buffer;
+      const encryptedRootFolderPayload = await cryptoService.encryptDocument(
+        rootFolderKey,
+        [rootFolderPayloadBuffer],
+      );
+
+      const encryptedRootFolderKey = await cryptoService.encryptMessage(
+        JSON.stringify(rootFolderKey),
+        decryptedSettingsKey,
+      );
+
+      const rootFolderFormData = new FormData();
+      rootFolderFormData.append(
+        "metadata",
+        new Blob([encryptedRootFolderPayload[0]], {
+          type: "application/octet-stream",
+        }),
+      );
+      rootFolderFormData.append(
+        "key",
+        new Blob([cryptoService.base64ToArrayBuffer(encryptedRootFolderKey)], {
+          type: "application/octet-stream",
+        }),
+        "key",
+      );
+      rootFolderFormData.append("issuer", user);
+
+      await fetch(`/users/${user}/documents/${rootFolderId}`, {
+        method: "PUT",
+        body: rootFolderFormData,
+      });
+
+      const settingsPayload = JSON.stringify({ documents: rootFolderId });
+      const settingsPayloadBuffer = new TextEncoder().encode(
+        settingsPayload,
+      ).buffer;
+      const encryptedSettingsPayload = await cryptoService.encryptDocument(
+        decryptedSettingsKey,
+        [settingsPayloadBuffer],
+      );
+      const encryptedSettingsKeyStr = await cryptoService.encryptKey(
+        decryptedSettingsKey,
+        publicKey,
+        privateKey,
+      );
+
+      const settingsFormData = new FormData();
+      settingsFormData.append(
+        "metadata",
+        new Blob([encryptedSettingsPayload[0]], {
+          type: "application/octet-stream",
+        }),
+      );
+      settingsFormData.append(
+        "key",
+        new Blob([cryptoService.base64ToArrayBuffer(encryptedSettingsKeyStr)], {
+          type: "application/octet-stream",
+        }),
+        "key",
+      );
+      settingsFormData.append("issuer", user);
+
+      await fetch(`/users/${user}/documents/${user}`, {
+        method: "PUT",
+        body: settingsFormData,
+      });
+
+      return {
+        documentId: rootFolderId,
+        name: "Images",
+        type: "Folder",
+        documents: [],
+        key: rootFolderKey,
+      } as Document;
+    }
+
+    const rootFolderMetadata = (
+      await documentRepository.loadDocumentMetadata(user, rootFolderId)
+    ).metadata;
+
+    const encryptedRootFolderKey =
+      rootFolderMetadata.sharedKey ??
+      (await documentRepository.loadKey(user, rootFolderId));
+
+    const rootFolderKeyJson = await cryptoService.decryptMessage(
+      encryptedRootFolderKey.sharedKey,
+      decryptedSettingsKey,
+    );
+    const rootFolderKey = JSON.parse(rootFolderKeyJson) as JsonWebKey;
+
+    return await decryptDocumentContent(
+      user,
+      await decryptDocumentMetadata(rootFolderMetadata, rootFolderKey),
+      rootFolderKey,
+    );
   },
 
   loadDocument: async (
@@ -129,11 +278,29 @@ export const documentService = {
         metadata.sharedKey ??
         (await documentRepository.loadKey(user, metadata.documentId));
       let decryptedDocumentKey: JsonWebKey;
-      if (encryptedDocumentKey.issuerType === "FOLDER" && parentFolderKey) {
+      let actualParentFolderKey = parentFolderKey;
+      if (
+        encryptedDocumentKey.issuerType === "FOLDER" &&
+        !actualParentFolderKey
+      ) {
+        const rootFolder = await documentService.getRootFolder(
+          user,
+          publicKey,
+          privateKey,
+        );
+        if (rootFolder.documentId === encryptedDocumentKey.issuer) {
+          actualParentFolderKey = rootFolder.key;
+        }
+      }
+
+      if (
+        encryptedDocumentKey.issuerType === "FOLDER" &&
+        actualParentFolderKey
+      ) {
         decryptedDocumentKey = JSON.parse(
           await cryptoService.decryptMessage(
             encryptedDocumentKey.sharedKey,
-            parentFolderKey,
+            actualParentFolderKey,
           ),
         );
       } else {
@@ -218,23 +385,12 @@ export const documentService = {
   },
   shareDocument: async (
     user: string,
-    documentId: string,
+    document: DocumentMetadata,
     contactEmail: string,
-    userPublicKey: JsonWebKey,
-    userPrivateKey: JsonWebKey,
     chatKey: JsonWebKey,
   ): Promise<void> => {
-    const encryptedDocumentKey = await documentRepository.loadKey(
-      user,
-      documentId,
-    );
-    const decryptedDocumentKey = await cryptoService.decryptKey(
-      encryptedDocumentKey.sharedKey,
-      userPublicKey,
-      userPrivateKey,
-    );
-
-    const docKeyStr = JSON.stringify(decryptedDocumentKey);
+    if (!document.key) throw new Error("Document key not found");
+    const docKeyStr = JSON.stringify(document.key);
     const newEncryptedDocumentKeyString = await cryptoService.encryptMessage(
       docKeyStr,
       chatKey,
@@ -247,7 +403,7 @@ export const documentService = {
     };
     await documentRepository.storeSharedKey(
       user,
-      documentId,
+      document.documentId,
       contactEmail,
       newEncryptedDocumentKey,
     );
@@ -266,24 +422,29 @@ export const documentService = {
     folderKey?: JsonWebKey,
   ): Promise<Document> => {
     try {
-      const encryptedDocumentKey =
-        encryptedKey ??
-        metadata.sharedKey ??
-        (await documentRepository.loadKey(user, metadata.documentId!));
       let decryptedDocumentKey: JsonWebKey;
-      if (encryptedDocumentKey.issuerType === "FOLDER" && folderKey) {
-        decryptedDocumentKey = JSON.parse(
-          await cryptoService.decryptMessage(
-            encryptedDocumentKey.sharedKey,
-            folderKey,
-          ),
-        );
+      if (metadata.key) {
+        decryptedDocumentKey = metadata.key;
       } else {
-        decryptedDocumentKey = await cryptoService.decryptKey(
-          encryptedDocumentKey.sharedKey,
-          publicKey,
-          privateKey,
-        );
+        const encryptedDocumentKey =
+          encryptedKey ??
+          metadata.sharedKey ??
+          (await documentRepository.loadKey(user, metadata.documentId!));
+
+        if (encryptedDocumentKey.issuerType === "FOLDER" && folderKey) {
+          decryptedDocumentKey = JSON.parse(
+            await cryptoService.decryptMessage(
+              encryptedDocumentKey.sharedKey,
+              folderKey,
+            ),
+          );
+        } else {
+          decryptedDocumentKey = await cryptoService.decryptKey(
+            encryptedDocumentKey.sharedKey,
+            publicKey,
+            privateKey,
+          );
+        }
       }
       return await decryptDocumentContent(user, metadata, decryptedDocumentKey);
     } catch (e) {
@@ -304,11 +465,7 @@ export const documentService = {
       attempts++;
       try {
         const { metadata, etag } =
-          await documentRepository.loadDocumentMetadata(
-            email,
-            folderId,
-            folderId,
-          );
+          await documentRepository.loadDocumentMetadata(email, folderId);
 
         let array: string[] = [];
         let payload: { documents?: string[]; [key: string]: unknown } = {};
@@ -398,6 +555,7 @@ export async function decryptDocumentMetadata(
     previewImageId: payload.previewImageId,
     documents: payload.documents,
     sharedKey: metadata.sharedKey,
+    key: decryptedDocumentKey,
   };
 }
 async function decryptDocumentContent(

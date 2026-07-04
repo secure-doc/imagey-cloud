@@ -4,6 +4,7 @@ import {
   loginAsMary,
   prepareMarysDocuments,
   prepareMarysLogin,
+  prepareMarysRootFolder,
   provider,
   runningPactRequests,
   setupMockServer,
@@ -294,12 +295,15 @@ test("mary logs into new device", async ({ page }) => {
       r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
     );
 
+  await prepareMarysRootFolder();
   provider
     .addInteraction()
     .given("marys second device unlocked")
     .uponReceiving("a request of mary to get documents for second device")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({ Accept: "application/json" }),
+      r
+        .query({ folderId: "root-folder-id" })
+        .headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 

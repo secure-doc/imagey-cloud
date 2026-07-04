@@ -34,23 +34,38 @@ export default function UploadButton({
     const privateMainKey = mainKeyPair.privateKey;
 
     setIsUploading(true);
-    for (const file of files) {
-      if (file) {
-        const metadata = await documentService.storeDocument(
+    try {
+      let actualFolderId = parentFolderId;
+      let actualFolderKey = parentFolderKey;
+      if (!actualFolderId || !actualFolderKey) {
+        const rootFolder = await documentService.getRootFolder(
           user,
-          file,
           publicMainKey,
           privateMainKey,
-          parentFolderId,
-          parentFolderKey,
         );
+        actualFolderId = rootFolder.documentId;
+        actualFolderKey = rootFolder.key;
+      }
 
-        if (onUploadComplete) {
-          onUploadComplete(metadata);
+      for (const file of files) {
+        if (file) {
+          const metadata = await documentService.storeDocument(
+            user,
+            file,
+            publicMainKey,
+            privateMainKey,
+            actualFolderId,
+            actualFolderKey,
+          );
+
+          if (onUploadComplete) {
+            onUploadComplete(metadata);
+          }
         }
       }
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   };
 
   const commonProps = {
