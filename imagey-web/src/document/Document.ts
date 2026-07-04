@@ -3,4 +3,7 @@ export default interface Document {
   type?: string;
   documentId: string;
   content?: ArrayBuffer;
+  key?: JsonWebKey;
+  etag?: string;
+  documents?: string[];
 }

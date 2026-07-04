@@ -34,7 +34,7 @@ export default function Profile() {
         setProfile(p);
         if (p.profilePictureId) {
           try {
-            const encryptedPicMetadata =
+            const { metadata: encryptedPicMetadata } =
               await documentRepository.loadDocumentMetadata(
                 auth.user,
                 p.profilePictureId,

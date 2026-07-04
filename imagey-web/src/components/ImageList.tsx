@@ -1,15 +1,31 @@
 import DocumentMetadata from "../document/DocumentMetadata";
 import ImageComponent from "./ImageComponent";
+import FolderImageComponent from "./FolderImageComponent";
 
 interface ImageListProps {
   documents: DocumentMetadata[];
   onImageClick?: (document: DocumentMetadata) => void;
+  onFolderClick?: (document: DocumentMetadata) => void;
 }
 
-export default function ImageList({ documents, onImageClick }: ImageListProps) {
+export default function ImageList({
+  documents,
+  onImageClick,
+  onFolderClick,
+}: ImageListProps) {
   return (
     <div className="column">
       {documents.map((doc) => {
+        if (doc.type?.toLowerCase() === "folder") {
+          return (
+            <FolderImageComponent
+              key={doc.documentId}
+              folder={doc}
+              onClick={() => onFolderClick?.(doc)}
+            />
+          );
+        }
+
         if (onImageClick) {
           return (
             <a

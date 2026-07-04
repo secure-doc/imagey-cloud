@@ -29,11 +29,13 @@ export const contactService = {
 
       const contactKeys: ContactKeys = {
         userKey: {
+          issuerType: "USER",
           issuer: userId,
           kid: "0",
           sharedKey: myEncryptedSharedKey,
         },
         contactKey: {
+          issuerType: "USER",
           issuer: contactId,
           kid: "0",
           sharedKey: contactEncryptedSharedKey,
@@ -113,11 +115,13 @@ export const contactService = {
     );
     await contactRepository.reissueContactKey(userEmail, contactEmail, {
       userKey: {
+        issuerType: "USER",
         issuer: userEmail,
         kid: "0",
         sharedKey: myEncryptedSharedKey,
       },
       contactKey: {
+        issuerType: "USER",
         issuer: contactEmail,
         kid: "0",
         sharedKey: contactEncryptedSharedKey,

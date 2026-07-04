@@ -186,6 +186,7 @@ test("load existing profile with picture", async ({ page }) => {
         metadata:
           "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
         sharedKey: {
+          issuerType: "USER",
           issuer: "mary@imagey.cloud",
           kid: "0",
           sharedKey: fs

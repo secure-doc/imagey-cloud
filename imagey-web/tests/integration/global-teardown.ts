@@ -32,16 +32,19 @@ export default async function globalTeardown() {
     const originalCount = pact.interactions.length;
     const uniqueInteractions = new Map();
 
-    pact.interactions.forEach((interaction) => {
-      // A unique key based on description and provider states.
-      // This safely deduplicates identical interactions appended by parallel test runs.
-      const key = JSON.stringify({
-        description: interaction.description,
-        providerStates: interaction.providerStates || [],
-      });
+    pact.interactions.forEach(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (interaction: any) => {
+        // A unique key based on description and provider states.
+        // This safely deduplicates identical interactions appended by parallel test runs.
+        const key = JSON.stringify({
+          description: interaction.description,
+          providerStates: interaction.providerStates || [],
+        });
 
-      uniqueInteractions.set(key, interaction);
-    });
+        uniqueInteractions.set(key, interaction);
+      },
+    );
 
     pact.interactions = Array.from(uniqueInteractions.values());
     const newCount = pact.interactions.length;

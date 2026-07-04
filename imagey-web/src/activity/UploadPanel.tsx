@@ -7,9 +7,13 @@ import DocumentMetadata from "../document/DocumentMetadata";
 export default function UploadPanel({
   className,
   onUploadComplete,
+  parentFolderId,
+  parentFolderKey,
 }: {
   className?: string;
   onUploadComplete?: (document: DocumentMetadata) => void;
+  parentFolderId?: string;
+  parentFolderKey?: JsonWebKey;
 }) {
   const { t } = useTranslation();
 
@@ -23,6 +27,8 @@ export default function UploadPanel({
             className="circle extra"
             multiple
             onUploadComplete={onUploadComplete}
+            parentFolderId={parentFolderId}
+            parentFolderKey={parentFolderKey}
           >
             <i>upload</i>
           </UploadButton>

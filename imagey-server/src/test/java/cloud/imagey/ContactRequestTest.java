@@ -348,8 +348,8 @@ public class ContactRequestTest {
         marysContacts.mkdirs();
 
         ContactKeys keys = new ContactKeys(
-            new EncryptedSharedKey("m", "1", "k1"),
-            new EncryptedSharedKey("l", "1", "k2")
+            new EncryptedSharedKey("USER", "m", "1", "k1"),
+            new EncryptedSharedKey("USER", "l", "1", "k2")
         );
 
         Response response = marysClient.path("contacts/laura@imagey.cloud/key")
@@ -449,8 +449,8 @@ public class ContactRequestTest {
     public void interactWithNonContact() throws IOException {
         // Mary tries to reissue keys for Laura, but Laura is not a contact yet
         ContactKeys keys = new ContactKeys(
-            new EncryptedSharedKey("m", "1", "k1"),
-            new EncryptedSharedKey("l", "1", "k2")
+            new EncryptedSharedKey("USER", "m", "1", "k1"),
+            new EncryptedSharedKey("USER", "l", "1", "k2")
         );
 
         // the endpoint /contacts/{email}/key handles reissue

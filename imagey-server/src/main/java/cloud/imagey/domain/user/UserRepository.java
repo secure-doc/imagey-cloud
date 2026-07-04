@@ -20,7 +20,6 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Optional;
 
@@ -74,7 +73,7 @@ public class UserRepository extends AbstractFileRepository {
         }
     }
 
-    public void storePublicKey(User user, Kid kid, PublicKey publicKey) throws IOException {
+    public void storePublicKey(User user, Kid kid, PublicKey publicKey) {
         File publicKeysFolder = new File(getUserHome(user), "public-keys");
         createNewFileWithContent(publicKeysFolder, kid.id() + ".json", publicKey.key());
     }

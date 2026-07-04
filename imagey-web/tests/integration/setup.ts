@@ -451,6 +451,26 @@ export async function prepareMarysDocuments() {
   provider
     .addInteraction()
     .uponReceiving(
+      "a second request of mary to get content with id 6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+    )
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+      ),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving(
       "a request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
     )
     .withRequest(
@@ -468,56 +488,24 @@ export async function prepareMarysDocuments() {
       ),
     );
 
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of mary to get key of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud",
-      (r) => r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: fs
-          .readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "utf8",
-          )
-          .trim(),
-      }),
-    );
-
   return provider
     .addInteraction()
     .uponReceiving(
-      "a request of mary to get key of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+      "a second request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/mary@imagey.cloud",
-      (r) => r.headers({ Accept: "application/json" }),
+      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: fs
-          .readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "utf8",
-          )
-          .trim(),
-      }),
+      r.binaryFile(
+        "application/octet-stream",
+        "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
+      ),
     );
 }
 
@@ -795,6 +783,19 @@ export async function prepareMarysEmptyContactRequests() {
     .given("mary has no contacts")
     .uponReceiving("a request of mary to get empty contact requests")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+}
+
+export async function prepareMarysEmptyDocuments() {
+  return provider
+    .addInteraction()
+    .given("mary has no documents")
+    .uponReceiving("a request of mary to get empty documents")
+    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r.headers({
         Accept: "application/json",
       }),

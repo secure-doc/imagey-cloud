@@ -21,6 +21,8 @@ import static jakarta.ws.rs.client.Entity.entity;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
 import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,7 +30,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -118,6 +119,39 @@ public class DocumentResourceTest {
     }
 
     @Test
+    @DisplayName("Metadata can be updated")
+    void updateMetadata() throws IOException {
+        metadataWithoutFiles();
+
+        DocumentId documentId = documentRepository.findMetadata(user, empty()).iterator().next().documentId();
+
+        Response response = newClient().target("http://localhost:" + config.getHttpPort())
+            .path("users").path(user.email().address()).path("documents").path(documentId.id())
+            .request()
+            .cookie(userCookie)
+            .put(entity(new byte[]{1, 2, 3}, jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.OK);
+    }
+
+    @Test
+    @DisplayName("Metadata update fails with wrong ETag")
+    void updateMetadataWrongEtag() throws IOException {
+        metadataWithoutFiles();
+
+        DocumentId documentId = documentRepository.findMetadata(user, empty()).iterator().next().documentId();
+
+        Response response = newClient().target("http://localhost:" + config.getHttpPort())
+            .path("users").path(user.email().address()).path("documents").path(documentId.id())
+            .request()
+            .cookie(userCookie)
+            .header("If-Match", "\"wrong\"")
+            .put(entity(new byte[]{1, 2, 3}, jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.PRECONDITION_FAILED);
+    }
+
+    @Test
     @DisplayName("Missing key leads to 400")
     void missingKey() {
         List<Attachment> attachments = new ArrayList<>();
@@ -141,7 +175,7 @@ public class DocumentResourceTest {
 
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
 
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user);
+        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
         assertThat(metadataList).hasSize(1);
     }
 
@@ -158,7 +192,7 @@ public class DocumentResourceTest {
 
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
 
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user);
+        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
         assertThat(metadataList).hasSize(1);
         DocumentId docId = metadataList.get(0).documentId();
 
@@ -182,7 +216,7 @@ public class DocumentResourceTest {
 
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
 
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user);
+        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
         assertThat(metadataList).hasSize(1);
         DocumentId docId = metadataList.get(0).documentId();
 
@@ -192,22 +226,22 @@ public class DocumentResourceTest {
     }
 
     private Attachment createMetadataAttachment() {
-        return new Attachment("metadata", new ByteArrayInputStream("{\"name\":\"test\"}".getBytes(StandardCharsets.UTF_8)),
+        return new Attachment("metadata", new ByteArrayInputStream("{\"name\":\"test\"}".getBytes(UTF_8)),
             new ContentDisposition("form-data; name=\"metadata\""));
     }
 
     private Attachment createKeyAttachment() {
-        return new Attachment("key", new ByteArrayInputStream("dummy-key".getBytes(StandardCharsets.UTF_8)),
+        return new Attachment("key", new ByteArrayInputStream("dummy-key".getBytes(UTF_8)),
             new ContentDisposition("form-data; name=\"key\""));
     }
 
     private Attachment createIssuerAttachment() {
-        return new Attachment("issuer", new ByteArrayInputStream("issuer@example.com".getBytes(StandardCharsets.UTF_8)),
+        return new Attachment("issuer", new ByteArrayInputStream("owner@example.com".getBytes(UTF_8)),
             new ContentDisposition("form-data; name=\"issuer\""));
     }
 
     private Attachment createFileAttachment(String filename, String content) {
-        return new Attachment("files", new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)),
+        return new Attachment("files", new ByteArrayInputStream(content.getBytes(UTF_8)),
             new ContentDisposition("form-data; name=\"files\"; filename=\"" + filename + "\""));
     }
 }

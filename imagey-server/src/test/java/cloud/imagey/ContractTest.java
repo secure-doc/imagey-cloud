@@ -24,10 +24,12 @@ import static cloud.imagey.ContractTest.TokenState.VALID_TOKEN;
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 import static java.net.URI.create;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.nio.file.Files.writeString;
 import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.copyURLToFile;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
+import static org.apache.commons.io.FileUtils.writeByteArrayToFile;
 import static org.apache.commons.io.FileUtils.writeStringToFile;
 
 import java.io.File;
@@ -53,6 +55,8 @@ import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvide
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -73,6 +77,8 @@ public class ContractTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private DocumentRepository documentRepository;
 
     private TokenState tokenState = VALID_TOKEN;
     private User user;
@@ -128,6 +134,12 @@ public class ContractTest {
                     + "0\r\n"
                     + "--" + boundary + "--\r\n";
                 updatableRequest.setEntity(new StringEntity(dummyBody));
+            } else if ("PUT".equals(method) && path.contains("users/mary%40imagey.cloud/documents")) {
+                int documentIdStart
+                    = path.indexOf("users/mary%40imagey.cloud/documents") + "users/mary%40imagey.cloud/documents".length() + 1;
+                String documentId = path.substring(documentIdStart);
+                documentRepository.getTimestamp(new User(new Email("mary@imagey.cloud")), new DocumentId(documentId))
+                    .ifPresent(etag -> updatableRequest.setHeader("If-Match", etag));
             }
         }
         context.verifyInteraction();
@@ -245,7 +257,7 @@ public class ContractTest {
         File marysDevices = new File(marysData, "devices");
         File firstDevice = new File(marysDevices, "1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c");
         File recoveryKeyFile = new File(firstDevice, "recovery-key.txt");
-        java.nio.file.Files.writeString(recoveryKeyFile.toPath(), "\"any-recovery-key\"");
+        writeString(recoveryKeyFile.toPath(), "\"any-recovery-key\"");
     }
 
     @State("mary has no contacts and a contact request from bill")
@@ -256,7 +268,7 @@ public class ContractTest {
         deleteQuietly(marysContactRequests);
         File billReq = new File(marysContactRequests, "bill@imagey.cloud");
         billReq.mkdirs();
-        writeStringToFile(new File(billReq, "status.txt"), "INVITATION_RECEIVED", java.nio.charset.StandardCharsets.UTF_8);
+        writeStringToFile(new File(billReq, "status.txt"), "INVITATION_RECEIVED", UTF_8);
     }
 
     @State("mary has no contacts")
@@ -273,6 +285,25 @@ public class ContractTest {
         }
     }
 
+    @State("mary has a folder")
+    void maryHasAFolder() throws IOException {
+        maryHasNoDocuments();
+        File folder = new File(getMarysDocuments(), "folder-uuid-1234");
+        folder.mkdirs();
+        File keysDir = new File(folder, "keys/mary@imagey.cloud");
+        keysDir.mkdirs();
+        File metadataEnc = new File(folder, "metadata.enc");
+        java.nio.file.Files.write(metadataEnc.toPath(),
+            java.util.Base64.getDecoder().decode("9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU"
+            + "+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U"
+            + "+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX"));
+        metadataEnc.setLastModified(123456789L);
+        java.nio.file.Files.write(new File(keysDir, "encrypted-shared.key").toPath(),
+            java.util.Base64.getDecoder().decode("ioFG3yaAIk0FNdkYhjjtCJC+j9DkKyCvrKG7sDiAGc0ExqyuyyGbM/r+934M0edPhcNlmkaSqQKTjQvbQ"
+            + "pLyJA421kPWhexIZNU+ZFCO/V/EOg//QB/NbxG6n4agHRojBdVHYHdRuZ5LJxHQ2tcUEV/yHp5hZfOz"
+            + "5HVYr63SmhGXPfl8QuxkPyauRLEiiPHUB0FuyD4s"));
+    }
+
     @State("Mary has a chat with alice")
     void maryHasChatWithAlice() throws IOException {
         File marysContacts = new File(getMarysData(), "contacts");
@@ -280,11 +311,11 @@ public class ContractTest {
         File aliceChat = new File(marysContacts, "alice@imagey.cloud");
         aliceChat.mkdirs();
         writeStringToFile(new File(aliceChat, "key.json"),
-            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
+            "{\"issuerType\":\"USER\",\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
             + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
             + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
             + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
     }
 
     @State("Mary has a chat with bill")
@@ -294,12 +325,13 @@ public class ContractTest {
         File billChat = new File(marysContacts, "bill@imagey.cloud");
         billChat.mkdirs();
         writeStringToFile(new File(billChat, "key.json"),
-            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
+            "{\"issuerType\":\"USER\",\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
             + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
             + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
             + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
     }
+
     @State("marys second device unlocked")
     void marysSecondDeviceUnlocked() throws URISyntaxException, IOException {
         marysSecondDeviceRegistered();
@@ -368,7 +400,7 @@ public class ContractTest {
             + "5G02gHdOvt4Eoh13nNfEXbzbqyrXybZPxOiKw7ozyMU8+7PIHSLrPtA9cprS1Mju8a"
             + "us1FEtdD9hFXWFJ2nz8d3PhLu+sRdmRafIZNksou8hlcKxBuS+aEvQ02KXPcGP5muG"
             + "PHBYRLHbq+Ilw5RGF1Id2Z8HFdENPXijLjzy6V/zSsYrUfIxdT0p6sE=\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
 
         File publicKeys = new File(device, "public-keys");
         publicKeys.mkdirs();
@@ -376,7 +408,7 @@ public class ContractTest {
             "{\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\",\"x\":\"O1aGIpmfLo"
             + "-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4\",\"y\":\"ySJAF_0XeBWOrL-jboQvxy644ViT"
             + "d0FDgp-pSCP3ONU\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
     }
 
     @State("Alice has a chat with mary")
@@ -388,7 +420,7 @@ public class ContractTest {
             "{\"issuer\":\"alice@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
             + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
             + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
 
         File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
         messagesDir.mkdirs();
@@ -396,7 +428,7 @@ public class ContractTest {
         writeStringToFile(messageFile,
             "{\"id\":\"msg-123\",\"sender\":\"mary@imagey.cloud\",\"channel\":\"mary@imagey.cloud:alice@imagey.cloud\","
             + "\"content\":\"HW8URzE9G7o/muIVmhdpPBTsmui7mlYyDmx5+d2l28tcQbJV2FXPf3e/jgZYP2Qpj70kqN7H\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
     }
 
     @State("Alice has received a message from Mary with shared doc")
@@ -408,7 +440,7 @@ public class ContractTest {
             "{\"id\":\"msg-999\",\"sender\":\"mary@imagey.cloud\",\"channel\":\"mary@imagey.cloud:alice@imagey.cloud\","
             + "\"content\":\"aeCDPI47cicIa11xsEcrIoJ61HTdQzttLFprdqPYP1eayYPs8/65ktZ0DxZgs6+MSOxeCpqTZGFerRWze9Az"
             + "CjaKpBJGq12foAZlbFfp56WzzAMeFg8JpT8bD/AYh6VBEa77Ipl2BLSpE5Jlszr45nDLQTzg8J3pb3EQiD8TpcndgU1Zyuc=\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            UTF_8);
     }
 
     @State("Mary has shared a document with alice")
@@ -419,12 +451,13 @@ public class ContractTest {
         sharedKeyDir.mkdirs();
         File sharedKeyFile = new File(sharedKeyDir, "encrypted-shared.key");
         byte[] keyBytes = java.util.Base64.getDecoder().decode(
-              "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
+            "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
             + "RVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07"
             + "geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR"
             + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8");
-        org.apache.commons.io.FileUtils.writeByteArrayToFile(sharedKeyFile, keyBytes);
+        writeByteArrayToFile(sharedKeyFile, keyBytes);
     }
+
 
 
 
@@ -448,10 +481,6 @@ public class ContractTest {
             return Optional.of(new User(new Email("joe@imagey.cloud")));
         }
         return Optional.of(new User(new Email(path.substring(startIndex, endIndex).replace("%40", "@"))));
-    }
-
-    private boolean userExists(User userToCheck) {
-        return new File("./" + rootPath, userToCheck.email().address()).exists();
     }
 
     private User getMary() {

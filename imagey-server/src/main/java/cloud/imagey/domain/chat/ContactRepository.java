@@ -22,10 +22,8 @@ import static java.nio.charset.Charset.defaultCharset;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Optional;
@@ -53,13 +51,13 @@ public class ContactRepository extends AbstractFileRepository {
     @ConfigProperty(name = "root.path")
     private String rootPath;
 
-    public void persist(User sender, User recipient, ContactStatus newStatus) throws IOException {
+    public void persist(User sender, User recipient, ContactStatus newStatus) {
         File contactRequests = new File(getUserHome(sender), "contact-requests");
         File recipientRequests = new File(contactRequests, recipient.email().address());
-        write(new File(recipientRequests, "status.txt"), newStatus.name(), defaultCharset());
+        writeStringToFile(new File(recipientRequests, "status.txt"), newStatus.name(), defaultCharset());
     }
 
-    public void persist(User user, User contact, EncryptedSharedKey key) throws IOException {
+    public void persist(User user, User contact, EncryptedSharedKey key) {
         File userHome = getUserHome(user);
         File contactHome = new File(userHome, "contacts");
         if (!contactHome.exists()) {
@@ -70,7 +68,7 @@ public class ContactRepository extends AbstractFileRepository {
             mkdir(contactFolder);
         }
         File keyFile = new File(contactFolder, "key.json");
-        write(keyFile, create().toJson(key), UTF_8, false);
+        writeStringToFile(keyFile, create().toJson(key), UTF_8, false);
 
         // Delete any pending invitations since they are now a contact
         File requestDirectory = new File(new File(userHome, "contact-requests"), contact.email().address());
@@ -120,14 +118,14 @@ public class ContactRepository extends AbstractFileRepository {
         return empty();
     }
 
-    public void updateContactKey(User user, User contact, EncryptedSharedKey key) throws IOException {
+    public void updateContactKey(User user, User contact, EncryptedSharedKey key) {
         File userHome = getUserHome(user);
         File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
         File keyFile = new File(contactFolder, "key.json");
-        write(keyFile, create().toJson(key), UTF_8);
+        writeStringToFile(keyFile, create().toJson(key), UTF_8);
     }
 
-    public void reissueKey(User user, User contact, ContactKeys keys) throws IOException {
+    public void reissueKey(User user, User contact, ContactKeys keys) {
         updateContactKey(user, contact, keys.userKey());
 
         File contactHome = getUserHome(contact);
@@ -137,7 +135,7 @@ public class ContactRepository extends AbstractFileRepository {
         }
 
         File keyFile = new File(contactFolder, "key.json");
-        write(keyFile, create().toJson(keys.contactKey()), UTF_8, false);
+        writeStringToFile(keyFile, create().toJson(keys.contactKey()), UTF_8, false);
     }
 
     public boolean isContact(User user, User contact) {

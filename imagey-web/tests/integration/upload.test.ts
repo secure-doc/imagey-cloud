@@ -40,10 +40,13 @@ test("upload image", async ({ page }) => {
     expect(await page.getByRole("link", { name: "Images" }).isVisible());
     await page.getByRole("link", { name: "Images" }).click();
 
+    const addMenuButton = page.locator("*[aria-label='add-menu']");
+    await expect(addMenuButton).toBeVisible();
+    await addMenuButton.click();
+
     const fileChooserPromise = page.waitForEvent("filechooser");
-    const addImageButton = page.locator("*[aria-label='add-image']");
-    await expect(addImageButton).toBeVisible();
-    await addImageButton.click();
+    const uploadDocumentButton = page.locator("text='Upload Document'");
+    await uploadDocumentButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
       path.join("tests", "images", TestData.mary.documents[0].name),
@@ -79,10 +82,13 @@ test("upload portrait", async ({ page }) => {
     expect(await page.getByRole("link", { name: "Images" }).isVisible());
     await page.getByRole("link", { name: "Images" }).click();
 
+    const addMenuButton = page.locator("*[aria-label='add-menu']");
+    await expect(addMenuButton).toBeVisible();
+    await addMenuButton.click();
+
     const fileChooserPromise = page.waitForEvent("filechooser");
-    const addImageButton = page.locator("*[aria-label='add-image']");
-    await expect(addImageButton).toBeVisible();
-    await addImageButton.click();
+    const uploadDocumentButton = page.locator("text='Upload Document'");
+    await uploadDocumentButton.click();
     const imageName = "jillwellington-baby-7463137_1920.jpg";
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(path.join("tests", "images", imageName));
@@ -115,10 +121,13 @@ test("upload small image", async ({ page }) => {
     expect(await page.getByRole("link", { name: "Images" }).isVisible());
     await page.getByRole("link", { name: "Images" }).click();
 
+    const addMenuButton = page.locator("*[aria-label='add-menu']");
+    await expect(addMenuButton).toBeVisible();
+    await addMenuButton.click();
+
     const fileChooserPromise = page.waitForEvent("filechooser");
-    const addImageButton = page.locator("*[aria-label='add-image']");
-    await expect(addImageButton).toBeVisible();
-    await addImageButton.click();
+    const uploadDocumentButton = page.locator("text='Upload Document'");
+    await uploadDocumentButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
       path.join("tests", "images", TestData.mary.documents[1].name),

@@ -384,6 +384,178 @@ test("manifest loading error fallback", async ({ page }) => {
   await expect(page).toHaveTitle("Documents");
 });
 
+test("registration 500 error", async ({ page }) => {
+  await page.route(
+    "**/users/mary@imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+  await page.route("**/users/", async (route) => {
+    await route.fulfill({
+      status: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
+  });
+
+  await page.goto("/?email=mary@imagey.cloud");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  await passwordInput.fill(TestData.mary.password);
+  await page.getByLabel("Confirm Password").fill(TestData.mary.password);
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+  await expect(
+    page.getByText("An error occurred during authentication"),
+  ).toBeVisible();
+});
+
+test("authentication 503 error", async ({ page }) => {
+  await page.route(
+    "**/users/mary@imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 401,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary@imagey.cloud/verifications/",
+    async (route) => {
+      await route.fulfill({
+        status: 503,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await page.goto("/?email=mary@imagey.cloud");
+  // AuthenticationDialog doesn't have a Confirm button
+
+  await expect(
+    page.getByText("Mail server is currently unavailable"),
+  ).toBeVisible();
+});
+
+test("authentication 403 error", async ({ page }) => {
+  await page.route(
+    "**/users/mary@imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 401,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+  await page.route(
+    "**/users/mary@imagey.cloud/verifications/",
+    async (route) => {
+      await route.fulfill({
+        status: 403,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
+
+  await page.goto("/?email=mary@imagey.cloud");
+  // AuthenticationDialog doesn't have a Confirm button, it just immediately tries
+  // to start authentication when mounted, so we just wait for the text.
+
+  await expect(
+    page.getByText("An error occurred during authentication"),
+  ).toBeVisible();
+});
+
+test("contact request 500 error from empty panel", async ({ page }) => {
+  await page.route(
+    "**/users/mary@imagey.cloud/public-keys/0",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.publicMainKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: TestData.mary.devices[0].publicDeviceKey,
+      });
+    },
+  );
+  await page.route(
+    `**/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        json: {
+          kid: "0",
+          encryptingDeviceId: TestData.mary.devices[0].deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      });
+    },
+  );
+  await page.route("**/users/mary@imagey.cloud/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+  await page.route("**/users/mary@imagey.cloud/contacts", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      json: [],
+    });
+  });
+  await page.route(
+    "**/users/mary@imagey.cloud/contact-requests",
+    async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 500,
+          headers: { "Access-Control-Allow-Origin": "*" },
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          headers: { "Access-Control-Allow-Origin": "*" },
+          json: [],
+        });
+      }
+    },
+  );
+
+  await setupMarysDevice(page);
+  await page.goto("/?email=mary@imagey.cloud");
+  await loginAsMary(page);
+
+  const inviteButton = page.getByRole("button", {
+    name: "person_add Invite Contact",
+    exact: true,
+  });
+  await expect(inviteButton).toBeVisible();
+  await inviteButton.click();
+
+  const emailInput = page.getByPlaceholder("email@imagey.cloud");
+  await emailInput.fill("alice@imagey.cloud");
+
+  const responsePromise = page.waitForResponse(
+    "**/users/mary@imagey.cloud/contact-requests",
+  );
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await responsePromise;
+});
 test("existing user fails to get challenge", async ({ page }) => {
   await page.route(
     "**/users/mary*imagey.cloud/public-keys/0",
@@ -847,9 +1019,10 @@ test("send message missing location header", async ({ page }) => {
         status: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
         json: {
+          issuerType: "USER",
           issuer: "mary@imagey.cloud",
           kid: "0",
-          sharedKey: TestData.mary.chats[0].encryptedSharedKey,
+          sharedKey: TestData.mary.chats![0].encryptedSharedKey,
         },
       });
     },

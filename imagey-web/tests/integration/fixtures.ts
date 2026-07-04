@@ -5,7 +5,8 @@ export const test = base.extend({
   page: async ({ page }, use) => {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page);
-    const coverage = await page.evaluate(() => window["__coverage__"]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const coverage = await page.evaluate(() => (window as any)["__coverage__"]);
     if (coverage) {
       await fs.promises.mkdir(".nyc_output", { recursive: true });
       await fs.promises.writeFile(
