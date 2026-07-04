@@ -28,11 +28,13 @@ export default function InvitationPanel({
       }
       actions={[
         <AcceptInvitationButton
+          key="accept"
           user={user}
           contact={activity.userId}
           onAccepted={() => onActivityHandled()}
         />,
         <DeclineInvitationButton
+          key="decline"
           user={user}
           contact={activity.userId}
           onDeclined={() => onActivityHandled()}

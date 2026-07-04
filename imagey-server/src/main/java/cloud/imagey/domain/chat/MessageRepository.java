@@ -17,10 +17,8 @@
 package cloud.imagey.domain.chat;
 
 import static jakarta.json.bind.JsonbBuilder.create;
-import static org.apache.commons.io.FileUtils.write;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -41,7 +39,7 @@ public class MessageRepository extends AbstractFileRepository {
     @ConfigProperty(name = "root.path")
     private String rootPath;
 
-    Message persist(User receiver, User sender, MessageContent encryptedContent) throws IOException {
+    Message persist(User receiver, User sender, MessageContent encryptedContent) {
         MessageId id = new MessageId();
         Message message = new Message(sender, encryptedContent);
         String jsonContent = create().toJson(message);
@@ -59,7 +57,7 @@ public class MessageRepository extends AbstractFileRepository {
             mkdir(senderFolder);
         }
         File messageFile = new File(senderFolder, id.value() + ".json");
-        write(messageFile, jsonContent, UTF_8, false);
+        writeStringToFile(messageFile, jsonContent, UTF_8, false);
 
         File senderHome = new File(rootPath, sender.email().address());
         if (!senderHome.exists()) {
@@ -74,7 +72,7 @@ public class MessageRepository extends AbstractFileRepository {
             mkdir(receiverFolder);
         }
         File senderMessageFile = new File(receiverFolder, id.value() + ".json");
-        write(senderMessageFile, jsonContent, UTF_8, false);
+        writeStringToFile(senderMessageFile, jsonContent, UTF_8, false);
 
         return new Message(sender, encryptedContent)
             .withId(id)

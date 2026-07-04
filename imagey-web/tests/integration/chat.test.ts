@@ -308,11 +308,13 @@ test("decryption error shows reissue dialog", async ({ page }) => {
         r.headers({ "Content-Type": "application/json" });
         r.jsonBody({
           userKey: {
+            issuerType: MatchersV3.like("USER"),
             issuer: MatchersV3.like("mary@imagey.cloud"),
             kid: MatchersV3.like("0"),
             sharedKey: MatchersV3.like("dummy-key"),
           },
           contactKey: {
+            issuerType: MatchersV3.like("USER"),
             issuer: MatchersV3.like("alice@imagey.cloud"),
             kid: MatchersV3.like("0"),
             sharedKey: MatchersV3.like("dummy-key"),
@@ -386,6 +388,31 @@ test("share a document in chat", async ({ page }) => {
     .willRespondWith(200, (r) => r.jsonBody([]));
 
   const documentId = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3";
+
+  // Interaction to load the document key
+  provider
+    .addInteraction()
+    .uponReceiving("a request to get the document key")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${documentId}/keys/mary@imagey.cloud`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: fs
+          .readFileSync(
+            path.resolve(
+              process.cwd(),
+              `tests/images/encrypted/${documentId}/keys/mary@imagey.cloud/encrypted-shared.key`,
+            ),
+            "utf8",
+          )
+          .trim(),
+      }),
+    );
 
   // Interaction to store the shared key
   provider

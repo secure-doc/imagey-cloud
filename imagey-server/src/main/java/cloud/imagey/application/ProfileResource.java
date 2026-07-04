@@ -19,7 +19,9 @@ package cloud.imagey.application;
 import static cloud.imagey.domain.document.DocumentId.CONTENT;
 import static cloud.imagey.domain.document.DocumentId.PREVIEW;
 import static cloud.imagey.domain.document.DocumentId.SMALL;
+import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
+import static java.util.Optional.empty;
 
 import java.io.IOException;
 
@@ -28,6 +30,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -95,9 +98,10 @@ public class ProfileResource {
 
     @GET
     @RolesAllowed({"owner", "contact", "contact-request"})
-    @Produces(jakarta.ws.rs.core.MediaType.APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
     public DocumentMetadata getProfileMetadata(@PathParam("email") User user) throws IOException {
         Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
-        return documentRepository.findMetadata(user, PROFILE_ID, callerEmail);
+        return documentRepository.findMetadata(user, PROFILE_ID, callerEmail, empty())
+            .orElseThrow(NotFoundException::new);
     }
 }

@@ -10,6 +10,8 @@ import {
   provider,
   prepareMarysContactRequests,
   runningPactRequests,
+  prepareMarysEmptyDocuments,
+  prepareMarysEmptyContactRequests,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -258,5 +260,34 @@ test("invite contact from empty panel", async ({ page }) => {
 
     // Then the dialog should close
     await expect(dialogHeading).not.toBeVisible();
+  });
+});
+
+test("cancel invite contact from empty panel", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocuments();
+  const provider = await prepareMarysEmptyContactRequests();
+
+  await provider.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    const inviteButton = page.getByRole("button", {
+      name: "person_add Invite Contact",
+      exact: true,
+    });
+    await expect(inviteButton).toBeVisible();
+    await inviteButton.click();
+
+    const dialogHeading = page.getByRole("heading", { name: "Add Contact" });
+    await expect(dialogHeading).toBeVisible();
+
+    const cancelButton = page.getByRole("button", { name: "Cancel" });
+    await expect(cancelButton).toBeVisible();
+    await cancelButton.click();
+
+    await expect(dialogHeading).not.toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

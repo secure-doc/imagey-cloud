@@ -88,7 +88,12 @@ export const contactRepository = {
   getSharedContactKey: async (
     userId: UserId,
     contactId: UserId,
-  ): Promise<{ issuer: IssuerId; kid: Kid; sharedKey: EncryptedSharedKey }> => {
+  ): Promise<{
+    issuerType?: string;
+    issuer: IssuerId;
+    kid: Kid;
+    sharedKey: EncryptedSharedKey;
+  }> => {
     const response = await fetch(`/users/${userId}/contacts/${contactId}/key`, {
       method: "GET",
       headers: {

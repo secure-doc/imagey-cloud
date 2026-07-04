@@ -20,11 +20,8 @@ import static java.util.Base64.getEncoder;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static org.apache.commons.io.FileUtils.readFileToByteArray;
-import static org.apache.commons.io.FileUtils.writeByteArrayToFile;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,7 +40,6 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.infrastructure.IoProblemException;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
@@ -60,13 +56,13 @@ public class DocumentRepository extends AbstractFileRepository {
         LOG.info("root.path = {}", rootPath);
     }
 
-    public DocumentId persist(User user, EncryptedContent metadata) throws IOException {
+    public DocumentId persist(User user, EncryptedContent metadata) {
         DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
         persist(user, documentId, metadata);
         return documentId;
     }
 
-    public void persist(User user, DocumentId documentId, EncryptedContent metadata) throws IOException {
+    public void persist(User user, DocumentId documentId, EncryptedContent metadata) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
@@ -78,22 +74,18 @@ public class DocumentRepository extends AbstractFileRepository {
     }
 
     public void persist(User user, DocumentId documentId, FileName fileName, EncryptedContent content) {
-        try {
-            File userHome = getUserHome(user);
-            File documentHome = new File(userHome, "documents");
-            File documentFolder = new File(documentHome, documentId.id());
-            File contentsFolder = new File(documentFolder, "files");
-            if (!contentsFolder.exists()) {
-                mkdir(contentsFolder);
-            }
-            File contentFile = new File(contentsFolder, fileName.name());
-            writeByteArrayToFile(contentFile, content.content());
-        } catch (IOException e) {
-            throw new IoProblemException(e);
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        File contentsFolder = new File(documentFolder, "files");
+        if (!contentsFolder.exists()) {
+            mkdir(contentsFolder);
         }
+        File contentFile = new File(contentsFolder, fileName.name());
+        writeByteArrayToFile(contentFile, content.content());
     }
 
-    public Optional<EncryptedContent> loadContent(User user, DocumentId documentId, DocumentId contentId) throws IOException {
+    public Optional<EncryptedContent> loadContent(User user, DocumentId documentId, DocumentId contentId) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
@@ -105,7 +97,20 @@ public class DocumentRepository extends AbstractFileRepository {
         return of(new EncryptedContent(readFileToByteArray(contentFile)));
     }
 
-    public List<DocumentMetadata> findMetadata(User user) throws IOException {
+
+    public Optional<Long> getTimestamp(User user, DocumentId documentId) {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        File metadataFile = new File(documentFolder, "metadata.enc");
+        if (!metadataFile.exists()) {
+            return empty();
+        }
+        return of(metadataFile.lastModified());
+    }
+
+
+    public List<DocumentMetadata> findMetadata(User user, Optional<DocumentId> folderId) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         if (!documentHome.exists()) {
@@ -113,15 +118,30 @@ public class DocumentRepository extends AbstractFileRepository {
         }
         return Stream.of(documentHome.list())
             .filter(name -> new File(documentHome, name).isDirectory())
+            .filter(name -> folderId.isEmpty() || !name.equals(folderId.get().id()))
             .sorted()
             .map(DocumentId::new)
-            .map(id -> findMetadata(user, id, user.email()))
+            .flatMap(id -> findMetadata(user, id, user.email(), folderId).stream())
+            .filter(metadata -> metadata.sharedKey() != null)
             .toList();
     }
 
-    public DocumentMetadata findMetadata(User user, DocumentId documentId, Email callerEmail) {
-        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, callerEmail).orElse(null);
-        return new DocumentMetadata(documentId, loadDocumentMetadata(user, documentId), sharedKey);
+    public Optional<DocumentMetadata> findMetadata(User user, DocumentId documentId, Email callerEmail, Optional<DocumentId> folderId) {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        File metadataFile = new File(documentFolder, "metadata.enc");
+        if (!metadataFile.exists()) {
+            return empty();
+        }
+
+        Email lookupEmail = folderId
+            .filter(f -> !f.equals(documentId))
+            .map(DocumentId::id)
+            .map(Email::new)
+            .orElse(callerEmail);
+        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, lookupEmail).orElse(null);
+        return of(new DocumentMetadata(documentId, loadDocumentMetadata(user, documentId), sharedKey));
     }
 
     private Base64Content loadDocumentMetadata(User user, DocumentId documentId) {
@@ -129,12 +149,7 @@ public class DocumentRepository extends AbstractFileRepository {
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         File metadataFile = new File(documentFolder, "metadata.enc");
-        try {
-            getEncoder().encodeToString(readFileToByteArray(metadataFile));
-            return new Base64Content(getEncoder().encodeToString(readFileToByteArray(metadataFile)));
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
+        return new Base64Content(getEncoder().encodeToString(readFileToByteArray(metadataFile)));
     }
 
     public Optional<EncryptedSharedKey> findDocumentKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {
@@ -147,15 +162,13 @@ public class DocumentRepository extends AbstractFileRepository {
         if (!sharedKey.exists()) {
             return empty();
         }
-        try {
-            String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
-            return of(new EncryptedSharedKey(user.email().address(), "0", encodedKey));
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
+        String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
+        String issuer = user.email().address();
+        String issuerType = issuer.contains("@") ? "USER" : "FOLDER";
+        return of(new EncryptedSharedKey(issuerType, issuer, "0", encodedKey));
     }
 
-    public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedContent key) throws IOException {
+    public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedContent key) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());

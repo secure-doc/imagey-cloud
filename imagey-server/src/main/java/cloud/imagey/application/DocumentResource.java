@@ -19,13 +19,15 @@ package cloud.imagey.application;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
+import static jakarta.ws.rs.core.Response.created;
+import static jakarta.ws.rs.core.Response.ok;
 import static java.util.Base64.getDecoder;
-import static java.util.Base64.getEncoder;
 import static java.util.Optional.ofNullable;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -38,8 +40,12 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.EntityTag;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response.ResponseBuilder;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
 
@@ -73,23 +79,28 @@ public class DocumentResource {
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
     public List<DocumentMetadata> getDocumentMetadata(
-        @PathParam("email") User user) throws IOException {
+        @PathParam("email") User user,
+        @QueryParam("folderId") DocumentId folderId) throws IOException {
 
-        return documentRepository.findMetadata(user);
+        return documentRepository.findMetadata(user, ofNullable(folderId));
     }
 
     @GET
     @RolesAllowed({"owner", "recipient"})
     @Path("{documentId}")
     @Produces(APPLICATION_JSON)
-    public DocumentMetadata getDocumentMetadata(
+    public Response getDocumentMetadata(
         @PathParam("email") User user,
-        @PathParam("documentId") DocumentId documentId) throws IOException {
+        @PathParam("documentId") DocumentId documentId,
+        @QueryParam("folderId") DocumentId folderId) throws IOException {
 
         Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
-        return documentRepository.findMetadata(user, documentId, callerEmail);
+        DocumentMetadata metadata = documentRepository.findMetadata(user, documentId, callerEmail, ofNullable(folderId))
+            .orElseThrow(NotFoundException::new);
+        long etag = documentRepository.getTimestamp(user, documentId).orElseThrow(NotFoundException::new);
+        return ok(metadata).header("ETag", Long.valueOf(etag)).build();
     }
-/*
+
     @PUT
     @RolesAllowed("owner")
     @Path("{documentId}")
@@ -97,12 +108,22 @@ public class DocumentResource {
     public Response storeEncryptedDocumentMetadata(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
-        EncryptedContent metadata) throws IOException {
+        EncryptedContent metadata,
+        @Context Request request) throws IOException {
 
-        documentRepository.persist(user, documentId, metadata);
-        return Response.ok().build();
+        return documentRepository.getTimestamp(user, documentId)
+            .map(String::valueOf)
+            .map(EntityTag::new)
+            .map(request::evaluatePreconditions)
+            .map(Optional::ofNullable)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .map(ResponseBuilder::build).orElseGet(() -> {
+                documentRepository.persist(user, documentId, metadata);
+                return ok().build();
+            });
     }
-*/
+
     @GET
     @RolesAllowed({"owner", "recipient"})
     @Path("{documentId}/files/{contentId}")
@@ -140,7 +161,7 @@ public class DocumentResource {
 
         EncryptedContent keyContent = new EncryptedContent(getDecoder().decode(key.sharedKey()));
         documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, keyContent);
-        return Response.ok().build();
+        return ok().build();
     }
 
     /**
@@ -165,8 +186,6 @@ public class DocumentResource {
 
         DocumentId documentId = documentRepository.persist(user, metadata);
 
-        String encodedKey = getEncoder().encodeToString(keyBytes);
-        EncryptedSharedKey sharedKey = new EncryptedSharedKey(issuer, "0", encodedKey);
         documentRepository.persist(user, documentId, new Email(issuer), new EncryptedContent(keyBytes));
 
         ofNullable(files).ifPresent(f -> f.stream().filter(a -> a.getContentDisposition().getFilename() != null).forEach(attachment -> {
@@ -175,6 +194,6 @@ public class DocumentResource {
             documentRepository.persist(user, documentId, name, content);
         }));
         URI location = uriInfo.getAbsolutePathBuilder().path(documentId.id()).build();
-        return Response.created(location).build();
+        return created(location).build();
     }
 }

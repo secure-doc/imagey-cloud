@@ -22,7 +22,6 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +62,7 @@ public class DeviceRepository extends AbstractFileRepository {
             .map(this::parse);
     }
 
-    public void storeDevicePublicKey(User user, DeviceId deviceId, PublicKey key) throws IOException {
+    public void storeDevicePublicKey(User user, DeviceId deviceId, PublicKey key) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
         createNewFileWithContent(keyDirectory, "0.json", key.key());
     }
@@ -81,16 +80,16 @@ public class DeviceRepository extends AbstractFileRepository {
         }
     }
 
-    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, PrivateKeyMetadata metadata) throws IOException {
+    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, PrivateKeyMetadata metadata) {
         storeEncryptedPrivateKey(user, deviceId, convert(metadata));
     }
 
-    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) throws IOException {
+    public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
         createNewFileWithContent(keyDirectory, "0.json", metadata);
     }
 
-    public void storeDeviceRecoveryKey(User user, DeviceId deviceId, String recoveryKey) throws IOException {
+    public void storeDeviceRecoveryKey(User user, DeviceId deviceId, String recoveryKey) {
         File deviceDirectory = new File(new File(getUserHome(user), "devices"), deviceId.id());
         createNewFileWithContent(deviceDirectory, "recovery-key.txt", recoveryKey);
     }

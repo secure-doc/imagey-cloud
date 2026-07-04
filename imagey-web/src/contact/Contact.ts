@@ -5,6 +5,7 @@ export type Contact = {
   userId: UserId;
 };
 export type SharedKey = {
+  issuerType?: string;
   issuer: UserId;
   kid: "0";
   sharedKey: EncryptedSharedKey;

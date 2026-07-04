@@ -677,10 +677,10 @@ test("existing user authenticates via challenge-response on existing device", as
     .willRespondWith(200, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody(
         Matchers.like({
-          crv: TestData.mary.devices[0].publicDeviceKey.crv,
-          kty: TestData.mary.devices[0].publicDeviceKey.kty,
-          x: TestData.mary.devices[0].publicDeviceKey.x,
-          y: TestData.mary.devices[0].publicDeviceKey.y,
+          crv: TestData.mary.devices[0].publicDeviceKey!.crv,
+          kty: TestData.mary.devices[0].publicDeviceKey!.kty,
+          x: TestData.mary.devices[0].publicDeviceKey!.x,
+          y: TestData.mary.devices[0].publicDeviceKey!.y,
         }),
       ),
     );
@@ -879,10 +879,10 @@ test("existing user authenticates via challenge-response and selects keep me log
     .willRespondWith(200, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody(
         Matchers.like({
-          crv: TestData.mary.devices[0].publicDeviceKey.crv,
-          kty: TestData.mary.devices[0].publicDeviceKey.kty,
-          x: TestData.mary.devices[0].publicDeviceKey.x,
-          y: TestData.mary.devices[0].publicDeviceKey.y,
+          crv: TestData.mary.devices[0].publicDeviceKey!.crv,
+          kty: TestData.mary.devices[0].publicDeviceKey!.kty,
+          x: TestData.mary.devices[0].publicDeviceKey!.x,
+          y: TestData.mary.devices[0].publicDeviceKey!.y,
         }),
       ),
     );
@@ -1112,10 +1112,10 @@ test("existing user auto-logs in with stored recovery key", async ({
     .willRespondWith(200, (r) =>
       r.jsonBody(
         Matchers.like({
-          crv: TestData.mary.devices[0].publicDeviceKey.crv,
-          kty: TestData.mary.devices[0].publicDeviceKey.kty,
-          x: TestData.mary.devices[0].publicDeviceKey.x,
-          y: TestData.mary.devices[0].publicDeviceKey.y,
+          crv: TestData.mary.devices[0].publicDeviceKey!.crv,
+          kty: TestData.mary.devices[0].publicDeviceKey!.kty,
+          x: TestData.mary.devices[0].publicDeviceKey!.x,
+          y: TestData.mary.devices[0].publicDeviceKey!.y,
         }),
       ),
     );

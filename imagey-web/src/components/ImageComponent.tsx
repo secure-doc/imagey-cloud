@@ -30,7 +30,13 @@ export default function ImageComponent({
 
     if (user && publicMainKey && privateMainKey) {
       documentService
-        .loadDocumentContent(user, image, publicMainKey, privateMainKey)
+        .loadDocumentContent(
+          user,
+          image,
+          publicMainKey,
+          privateMainKey,
+          image.sharedKey,
+        )
         .then((doc) => setContent(doc.content))
         .catch((e) => {
           console.error(e);
@@ -59,8 +65,32 @@ export default function ImageComponent({
     );
   } else if (error) {
     return (
-      <div key={image.documentId} className={className}>
-        {t("Error loading {{name}}", { name: image.name })}
+      <div
+        key={image.documentId}
+        className={`${className} border surface-container-highest center-align`}
+        style={{
+          display: "inline-flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          verticalAlign: "top",
+          boxSizing: "border-box",
+          margin: 0,
+          padding: "0.5rem",
+          textAlign: "center",
+        }}
+      >
+        <i className="error-text">error</i>
+        <div
+          className="small"
+          style={{
+            marginTop: "0.5rem",
+            wordBreak: "break-word",
+            maxWidth: "100%",
+          }}
+        >
+          {t("Error loading {{name}}", { name: image.name })}
+        </div>
       </div>
     );
   } else {

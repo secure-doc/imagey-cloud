@@ -9,12 +9,18 @@ export default function UploadButton({
   onUploadComplete,
   children,
   "aria-label": ariaLabel,
+  parentFolderId,
+  parentFolderKey,
+  asMenuItem,
 }: {
   className?: string;
   multiple?: boolean;
   onUploadComplete?: (document: DocumentMetadata) => void;
   children?: React.ReactNode;
   "aria-label"?: string;
+  parentFolderId?: string;
+  parentFolderKey?: JsonWebKey;
+  asMenuItem?: boolean;
 }) {
   const fileChooser = useRef<HTMLInputElement>(null);
   const authentication = useAuthentication();
@@ -35,7 +41,10 @@ export default function UploadButton({
           file,
           publicMainKey,
           privateMainKey,
+          parentFolderId,
+          parentFolderKey,
         );
+
         if (onUploadComplete) {
           onUploadComplete(metadata);
         }
@@ -44,14 +53,14 @@ export default function UploadButton({
     setIsUploading(false);
   };
 
-  return (
-    <button
-      type="button"
-      className={className || "circle transparent"}
-      onClick={() => fileChooser.current?.click()}
-      disabled={isUploading}
-      aria-label={ariaLabel}
-    >
+  const commonProps = {
+    className: className || "circle transparent",
+    onClick: () => fileChooser.current?.click(),
+    "aria-label": ariaLabel,
+  };
+
+  const innerContent = (
+    <>
       {isUploading ? (
         <progress className="circle"></progress>
       ) : (
@@ -71,6 +80,26 @@ export default function UploadButton({
           }
         }}
       />
+    </>
+  );
+
+  if (asMenuItem) {
+    return (
+      <a
+        {...commonProps}
+        style={{
+          cursor: isUploading ? "not-allowed" : "pointer",
+          pointerEvents: isUploading ? "none" : "auto",
+        }}
+      >
+        {innerContent}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" disabled={isUploading} {...commonProps}>
+      {innerContent}
     </button>
   );
 }

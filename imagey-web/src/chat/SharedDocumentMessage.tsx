@@ -30,7 +30,7 @@ export function SharedDocumentMessage({
     if (user && chatKey && publicKey && privateKey) {
       documentRepository
         .loadDocumentMetadata(owner, documentId)
-        .then((metadata) => {
+        .then(({ metadata }) => {
           if (user === owner) {
             return documentService.loadDocument(
               owner,

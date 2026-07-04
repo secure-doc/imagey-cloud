@@ -5,4 +5,11 @@ export default interface DocumentMetadata {
   size?: number;
   smallImageId?: string;
   previewImageId?: string;
+  documents?: string[];
+  sharedKey?: {
+    issuerType?: string;
+    issuer: string;
+    kid: string;
+    sharedKey: string;
+  };
 }

@@ -76,14 +76,46 @@ public class AbstractFileRepository {
         }
     }
 
-    protected void deleteDirectory(File f) throws IOException {
+    protected void deleteDirectory(File f) {
         if (f.isDirectory()) {
             for (File c : f.listFiles()) {
                 deleteDirectory(c);
             }
         }
         if (!f.delete()) {
-            throw new IOException("Failed to delete file: " + f);
+            throw new IoProblemException("Failed to delete file: " + f);
+        }
+    }
+
+    protected void writeByteArrayToFile(File file, byte[] data) {
+        try {
+            FileUtils.writeByteArrayToFile(file, data);
+        } catch (IOException e) {
+            throw new IoProblemException(e);
+        }
+    }
+
+    protected byte[] readFileToByteArray(File file) {
+        try {
+            return FileUtils.readFileToByteArray(file);
+        } catch (IOException e) {
+            throw new IoProblemException(e);
+        }
+    }
+
+    protected void writeStringToFile(File file, String data, Charset charset) {
+        try {
+            FileUtils.writeStringToFile(file, data, charset);
+        } catch (IOException e) {
+            throw new IoProblemException(e);
+        }
+    }
+
+    protected void writeStringToFile(File file, String data, Charset charset, boolean append) {
+        try {
+            FileUtils.writeStringToFile(file, data, charset, append);
+        } catch (IOException e) {
+            throw new IoProblemException(e);
         }
     }
 }

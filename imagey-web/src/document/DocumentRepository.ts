@@ -7,12 +7,14 @@ export const documentRepository = {
   uploadDocument: async (
     email: string,
     metadata: ArrayBuffer,
-    sharedKey: { issuer: string; kid: string; sharedKey: string },
+    sharedKey: {
+      issuerType?: string;
+      issuer: string;
+      kid: string;
+      sharedKey: string;
+    },
     content: ArrayBuffer[],
   ): Promise<string> => {
-    if (content.length === 0) {
-      throw new Error("content must be provided");
-    }
     const formData = new FormData();
     formData.append(
       "metadata",
@@ -26,11 +28,13 @@ export const documentRepository = {
       "key",
     );
     formData.append("issuer", sharedKey.issuer);
-    formData.append(
-      "content",
-      new Blob([content[0]], { type: "application/octet-stream" }),
-      "content",
-    );
+    if (content.length > 0) {
+      formData.append(
+        "content",
+        new Blob([content[0]], { type: "application/octet-stream" }),
+        "content",
+      );
+    }
     if (content.length > 1) {
       formData.append(
         "smallImage",
@@ -61,26 +65,63 @@ export const documentRepository = {
   loadDocumentMetadata: async (
     email: string,
     documentId: string,
-  ): Promise<EncryptedDocumentMetadata> => {
-    const response = await fetch(`/users/${email}/documents/${documentId}`, {
+    folderId?: string,
+  ): Promise<{ metadata: EncryptedDocumentMetadata; etag: string | null }> => {
+    let url = `/users/${email}/documents/${documentId}`;
+    if (folderId) {
+      url += "?folderId=" + encodeURIComponent(folderId);
+    }
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
       },
       credentials: "same-origin",
     });
-    return resolve(response, () => response.json());
+    return resolve(response, async () => {
+      const metadata = await response.json();
+      const etag = response.headers.get("ETag");
+      return { metadata, etag };
+    });
+  },
+
+  updateDocumentMetadata: async (
+    email: string,
+    documentId: string,
+    metadata: ArrayBuffer,
+    etag?: string,
+  ): Promise<void> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/octet-stream",
+    };
+    if (etag) {
+      headers["If-Match"] = etag;
+    }
+
+    const response = await fetch(`/users/${email}/documents/${documentId}`, {
+      method: "PUT",
+      headers,
+      credentials: "same-origin",
+      body: metadata,
+    });
+    return resolve(response, () => Promise.resolve());
   },
 
   loadDocuments: async (
     email: string,
+    folderId?: string,
   ): Promise<EncryptedDocumentMetadata[]> => {
-    const response = await fetch("/users/" + email + "/documents", {
+    let url = "/users/" + email + "/documents";
+    if (folderId) {
+      url += "?folderId=" + encodeURIComponent(folderId);
+    }
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
       },
       credentials: "same-origin",
+      cache: "no-cache",
     });
     return resolve(response, () => response.json());
   },
@@ -89,7 +130,12 @@ export const documentRepository = {
     email: string,
     documentId: string,
     shareEmail?: string,
-  ): Promise<{ issuer: string; kid: string; sharedKey: string }> => {
+  ): Promise<{
+    issuerType?: string;
+    issuer: string;
+    kid: string;
+    sharedKey: string;
+  }> => {
     const targetEmail = shareEmail ?? email;
     const response = await fetch(
       "/users/" + email + "/documents/" + documentId + "/keys/" + targetEmail,
@@ -99,6 +145,7 @@ export const documentRepository = {
           Accept: "application/json",
         },
         credentials: "same-origin",
+        cache: "no-cache",
       },
     );
     return resolve(response, () => response.json());
@@ -107,11 +154,14 @@ export const documentRepository = {
     email: string,
     documentId: string,
     contentId: string,
-  ): Promise<ArrayBuffer> => {
+    noCache?: boolean,
+  ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
     const path = `/users/${email}/documents/${documentId}/files/${contentId}`;
-    const cachedValue = cache.get(path);
-    if (cachedValue) {
-      return cachedValue;
+    if (!noCache) {
+      const cachedValue = cache.get(path);
+      if (cachedValue) {
+        return { content: cachedValue, etag: null };
+      }
     }
     const response = await fetch(path, {
       method: "GET",
@@ -119,11 +169,15 @@ export const documentRepository = {
         Accept: "application/octet-stream",
       },
       credentials: "same-origin",
+      cache: "no-cache",
     });
     const content = await resolve(response, () => response.arrayBuffer());
-    cache.set(path, content);
-    return content;
+    if (!noCache) {
+      cache.set(path, content);
+    }
+    return { content, etag: response.headers.get("ETag") };
   },
+
   storeSharedKey: async (
     email: string,
     documentId: string,
