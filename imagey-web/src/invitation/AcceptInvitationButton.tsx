@@ -1,4 +1,4 @@
-import { contactRepository } from "../contact/ContactRepository";
+import { contactService } from "../contact/ContactService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 
 export default function AcceptInvitationButton({
@@ -17,7 +17,7 @@ export default function AcceptInvitationButton({
     <button
       className={`${className} circle transparent`}
       onClick={() => {
-        contactRepository
+        contactService
           .acceptContactRequest(user, contact, mainKeyPair)
           .then(() => onAccepted());
       }}

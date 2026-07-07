@@ -86,20 +86,20 @@ export function ChatsList({
             contactRequests.map((contactRequest, index) => (
               <li key={index}>
                 <button className="circle">
-                  {contactRequest.email.charAt(0).toLocaleUpperCase()}
+                  {contactRequest.userId.charAt(0).toLocaleUpperCase()}
                 </button>
                 <div className="max">
-                  <h6 className="small">{contactRequest.email}</h6>
-                  <div>{contactRequest.email}</div>
+                  <h6 className="small">{contactRequest.userId}</h6>
+                  <div>{contactRequest.userId}</div>
                 </div>
                 <div>
                   <AcceptInvitationButton
                     user={user}
-                    contact={contactRequest.email}
+                    contact={contactRequest.userId}
                     onAccepted={() => {
                       setContactRequests((contactRequests) =>
                         contactRequests?.filter(
-                          (request) => request.email !== contactRequest.email,
+                          (request) => request.userId !== contactRequest.userId,
                         ),
                       );
                       setContacts((contacts) =>
@@ -109,11 +109,11 @@ export function ChatsList({
                   />
                   <DeclineInvitationButton
                     user={user}
-                    contact={contactRequest.email}
+                    contact={contactRequest.userId}
                     onDeclined={() =>
                       setContactRequests((contactRequests) =>
                         contactRequests?.filter(
-                          (request) => request.email !== contactRequest.email,
+                          (request) => request.userId !== contactRequest.userId,
                         ),
                       )
                     }
@@ -125,17 +125,17 @@ export function ChatsList({
             contacts.map((contact, index) => (
               <li key={index + (contactRequests ? contactRequests.length : 0)}>
                 <NavLink
-                  to={`/chats/${contact.email}`}
+                  to={`/chats/${contact.userId}`}
                   className={({ isActive }) =>
                     isActive ? "active surface-variant" : ""
                   }
                 >
                   <button className="circle transparent">
-                    {contact.email.charAt(0).toLocaleUpperCase()}
+                    {contact.userId.charAt(0).toLocaleUpperCase()}
                   </button>
                   <div className="max">
-                    <h6 className="small">{contact.email}</h6>
-                    <div>{contact.email}</div>
+                    <h6 className="small">{contact.userId}</h6>
+                    <div>{contact.userId}</div>
                   </div>
                   <label>{new Date().toLocaleDateString(i18n.language)}</label>
                 </NavLink>

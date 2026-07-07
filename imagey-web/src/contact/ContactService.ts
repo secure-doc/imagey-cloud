@@ -1,8 +1,60 @@
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
 import { cryptoService } from "../authentication/CryptoService";
+import { UserId } from "../authentication/UserId";
+import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
+import { ContactKeys } from "./Contact";
 import { contactRepository } from "./ContactRepository";
 
 export const contactService = {
+  acceptContactRequest: async (
+    userId: UserId,
+    contactId: UserId,
+    mainKeyPair: JsonWebKeyPair,
+  ): Promise<void> => {
+    try {
+      const contactPublicKey =
+        await authenticationRepository.loadPublicMainKey(contactId);
+      const sharedKey = await cryptoService.generateSymmetricKey();
+
+      const contactEncryptedSharedKey = await cryptoService.encryptKey(
+        sharedKey,
+        contactPublicKey,
+        mainKeyPair.privateKey,
+      );
+      const myEncryptedSharedKey = await cryptoService.encryptKey(
+        sharedKey,
+        mainKeyPair.publicKey,
+        mainKeyPair.privateKey,
+      );
+
+      const contactKeys: ContactKeys = {
+        userKey: {
+          issuer: userId,
+          kid: "0",
+          sharedKey: myEncryptedSharedKey,
+        },
+        contactKey: {
+          issuer: contactId,
+          kid: "0",
+          sharedKey: contactEncryptedSharedKey,
+        },
+      };
+
+      await contactRepository.acceptContactRequest(
+        userId,
+        contactId,
+        contactKeys,
+      );
+    } catch (e) {
+      console.error(
+        "Error in acceptContactRequest",
+        typeof e,
+        e,
+        e instanceof Error ? e.stack : "",
+      );
+      throw e;
+    }
+  },
   loadSharedKey: async (
     userEmail: string,
     contactEmail: string,

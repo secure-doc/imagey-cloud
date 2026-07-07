@@ -1,4 +1,8 @@
+import { UserId } from "../authentication/UserId";
+import { MessageContent } from "../chat/Message";
 import Document from "../document/Document";
+
+export type ActivityId = string;
 
 export type Activity =
   | InvitationActivity
@@ -7,25 +11,25 @@ export type Activity =
   | NoContactsActivity;
 
 export interface InvitationActivity {
-  id: string;
+  id: ActivityId;
   type: ActivityType.INVITATION;
-  userName: string;
-  message?: string;
+  userId: UserId;
+  message?: MessageContent;
 }
 
 export interface ImageActivity {
-  id: string;
+  id: ActivityId;
   type: ActivityType.IMAGE;
   image: Document;
 }
 
 export interface UploadActivity {
-  id: string;
+  id: ActivityId;
   type: ActivityType.UPLOAD;
 }
 
 export interface NoContactsActivity {
-  id: string;
+  id: ActivityId;
   type: ActivityType.NO_CONTACTS;
 }
 

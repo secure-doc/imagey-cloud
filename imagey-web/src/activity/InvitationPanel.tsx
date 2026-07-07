@@ -29,18 +29,18 @@ export default function InvitationPanel({
       actions={[
         <AcceptInvitationButton
           user={user}
-          contact={activity.userName}
+          contact={activity.userId}
           onAccepted={() => onActivityHandled()}
         />,
         <DeclineInvitationButton
           user={user}
-          contact={activity.userName}
+          contact={activity.userId}
           onDeclined={() => onActivityHandled()}
         />,
       ]}
     >
       <p className="center-align">
-        {t("{{user}} whants to connect with you.", { user: activity.userName })}
+        {t("{{user}} whants to connect with you.", { user: activity.userId })}
       </p>
     </Panel>
   );

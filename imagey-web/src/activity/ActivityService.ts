@@ -1,3 +1,4 @@
+import { UserId } from "../authentication/UserId";
 import { contactRepository } from "../contact/ContactRepository";
 import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
@@ -10,7 +11,7 @@ import {
 
 export const activityService = {
   getActivities: async (
-    user: string,
+    user: UserId,
     keyPair: JsonWebKeyPair,
   ): Promise<Activity[]> => {
     const contactRequests = await contactRepository.getContactRequests(user);
@@ -23,9 +24,9 @@ export const activityService = {
     const activities: Activity[] = [
       ...contactRequests.map(
         (request): InvitationActivity => ({
-          id: `invitation-${request.email}`,
+          id: `invitation-${request.userId}`,
           type: ActivityType.INVITATION,
-          userName: request.email,
+          userId: request.userId,
         }),
       ),
       ...images.map(

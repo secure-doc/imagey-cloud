@@ -1,3 +1,10 @@
+import { MessageContent } from "../chat/Message";
+import { Nonce } from "./AuthenticationService";
+import { DeviceId, Password } from "./UserId";
+
+export type EncryptedKey = string;
+export type EncryptedContent = string;
+
 export const cryptoService = {
   generateUuid: () => crypto.randomUUID(),
 
@@ -11,8 +18,8 @@ export const cryptoService = {
   },
 
   generatePasswordKey: async (
-    deviceId: string,
-    password: string,
+    deviceId: DeviceId,
+    password: Password,
   ): Promise<JsonWebKey> => {
     const passwordKey = await crypto.subtle.importKey(
       "raw",
@@ -55,7 +62,7 @@ export const cryptoService = {
 
   encryptPrivatePasswordKey: async (
     privateKey: JsonWebKey,
-    password: string,
+    password: Password,
   ): Promise<string> => {
     const plaintext = JSON.stringify(privateKey);
     const result = await encryptWithPassword(plaintext, password);
@@ -63,8 +70,8 @@ export const cryptoService = {
   },
 
   decryptPrivatePasswordKey: async (
-    encrypted: string,
-    password: string,
+    encrypted: EncryptedKey,
+    password: Password,
   ): Promise<JsonWebKey> => {
     const decrypted = await decryptWithPassword(encrypted, password);
     return JSON.parse(decrypted);
@@ -74,7 +81,7 @@ export const cryptoService = {
     keyToEncrypt: JsonWebKey,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
-  ): Promise<string> => {
+  ): Promise<EncryptedKey> => {
     const derivedKey = await deriveKey(privateKey, publicKey);
     const plaintext = new TextEncoder().encode(JSON.stringify(keyToEncrypt));
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -94,7 +101,7 @@ export const cryptoService = {
   },
 
   decryptKey: async (
-    encryptedBase64: string,
+    encryptedBase64: EncryptedKey,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
@@ -130,10 +137,10 @@ export const cryptoService = {
   },
 
   encryptChallengeNonce: async (
-    nonce: string,
+    nonce: Nonce,
     serverPublicKey: JsonWebKey,
     privateDeviceKey: JsonWebKey,
-  ): Promise<string> => {
+  ): Promise<EncryptedContent> => {
     const derivedKey = await deriveKey(privateDeviceKey, serverPublicKey);
     const plaintext = new TextEncoder().encode(nonce);
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -150,7 +157,10 @@ export const cryptoService = {
     return arrayBufferToBase64(combined.buffer);
   },
 
-  encryptMessage: async (message: string, key: JsonWebKey): Promise<string> => {
+  encryptMessage: async (
+    message: MessageContent,
+    key: JsonWebKey,
+  ): Promise<EncryptedContent> => {
     const cryptoKey = await importSymmetricKey(key);
     const encoded = new TextEncoder().encode(message);
     const encrypted = await encryptAESGCM(
@@ -161,9 +171,9 @@ export const cryptoService = {
   },
 
   decryptMessage: async (
-    encryptedBase64: string,
+    encryptedBase64: EncryptedContent,
     key: JsonWebKey,
-  ): Promise<string> => {
+  ): Promise<MessageContent> => {
     const cryptoKey = await importSymmetricKey(key);
     const encryptedBuffer = base64ToArrayBuffer(encryptedBase64);
     const decryptedBuffer = await decryptAESGCM(encryptedBuffer, cryptoKey);
@@ -277,8 +287,8 @@ async function encryptWithPassword(
 }
 
 async function decryptWithPassword(
-  encryptedBase64: string,
-  password: string,
+  encryptedBase64: EncryptedKey,
+  password: Password,
 ): Promise<string> {
   const combined = base64ToArrayBuffer(encryptedBase64);
   const salt = combined.slice(0, 16);
