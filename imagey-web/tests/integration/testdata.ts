@@ -14,6 +14,7 @@ export interface TestChat {
 export interface TestDocument {
   documentId: string;
   name: string;
+  metadata?: string;
 }
 
 export interface TestUser<
@@ -98,18 +99,26 @@ export const TestData: TestDataStructure = {
       {
         documentId: "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb",
         name: "child-355176_1920.jpg",
+        metadata:
+          "WK8Fu/50nR9I/whZjbqsEcQkgP2h6/TAzvbxkaOcVfp8ElHQLoKXgdV0STrYeui9EEjH2AbMq4T6De6xTGVyqpvFjWRjOAvgWmxKv2tFUiI9b3RNsJoUBlbZutw5RRSY+JzERZ6VNpLhSJNn568YT+di3o8ca7w39bx8xIoNimYvb/rTB8nLoM1LY6cjf99dOP1In+GYjBRkDeqouKOqpH1jvx4V5fOxSrNQCOF3u5zmsnupYVeatjPrq9k/6xytM+XQClVfOBK4Xa1ZpGkD5hpqNlC8JNJwjqyynRUw0bGrMJcg+cb1GnKrGsM9j0N3jnseQGNLNgssmObkUL3umrU=",
       },
       {
         documentId: "78d1b093-45ec-4a25-9594-615ca2d70ba2",
         name: "beach-4524911_480.jpg",
+        metadata:
+          "qvLFOjMio9UXlH15L4G//nDgtZiCRmOirewJIKlLvCfvwKSRJUOOsU1aU/PjuQ2LfN2qkUVerEthue3531l2oiB2U08PfHTp6INL8SiAbCcuYVxajjuXWL+BhQX24LYK8EVpLSW/jQRneclFmDEoUETJ8kLllnyISL/FADoZbd46SfIVrf/U9ijxemJZQrQ6y6D3/wAoNyn2lOC93bO7m8ZyIWYQ4z264o98ykNsD5n+Kpq4IoOuw0YZHIBfYRp/dlm1Xo9TedKs14F1h02DgN0QKeA7Fdl2P8nPshB2R61lHUQpNYV12DV27KBvefdPtRXAS73ACmhxbtgg+PVZkQ==",
       },
       {
         documentId: "profile",
         name: "profile.json",
+        metadata:
+          "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
       },
       {
         documentId: "profile-pic-doc-id",
         name: "profile.jpg",
+        metadata:
+          "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
       },
     ],
     chats: [
@@ -188,18 +197,26 @@ export const TestData: TestDataStructure = {
       {
         documentId: "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb",
         name: "child-355176_1920.jpg",
+        metadata:
+          "WK8Fu/50nR9I/whZjbqsEcQkgP2h6/TAzvbxkaOcVfp8ElHQLoKXgdV0STrYeui9EEjH2AbMq4T6De6xTGVyqpvFjWRjOAvgWmxKv2tFUiI9b3RNsJoUBlbZutw5RRSY+JzERZ6VNpLhSJNn568YT+di3o8ca7w39bx8xIoNimYvb/rTB8nLoM1LY6cjf99dOP1In+GYjBRkDeqouKOqpH1jvx4V5fOxSrNQCOF3u5zmsnupYVeatjPrq9k/6xytM+XQClVfOBK4Xa1ZpGkD5hpqNlC8JNJwjqyynRUw0bGrMJcg+cb1GnKrGsM9j0N3jnseQGNLNgssmObkUL3umrU=",
       },
       {
         documentId: "78d1b093-45ec-4a25-9594-615ca2d70ba2",
         name: "beach-4524911_480.jpg",
+        metadata:
+          "qvLFOjMio9UXlH15L4G//nDgtZiCRmOirewJIKlLvCfvwKSRJUOOsU1aU/PjuQ2LfN2qkUVerEthue3531l2oiB2U08PfHTp6INL8SiAbCcuYVxajjuXWL+BhQX24LYK8EVpLSW/jQRneclFmDEoUETJ8kLllnyISL/FADoZbd46SfIVrf/U9ijxemJZQrQ6y6D3/wAoNyn2lOC93bO7m8ZyIWYQ4z264o98ykNsD5n+Kpq4IoOuw0YZHIBfYRp/dlm1Xo9TedKs14F1h02DgN0QKeA7Fdl2P8nPshB2R61lHUQpNYV12DV27KBvefdPtRXAS73ACmhxbtgg+PVZkQ==",
       },
       {
         documentId: "profile",
         name: "profile.json",
+        metadata:
+          "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
       },
       {
         documentId: "profile-pic-doc-id",
         name: "profile.jpg",
+        metadata:
+          "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
       },
     ],
     chats: [

@@ -2,7 +2,7 @@ import { useActionIcons } from "../contexts/ActionBarContext";
 import UploadButton from "../components/UploadButton";
 import { useEffect, useState, useMemo } from "react";
 import { documentService } from "../document/DocumentService";
-import Document from "../document/Document";
+import DocumentMetadata from "../document/DocumentMetadata";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import ImageList from "../components/ImageList";
@@ -15,7 +15,7 @@ export default function Images() {
   const mainKeyPair = authentication.keyPairs.mainKeyPair;
   const publicMainKey = mainKeyPair.publicKey;
   const privateMainKey = mainKeyPair.privateKey;
-  const [documents, setDocuments] = useState<Document[]>();
+  const [documents, setDocuments] = useState<DocumentMetadata[]>();
   const actionIcons = useMemo(
     () => [
       <UploadButton

@@ -2,14 +2,14 @@ import { useTranslation } from "react-i18next";
 import Panel from "../components/Panel";
 import UploadButton from "../components/UploadButton";
 
-import Document from "../document/Document";
+import DocumentMetadata from "../document/DocumentMetadata";
 
 export default function UploadPanel({
   className,
   onUploadComplete,
 }: {
   className?: string;
-  onUploadComplete?: (document: Document) => void;
+  onUploadComplete?: (document: DocumentMetadata) => void;
 }) {
   const { t } = useTranslation();
 

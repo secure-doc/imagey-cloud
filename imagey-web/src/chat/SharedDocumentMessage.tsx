@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { documentService } from "../document/DocumentService";
 import { documentRepository } from "../document/DocumentRepository";
-import Document from "../document/Document";
+import DocumentMetadata from "../document/DocumentMetadata";
 import ImageComponent from "../components/ImageComponent";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 
@@ -23,7 +23,7 @@ export function SharedDocumentMessage({
   const publicKey = authentication.keyPairs?.mainKeyPair.publicKey;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
 
-  const [document, setDocument] = useState<Document>();
+  const [document, setDocument] = useState<DocumentMetadata>();
   const [error, setError] = useState(false);
 
   useEffect(() => {

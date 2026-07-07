@@ -3,6 +3,7 @@ import { imageService } from "../image/ImageService";
 import Document from "./Document";
 import DocumentMetadata from "./DocumentMetadata";
 import { documentRepository } from "./DocumentRepository";
+import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
 
 export const documentService = {
   storeDocument: async (
@@ -12,12 +13,11 @@ export const documentService = {
     privateKey: JsonWebKey,
   ): Promise<DocumentMetadata> => {
     const buffers: ArrayBuffer[] = [await file.arrayBuffer()];
-    const documentId = cryptoService.generateUuid();
     const documentMetadata: DocumentMetadata = {
+      documentId: "",
       name: file.name,
       type: file.type,
       size: file.size,
-      documentId: documentId,
     };
     const documentKey = await cryptoService.generateSymmetricKey();
     const encryptedDocumentKeyString = await cryptoService.encryptKey(
@@ -51,33 +51,27 @@ export const documentService = {
       payloadBuffer,
     ]);
 
-    const uploadMetadata: DocumentMetadata = {
-      documentId: documentId,
-      smallImageId: documentMetadata.smallImageId,
-      previewImageId: documentMetadata.previewImageId,
-      encryptedData: cryptoService.arrayBufferToBase64(encryptedPayload[0]),
-    };
-
     const encryptedDocuments = await cryptoService.encryptDocument(
       documentKey,
       buffers,
     );
 
-    await documentRepository.uploadDocument(
+    const documentId = await documentRepository.uploadDocument(
       email,
-      uploadMetadata,
+      encryptedPayload[0],
       encryptedDocumentKey,
       encryptedDocuments,
     );
 
+    documentMetadata.documentId = documentId;
     return documentMetadata;
   },
   loadDocument: async (
     user: string,
-    metadata: DocumentMetadata,
+    metadata: EncryptedDocumentMetadata,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
-  ): Promise<Document> => {
+  ): Promise<DocumentMetadata> => {
     try {
       const encryptedDocumentKey =
         metadata.sharedKey ??
@@ -87,29 +81,27 @@ export const documentService = {
         publicKey,
         privateKey,
       );
-      return await decryptDocumentContent(user, metadata, decryptedDocumentKey);
+      return decryptDocumentMetadata(metadata, decryptedDocumentKey);
     } catch (e) {
       console.error(e);
     }
     return {
       documentId: metadata.documentId,
-      name: metadata.name ?? "Encrypted Document",
+      name: "Encrypted Document",
     };
   },
   loadSharedDocument: async (
     owner: string,
-    metadata: DocumentMetadata,
+    metadata: EncryptedDocumentMetadata,
     chatKey: JsonWebKey,
     recipient: string,
   ): Promise<Document> => {
     try {
-      const encryptedDocumentKey =
-        metadata.sharedKey ??
-        (await documentRepository.loadKey(
-          owner,
-          metadata.documentId,
-          recipient,
-        ));
+      const encryptedDocumentKey = await documentRepository.loadKey(
+        owner,
+        metadata.documentId,
+        recipient,
+      );
 
       const docKeyStr = await cryptoService.decryptMessage(
         encryptedDocumentKey.sharedKey,
@@ -117,9 +109,14 @@ export const documentService = {
       );
       const decryptedDocumentKey = JSON.parse(docKeyStr) as JsonWebKey;
 
+      const documentMetadata = await decryptDocumentMetadata(
+        metadata,
+        decryptedDocumentKey,
+      );
+
       return await decryptDocumentContent(
         owner,
-        metadata,
+        documentMetadata,
         decryptedDocumentKey,
       );
     } catch (e) {
@@ -127,14 +124,14 @@ export const documentService = {
     }
     return {
       documentId: metadata.documentId,
-      name: metadata.name ?? "Encrypted Document",
+      name: "Encrypted Document",
     };
   },
   loadDocuments: async (
     user: string,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
-  ): Promise<Document[]> => {
+  ): Promise<DocumentMetadata[]> => {
     const metadata = await documentRepository.loadDocuments(user);
     const validMetadata = metadata.filter(
       (meta) =>
@@ -183,36 +180,67 @@ export const documentService = {
       newEncryptedDocumentKey,
     );
   },
+  loadDocumentContent: async (
+    user: string,
+    metadata: DocumentMetadata,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+    encryptedKey?: { issuer: string; kid: string; sharedKey: string },
+  ): Promise<Document> => {
+    try {
+      const encryptedDocumentKey =
+        encryptedKey ??
+        (await documentRepository.loadKey(user, metadata.documentId!));
+      const decryptedDocumentKey = await cryptoService.decryptKey(
+        encryptedDocumentKey.sharedKey,
+        publicKey,
+        privateKey,
+      );
+      return await decryptDocumentContent(user, metadata, decryptedDocumentKey);
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  },
 };
 
+export async function decryptDocumentMetadata(
+  metadata: EncryptedDocumentMetadata,
+  decryptedDocumentKey: JsonWebKey,
+): Promise<DocumentMetadata> {
+  console.log(
+    "DECRYPTING METADATA LENGTH:",
+    metadata.metadata.length,
+    "STRING:",
+    metadata.metadata,
+  );
+  const encryptedMetadataBuffer = cryptoService.base64ToArrayBuffer(
+    metadata.metadata,
+  );
+  const decryptedMetadataBuffer = await cryptoService.decryptDocument(
+    decryptedDocumentKey,
+    encryptedMetadataBuffer,
+  );
+  const payloadText = new TextDecoder().decode(decryptedMetadataBuffer);
+  const payload = JSON.parse(payloadText);
+  return {
+    documentId: metadata.documentId,
+    name: payload.name,
+    type: payload.type,
+    size: payload.size,
+    smallImageId: payload.smallImageId,
+    previewImageId: payload.previewImageId,
+  };
+}
 async function decryptDocumentContent(
   owner: string,
   metadata: DocumentMetadata,
   decryptedDocumentKey: JsonWebKey,
 ): Promise<Document> {
-  let name = metadata.name;
-  let previewImageId = metadata.previewImageId;
-  let type = metadata.type;
-
-  if (metadata.encryptedData) {
-    const encryptedPayloadBuffer = cryptoService.base64ToArrayBuffer(
-      metadata.encryptedData,
-    );
-    const decryptedPayloadBuffer = await cryptoService.decryptDocument(
-      decryptedDocumentKey,
-      encryptedPayloadBuffer,
-    );
-    const payloadText = new TextDecoder().decode(decryptedPayloadBuffer);
-    const payload = JSON.parse(payloadText);
-    name = payload.name;
-    previewImageId = payload.previewImageId;
-    type = payload.type;
-  }
-
   const encryptedContent: ArrayBuffer = await documentRepository.loadContent(
     owner,
-    metadata.documentId,
-    previewImageId ?? metadata.documentId,
+    metadata.documentId!,
+    metadata.previewImageId ?? metadata.documentId!,
   );
 
   const decryptedContent = await cryptoService.decryptDocument(
@@ -221,8 +249,8 @@ async function decryptDocumentContent(
   );
   return {
     content: decryptedContent,
-    documentId: metadata.documentId,
-    name: name!,
-    type: type,
+    documentId: metadata.documentId!,
+    name: metadata.name!,
+    type: metadata.type,
   };
 }

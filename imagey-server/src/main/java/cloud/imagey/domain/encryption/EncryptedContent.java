@@ -14,8 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.document;
+package cloud.imagey.domain.encryption;
 
-public record DocumentContent(byte[] content) {
+public record EncryptedContent(byte[] content) {
 
 }

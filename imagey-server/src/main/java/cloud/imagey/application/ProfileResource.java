@@ -16,6 +16,9 @@
  */
 package cloud.imagey.application;
 
+import static cloud.imagey.domain.document.DocumentId.CONTENT;
+import static cloud.imagey.domain.document.DocumentId.PREVIEW;
+import static cloud.imagey.domain.document.DocumentId.SMALL;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 
 import java.io.IOException;
@@ -37,10 +40,10 @@ import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.document.DocumentContent;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
@@ -61,38 +64,28 @@ public class ProfileResource {
     @PUT
     @RolesAllowed("owner")
     @Consumes(MULTIPART_FORM_DATA)
-    public Response updateProfile(
+    public Response uploadDocument(
         @PathParam("email") User user,
-        @Multipart("metadata") DocumentMetadata metadata,
+        @Multipart("metadata") byte[] metadataBytes,
         @Multipart("sharedKey") EncryptedSharedKey sharedKey,
-        @Multipart("content") DocumentContent content,
-        @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
-        @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
+        @Multipart("content") byte[] contentBytes,
+        @Multipart(value = "smallImage", required = false) byte[] smallImageBytes,
+        @Multipart(value = "previewImage", required = false) byte[] previewImageBytes)
             throws IOException {
 
-        // Ensure we are working with the profile document ID
-        DocumentMetadata profileMetadata = new DocumentMetadata(
-            PROFILE_ID,
-            metadata.smallImageId(),
-            metadata.previewImageId(),
-            metadata.encryptedData(),
-            metadata.sharedKey()
-        );
+        EncryptedContent metadata = new EncryptedContent(metadataBytes);
+        DocumentId documentId = documentRepository.persist(user, metadata);
+        documentRepository.persist(user, documentId, user.email(), sharedKey);
 
-        // Delete the existing profile document if it exists to allow overwriting
-        documentRepository.deleteDocument(user, PROFILE_ID);
+        EncryptedContent content = new EncryptedContent(contentBytes);
+        documentRepository.persist(user, documentId, CONTENT, content);
 
-        // Persist the new profile document
-        documentRepository.persist(user, PROFILE_ID, user.email(), sharedKey);
-        documentRepository.persist(user, profileMetadata);
-        documentRepository.persist(user, PROFILE_ID, PROFILE_ID, content);
-
-        if (smallImage != null) {
-            documentRepository.persist(user, PROFILE_ID, profileMetadata.smallImageId(), smallImage);
+        if (smallImageBytes != null) {
+            documentRepository.persist(user, documentId, SMALL, new EncryptedContent(smallImageBytes));
         }
 
-        if (previewImage != null) {
-            documentRepository.persist(user, PROFILE_ID, profileMetadata.previewImageId(), previewImage);
+        if (previewImageBytes != null) {
+            documentRepository.persist(user, documentId, PREVIEW, new EncryptedContent(previewImageBytes));
         }
 
         return Response.ok().build();

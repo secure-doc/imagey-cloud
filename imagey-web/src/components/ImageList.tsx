@@ -1,9 +1,9 @@
-import Document from "../document/Document";
+import DocumentMetadata from "../document/DocumentMetadata";
 import ImageComponent from "./ImageComponent";
 
 interface ImageListProps {
-  documents: Document[];
-  onImageClick?: (document: Document) => void;
+  documents: DocumentMetadata[];
+  onImageClick?: (document: DocumentMetadata) => void;
 }
 
 export default function ImageList({ documents, onImageClick }: ImageListProps) {
