@@ -1,11 +1,15 @@
-import { contactRepository } from "../contact/ContactRepository";
-import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
+import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { deviceService } from "../device/DeviceService";
 import { deviceRepository } from "../device/DeviceRepository";
 import { authenticationRepository } from "./AuthenticationRepository";
 import { cryptoService } from "./CryptoService";
 
 import { ResponseError } from "./ResponseError";
+import { contactService } from "../contact/ContactService";
+import { DeviceId, Password, UserId } from "./UserId";
+
+export type Nonce = string;
+export type EncryptedRecoveryKey = string;
 
 export enum RegistrationResult {
   RegistrationStarted,
@@ -16,9 +20,9 @@ export enum RegistrationResult {
 
 export const authenticationService = {
   register: async (
-    email: string,
-    password: string,
-    inviter?: string,
+    email: Email,
+    password: Password,
+    inviter?: UserId,
   ): Promise<JsonWebKeyPairs> => {
     const device = await deviceService.initializeDevice(email, password);
 
@@ -36,14 +40,14 @@ export const authenticationService = {
       device.deviceKeyPair.publicKey,
     );
     if (inviter) {
-      await contactRepository.acceptContactRequest(email, inviter, mainKeyPair);
+      await contactService.acceptContactRequest(email, inviter, mainKeyPair);
     }
     return {
       mainKeyPair,
       deviceKeyPair: device.deviceKeyPair,
     };
   },
-  startAuthentication: async (email: string): Promise<RegistrationResult> => {
+  startAuthentication: async (email: Email): Promise<RegistrationResult> => {
     try {
       const response =
         await authenticationRepository.startAuthentication(email);
@@ -60,9 +64,9 @@ export const authenticationService = {
     }
   },
   requestChallenge: async (
-    email: string,
-    deviceId: string,
-  ): Promise<{ nonce: string; ephemeralPublicKey: JsonWebKey }> => {
+    email: Email,
+    deviceId: DeviceId,
+  ): Promise<{ nonce: Nonce; ephemeralPublicKey: JsonWebKey }> => {
     try {
       return await authenticationRepository.requestChallenge(email, deviceId);
     } catch {
@@ -70,9 +74,9 @@ export const authenticationService = {
     }
   },
   authenticateWithChallenge: async (
-    email: string,
-    deviceId: string,
-    password: string,
+    email: Email,
+    deviceId: DeviceId,
+    password: Password,
     trustedDevice: boolean = false,
   ): Promise<{ privateMainKey: JsonWebKey; privateDeviceKey: JsonWebKey }> => {
     const challenge = await authenticationService.requestChallenge(
@@ -137,8 +141,8 @@ export const authenticationService = {
     return { privateMainKey, privateDeviceKey };
   },
   loadPrivateMainKey: async (
-    email: string,
-    deviceId: string,
+    email: Email,
+    deviceId: DeviceId,
     privateDeviceKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
     const encryptedPrivateMainKey =
@@ -155,9 +159,9 @@ export const authenticationService = {
     return decryptedPrivateMainKey;
   },
   autoLogin: async (
-    email: string,
-    deviceId: string,
-    encryptedRecoveryDeviceKey: string,
+    email: Email,
+    deviceId: DeviceId,
+    encryptedRecoveryDeviceKey: EncryptedRecoveryKey,
   ): Promise<{
     privateMainKey: JsonWebKey;
     privateDeviceKey: JsonWebKey;

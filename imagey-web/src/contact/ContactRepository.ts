@@ -1,31 +1,32 @@
-import { authenticationRepository } from "../authentication/AuthenticationRepository";
-import { cryptoService } from "../authentication/CryptoService";
-import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
-import { Contact } from "./Contact";
+import { UserId } from "../authentication/UserId";
+import { IssuerId } from "../chat/Message";
+import {
+  Email,
+  EncryptedSharedKey,
+  Kid,
+} from "../contexts/AuthenticationContext";
+import { Contact, ContactKeys, SharedKey } from "./Contact";
 import { ContactRequest } from "./ContactRequest";
 
 export const contactRepository = {
   sendContactRequest: async (
-    senderEmail: string,
-    addresseeEmail: string,
+    senderId: UserId,
+    addresseeEmail: Email,
   ): Promise<void> => {
-    const response = await fetch(
-      "/users/" + senderEmail + "/contact-requests",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({ email: addresseeEmail }),
+    const response = await fetch(`/users/${senderId}/contact-requests`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      credentials: "same-origin",
+      body: JSON.stringify({ email: addresseeEmail }),
+    });
     if (!response.ok) {
       throw new Error("Failed to send contact request");
     }
   },
-  getContactRequests: async (userEmail: string): Promise<ContactRequest[]> => {
-    const response = await fetch("/users/" + userEmail + "/contact-requests", {
+  getContactRequests: async (userId: UserId): Promise<ContactRequest[]> => {
+    const response = await fetch(`/users/${userId}/contact-requests`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -35,80 +36,32 @@ export const contactRepository = {
     if (!response.ok) {
       throw new Error("Failed to get contact requests");
     }
-    const emails: string[] = await response.json();
-    return emails.map((email) => ({ email }));
+    const userIds: UserId[] = await response.json();
+    return userIds.map((userId) => ({ userId }));
   },
   acceptContactRequest: async (
-    userEmail: string,
-    contactEmail: string,
-    mainKeyPair: JsonWebKeyPair,
+    userId: UserId,
+    contactId: UserId,
+    contactKeys: ContactKeys,
   ): Promise<void> => {
-    try {
-      const contactPublicKey =
-        await authenticationRepository.loadPublicMainKey(contactEmail);
-      console.log("Loaded public key", contactPublicKey);
-      const sharedKey = await cryptoService.generateSymmetricKey();
-      console.log("Generated shared key", sharedKey);
-
-      const contactEncryptedSharedKey = await cryptoService.encryptKey(
-        sharedKey,
-        contactPublicKey,
-        mainKeyPair.privateKey,
-      );
-      const myEncryptedSharedKey = await cryptoService.encryptKey(
-        sharedKey,
-        mainKeyPair.publicKey,
-        mainKeyPair.privateKey,
-      );
-      console.log(
-        "Encrypted shared keys",
-        contactEncryptedSharedKey,
-        myEncryptedSharedKey,
-      );
-
-      const contactKeys = {
-        userKey: {
-          issuer: userEmail,
-          kid: "0",
-          sharedKey: myEncryptedSharedKey,
-        },
-        contactKey: {
-          issuer: contactEmail,
-          kid: "0",
-          sharedKey: contactEncryptedSharedKey,
-        },
-      };
-
-      const response = await fetch(
-        "/users/" + userEmail + "/contacts/" + contactEmail,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "same-origin",
-          body: JSON.stringify(contactKeys),
-        },
-      );
-      if (!response.ok) {
-        throw new Error("Failed to accept contact request");
-      }
-    } catch (e) {
-      console.error(
-        "Error in acceptContactRequest",
-        typeof e,
-        e,
-        e instanceof Error ? e.stack : "",
-      );
-      throw e;
+    const response = await fetch(`/users/${userId}/contacts/${contactId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(contactKeys),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to accept contact request");
     }
   },
   declineContactRequest: async (
-    userEmail: string,
-    contactEmail: string,
+    userId: UserId,
+    contactId: UserId,
   ): Promise<void> => {
     const response = await fetch(
-      "/users/" + userEmail + "/contact-requests/" + contactEmail,
+      `/users/${userId}/contact-requests/${contactId}`,
       {
         method: "DELETE",
         credentials: "same-origin",
@@ -118,8 +71,8 @@ export const contactRepository = {
       throw new Error("Failed to decline contact request");
     }
   },
-  getContacts: async (userEmail: string): Promise<Contact[]> => {
-    const response = await fetch("/users/" + userEmail + "/contacts", {
+  getContacts: async (userId: UserId): Promise<Contact[]> => {
+    const response = await fetch(`/users/${userId}/contacts`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -129,48 +82,41 @@ export const contactRepository = {
     if (!response.ok) {
       throw new Error("Failed to get contact requests");
     }
-    const emails: string[] = await response.json();
-    return emails.map((email) => ({ email }));
+    const userIds: UserId[] = await response.json();
+    return userIds.map((userId) => ({ userId }));
   },
   getSharedContactKey: async (
-    userEmail: string,
-    contactEmail: string,
-  ): Promise<{ issuer: string; kid: string; sharedKey: string }> => {
-    const response = await fetch(
-      `/users/${userEmail}/contacts/${contactEmail}/key`,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        credentials: "same-origin",
+    userId: UserId,
+    contactId: UserId,
+  ): Promise<{ issuer: IssuerId; kid: Kid; sharedKey: EncryptedSharedKey }> => {
+    const response = await fetch(`/users/${userId}/contacts/${contactId}/key`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
       },
-    );
+      credentials: "same-origin",
+    });
     if (!response.ok) {
       throw new Error("Failed to get shared contact key");
     }
     return response.json();
   },
-
   reissueContactKey: async (
-    userEmail: string,
-    contactEmail: string,
+    userId: UserId,
+    contactId: UserId,
     contactKeys: {
-      userKey: { issuer: string; kid: string; sharedKey: string };
-      contactKey: { issuer: string; kid: string; sharedKey: string };
+      userKey: SharedKey;
+      contactKey: SharedKey;
     },
   ) => {
-    const response = await fetch(
-      `/users/${userEmail}/contacts/${contactEmail}/key`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "same-origin",
-        body: JSON.stringify(contactKeys),
+    const response = await fetch(`/users/${userId}/contacts/${contactId}/key`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      credentials: "same-origin",
+      body: JSON.stringify(contactKeys),
+    });
     if (!response.ok) {
       throw new Error("Failed to reissue contact key");
     }

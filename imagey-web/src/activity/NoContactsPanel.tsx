@@ -6,6 +6,7 @@ import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
 import { getAppName } from "../utils/appName";
 import Panel from "../components/Panel";
+import { UserId } from "../authentication/UserId";
 
 export default function NoContactsPanel({ className }: { className?: string }) {
   const { t } = useTranslation();
@@ -13,10 +14,10 @@ export default function NoContactsPanel({ className }: { className?: string }) {
   const user = authentication.user;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const handleContactRequest = async (email: string) => {
+  const handleContactRequest = async (userId: UserId) => {
     if (user) {
       try {
-        await contactRepository.sendContactRequest(user, email);
+        await contactRepository.sendContactRequest(user, userId);
         setIsDialogOpen(false);
       } catch (error) {
         console.error("Failed to send contact request", error);
