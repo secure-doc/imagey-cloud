@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import Document from "../document/Document";
+import DocumentMetadata from "../document/DocumentMetadata";
 
 export default function UploadButton({
   className,
@@ -12,7 +12,7 @@ export default function UploadButton({
 }: {
   className?: string;
   multiple?: boolean;
-  onUploadComplete?: (document: Document) => void;
+  onUploadComplete?: (document: DocumentMetadata) => void;
   children?: React.ReactNode;
   "aria-label"?: string;
 }) {
@@ -36,14 +36,8 @@ export default function UploadButton({
           publicMainKey,
           privateMainKey,
         );
-        const document = await documentService.loadDocument(
-          user,
-          metadata,
-          publicMainKey,
-          privateMainKey,
-        );
         if (onUploadComplete) {
-          onUploadComplete(document);
+          onUploadComplete(metadata);
         }
       }
     }

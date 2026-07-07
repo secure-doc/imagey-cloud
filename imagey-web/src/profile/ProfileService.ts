@@ -1,7 +1,7 @@
 import { cryptoService } from "../authentication/CryptoService";
-import DocumentMetadata from "../document/DocumentMetadata";
 import { Profile } from "./Profile";
 import { documentService } from "../document/DocumentService";
+import EncryptedDocumentMetadata from "../document/EncryptedDocumentMetadata";
 
 export const profileService = {
   saveProfile: async (
@@ -27,15 +27,6 @@ export const profileService = {
       payloadBuffer,
     ]);
 
-    // Metadata for the profile document
-    const metadata: DocumentMetadata = {
-      name: "profile.json",
-      type: "application/json",
-      size: profileBlob.size,
-      documentId: "profile",
-      encryptedData: cryptoService.arrayBufferToBase64(encryptedPayload[0]),
-    };
-
     // Encrypt the content
     const buffers: ArrayBuffer[] = [await profileBlob.arrayBuffer()];
     const encryptedDocuments = await cryptoService.encryptDocument(
@@ -43,11 +34,10 @@ export const profileService = {
       buffers,
     );
 
-    // 3. Upload using the new PUT endpoint
     const formData = new FormData();
     formData.append(
       "metadata",
-      new Blob([JSON.stringify(metadata)], { type: "application/json" }),
+      new Blob([encryptedPayload[0]], { type: "application/octet-stream" }),
     );
     formData.append(
       "sharedKey",
@@ -99,12 +89,20 @@ export const profileService = {
         throw new Error("Http Error " + response.status);
       }
 
-      const metadata: DocumentMetadata = await response.json();
-      const doc = await documentService.loadDocument(
+      const metadata: EncryptedDocumentMetadata = await response.json();
+      const docMetadata = await documentService.loadDocument(
         user,
         metadata,
         publicKey,
         privateKey,
+      );
+
+      const doc = await documentService.loadDocumentContent(
+        user,
+        docMetadata,
+        publicKey,
+        privateKey,
+        metadata.sharedKey,
       );
 
       const contentText = new TextDecoder().decode(doc.content);

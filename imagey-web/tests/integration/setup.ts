@@ -1,5 +1,9 @@
 import { expect, Page } from "@playwright/test";
-import { PactV4, MatchersV2 as Matchers } from "@pact-foundation/pact";
+import {
+  PactV4,
+  MatchersV3,
+  MatchersV2 as Matchers,
+} from "@pact-foundation/pact";
 import * as fs from "fs";
 import * as path from "path";
 import { TestData, TestDataStructure, TestUser } from "./testdata";
@@ -82,6 +86,8 @@ export async function loginAsBill(page: Page) {
 
 export let runningPactRequests = 0;
 export let expectedUploadDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
+export let expectedUploadSmallImageId: string | undefined = undefined;
+export let expectedUploadPreviewImageId: string | undefined = undefined;
 
 function createMultipartPayload(documentId: string): Buffer {
   const boundary = "----WebKitFormBoundary";
@@ -104,7 +110,7 @@ function createMultipartPayload(documentId: string): Buffer {
     ),
   );
 
-  return Buffer.concat([
+  const buffers = [
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="metadata"; filename="meta-data"\r\nContent-Type: application/json\r\n\r\n`,
     ),
@@ -120,11 +126,44 @@ function createMultipartPayload(documentId: string): Buffer {
       }),
     ),
     Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="${documentId}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="blob"\r\nContent-Type: application/octet-stream\r\n\r\n`,
     ),
     content,
-    Buffer.from(`\r\n--${boundary}--\r\n`),
-  ]);
+  ];
+
+  if (expectedUploadSmallImageId) {
+    const smallImage = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        `tests/images/encrypted/${documentId}/files/${expectedUploadSmallImageId}`,
+      ),
+    );
+    buffers.push(
+      Buffer.from(
+        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="smallImage"; filename="blob"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      ),
+      smallImage,
+    );
+  }
+
+  if (expectedUploadPreviewImageId) {
+    const previewImage = fs.readFileSync(
+      path.resolve(
+        process.cwd(),
+        `tests/images/encrypted/${documentId}/files/${expectedUploadPreviewImageId}`,
+      ),
+    );
+    buffers.push(
+      Buffer.from(
+        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="previewImage"; filename="blob"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      ),
+      previewImage,
+    );
+  }
+
+  buffers.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  return Buffer.concat(buffers);
 }
 
 export async function setupMockServer(page: Page, mockServer: MockServer) {
@@ -352,9 +391,7 @@ export async function prepareMarysDocuments() {
       r.jsonBody([
         {
           documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-          smallImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
-          previewImageId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-          encryptedData:
+          metadata:
             "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
           sharedKey: {
             issuer: "mary@imagey.cloud",
@@ -372,9 +409,7 @@ export async function prepareMarysDocuments() {
         },
         {
           documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-          smallImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
-          previewImageId: "f232a44d-6396-42bb-9196-f0013d46ded5",
-          encryptedData:
+          metadata:
             "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
           sharedKey: {
             issuer: "mary@imagey.cloud",
@@ -392,7 +427,7 @@ export async function prepareMarysDocuments() {
         },
         {
           documentId: "profile",
-          encryptedData:
+          metadata:
             "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
           sharedKey: {
             issuer: "mary@imagey.cloud",
@@ -403,7 +438,7 @@ export async function prepareMarysDocuments() {
         },
         {
           documentId: "profile-pic-doc-id",
-          encryptedData:
+          metadata:
             "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
           sharedKey: {
             issuer: "mary@imagey.cloud",
@@ -435,7 +470,7 @@ export async function prepareMarysDocuments() {
       ),
     );
 
-  return provider
+  provider
     .addInteraction()
     .uponReceiving(
       "a request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
@@ -453,6 +488,58 @@ export async function prepareMarysDocuments() {
         "application/octet-stream",
         "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
       ),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get key of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+    )
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: fs
+          .readFileSync(
+            path.resolve(
+              process.cwd(),
+              "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key",
+            ),
+            "utf8",
+          )
+          .trim(),
+      }),
+    );
+
+  return provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get key of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+    )
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/mary@imagey.cloud",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: fs
+          .readFileSync(
+            path.resolve(
+              process.cwd(),
+              "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/mary@imagey.cloud/encrypted-shared.key",
+            ),
+            "utf8",
+          )
+          .trim(),
+      }),
     );
 }
 
@@ -503,12 +590,15 @@ export async function prepareDocumentUpload(
     documentId === TestData.mary.documents[0].documentId
       ? "9e4742c8-b3b8-44b9-ab83-8e4912271dee"
       : "2211b759-744c-40f3-aec2-10c8d549a49e";
-  /*
-const smallImageId =
-documentId === TestData.mary.documents[0].documentId
-  ? "d09630e2-437e-40ff-8da1-753a0e05caad"
-  : "01e9b15b-655c-4baf-8fd3-78c23df70a67";
-  */
+
+  const smallImageId =
+    documentId === TestData.mary.documents[0].documentId
+      ? "d09630e2-437e-40ff-8da1-753a0e05caad"
+      : "01e9b15b-655c-4baf-8fd3-78c23df70a67";
+
+  expectedUploadSmallImageId = smallImageId;
+  expectedUploadPreviewImageId = previewImageId;
+
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
@@ -534,7 +624,14 @@ documentId === TestData.mary.documents[0].documentId
         createMultipartPayload(documentId),
       );
     })
-    .willRespondWith(200);
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          `/users/mary@imagey.cloud/documents/${documentId}`,
+        ),
+        "Access-Control-Expose-Headers": "Location",
+      }),
+    );
   provider
     .addInteraction()
     .given("Mary has uploaded document")

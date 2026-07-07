@@ -44,6 +44,8 @@ RUN apt-get update && apt-get install -y unzip && rm -rf /var/lib/apt/lists/*
 # Copy the zip from Stage 2
 COPY --from=backend-builder /app/imagey-server/target/imagey-server-meecrowave-distribution.zip .
 
+COPY imagey-server/src/test/resources/data /app/data
+
 # Unzip and cleanup
 RUN unzip imagey-server-meecrowave-distribution.zip && \
     rm imagey-server-meecrowave-distribution.zip && \

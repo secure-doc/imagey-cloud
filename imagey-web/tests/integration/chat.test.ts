@@ -1,6 +1,7 @@
 import { MatchersV3 } from "@pact-foundation/pact";
 import * as fs from "fs";
 import * as path from "path";
+
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
@@ -116,7 +117,17 @@ test("view chat and send message", async ({ page }) => {
     // Send a message
     const input = page.getByLabel("Type a message");
     await input.fill("Hi Laura, nice to chat!");
+
+    const postResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(
+            "/users/mary@imagey.cloud/contacts/laura@imagey.cloud/messages",
+          ) && response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "send" }).click();
+    await postResponse;
 
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -376,30 +387,6 @@ test("share a document in chat", async ({ page }) => {
 
   const documentId = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3";
 
-  // Interaction to load the shared key for Mary
-  provider
-    .addInteraction()
-    .uponReceiving("a request to load shared key for sharing")
-    .withRequest(
-      "GET",
-      `/users/mary@imagey.cloud/documents/${documentId}/keys/mary@imagey.cloud`,
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: fs
-          .readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "utf8",
-          )
-          .trim(),
-      }),
-    );
-
   // Interaction to store the shared key
   provider
     .addInteraction()
@@ -426,10 +413,21 @@ test("share a document in chat", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.jsonBody({
         documentId: documentId,
-        smallImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
-        previewImageId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-        encryptedData:
+        metadata:
           "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
+        sharedKey: {
+          issuer: "mary@imagey.cloud",
+          kid: "0",
+          sharedKey: fs
+            .readFileSync(
+              path.resolve(
+                process.cwd(),
+                `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/mary@imagey.cloud/encrypted-shared.key`,
+              ),
+              "utf8",
+            )
+            .trim(),
+        },
       }),
     );
 
@@ -467,24 +465,26 @@ test("share a document in chat", async ({ page }) => {
     // Expect the dialog to show
     await expect(page.getByText("Share Document")).toBeVisible();
 
-    const messageRequest = page.waitForRequest(
-      (request) =>
-        request
+    const messageResponse = page.waitForResponse(
+      (response) =>
+        response
           .url()
           .includes(
             "/users/mary@imagey.cloud/contacts/laura@imagey.cloud/messages",
-          ) && request.method() === "POST",
+          ) && response.request().method() === "POST",
     );
 
     // Click on the first image to share it
     await page.locator("dialog img").first().click();
 
     // Verify it sent
-    await messageRequest;
+    await messageResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
 
-    // It will try to render the image but fail since meta-data 404s.
-    // The SharedDocumentMessage will return the dummy document, which displays within the container.
+    // Wait for the image to render to ensure all network requests complete and mocks are consumed.
+    await expect(page.locator(".shared-document img")).toBeVisible({
+      timeout: 5000,
+    });
     await expect(page.locator(".shared-document")).toBeVisible();
   });
 });
@@ -536,6 +536,7 @@ test("view shared document from another user", async ({ page }) => {
     .withRequest(
       "GET",
       `/users/mary@imagey.cloud/documents/${documentId}/keys/alice@imagey.cloud`,
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
@@ -555,10 +556,14 @@ test("view shared document from another user", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.jsonBody({
         documentId: documentId,
-        smallImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
-        previewImageId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-        encryptedData:
+        metadata:
           "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
+        sharedKey: {
+          issuer: "mary@imagey.cloud",
+          kid: "0",
+          sharedKey:
+            "lezn+6YMgHCKigQhu4DcXQMJiyF9zRVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8",
+        },
       }),
     );
 

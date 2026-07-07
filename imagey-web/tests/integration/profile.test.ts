@@ -30,7 +30,14 @@ export async function prepareProfileUpload() {
         ),
       });
     })
-    .willRespondWith(200);
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/mary@imagey.cloud/documents/profile-pic-doc-id",
+        ),
+        "Access-Control-Expose-Headers": "Location",
+      }),
+    );
 
   provider
     .addInteraction()
@@ -165,10 +172,10 @@ test("load existing profile with picture", async ({ page }) => {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get her profile picture key")
+    .uponReceiving("a request of mary to get her profile picture metadata")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/keys/mary@imagey.cloud",
+      "/users/mary@imagey.cloud/documents/profile-pic-doc-id",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -176,14 +183,19 @@ test("load existing profile with picture", async ({ page }) => {
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: fs
-          .readFileSync(
-            "./tests/images/encrypted/profile-pic-doc-id/keys/mary@imagey.cloud/encrypted-shared.key",
-            "utf8",
-          )
-          .trim(),
+        documentId: "profile-pic-doc-id",
+        metadata:
+          "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
+        sharedKey: {
+          issuer: "mary@imagey.cloud",
+          kid: "0",
+          sharedKey: fs
+            .readFileSync(
+              "./tests/images/encrypted/profile-pic-doc-id/keys/mary@imagey.cloud/encrypted-shared.key",
+              "utf8",
+            )
+            .trim(),
+        },
       }),
     );
 
@@ -246,13 +258,13 @@ test("load existing profile with picture", async ({ page }) => {
     });
 
     await page.route(
-      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/keys/mary*imagey.cloud",
+      "**/users/mary*imagey.cloud/documents/profile/files/profile",
       async (route) => {
         if (route.request().method() === "GET") {
           const response = await route.fetch({
             url:
               mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/keys/mary@imagey.cloud",
+              "/users/mary@imagey.cloud/documents/profile/files/profile",
             headers: route.request().headers(),
           });
           await route.fulfill({ response });
@@ -263,13 +275,13 @@ test("load existing profile with picture", async ({ page }) => {
     );
 
     await page.route(
-      "**/users/mary*imagey.cloud/documents/profile/files/profile",
+      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id",
       async (route) => {
         if (route.request().method() === "GET") {
           const response = await route.fetch({
             url:
               mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile/files/profile",
+              "/users/mary@imagey.cloud/documents/profile-pic-doc-id",
             headers: route.request().headers(),
           });
           await route.fulfill({ response });

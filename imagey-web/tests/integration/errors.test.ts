@@ -976,7 +976,7 @@ test("profile picture load error", async ({ page }) => {
 
   // Mock failure for the profile picture
   await page.route(
-    "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/keys/mary*imagey.cloud",
+    "**/users/mary*imagey.cloud/documents/profile-pic-doc-id",
     async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({

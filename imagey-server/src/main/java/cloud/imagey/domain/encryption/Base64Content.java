@@ -14,15 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.document;
+package cloud.imagey.domain.encryption;
 
-import jakarta.json.bind.annotation.JsonbProperty;
+public record Base64Content(String content) {
 
-import cloud.imagey.domain.encryption.Base64Content;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
-
-public record DocumentMetadata(
-    @JsonbProperty("documentId") DocumentId documentId,
-    @JsonbProperty("metadata") Base64Content metadata,
-    @JsonbProperty("sharedKey") EncryptedSharedKey sharedKey) {
 }

@@ -19,17 +19,16 @@ package cloud.imagey.application.authentication;
 import static cloud.imagey.application.authentication.DefaultSecurityContext.forPrincipal;
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_SENT;
-import static java.util.Optional.empty;
-import static java.util.Optional.of;
-import static java.util.Optional.ofNullable;
 import static jakarta.ws.rs.Priorities.AUTHENTICATION;
+import static java.util.Optional.ofNullable;
 
 import java.io.IOException;
 import java.security.Principal;
 import java.util.EnumSet;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -78,19 +77,24 @@ public class RolesFilter implements ContainerRequestFilter {
     }
 
     private User extractUser(UriInfo uriInfo) {
-        List<PathSegment> segments = uriInfo.getPathSegments();
-        if (segments.isEmpty()) {
-            return null;
-        }
-        return new User(new Email(segments.get(0).getPath()));
+        return uriInfo.getPathSegments()
+            .stream()
+            .findFirst()
+            .map(PathSegment::getPath)
+            .map(Email::new)
+            .map(User::new)
+            .orElse(null);
     }
 
     private Optional<DocumentId> extractDocumentId(UriInfo uriInfo) {
-        List<PathSegment> segments = uriInfo.getPathSegments();
-        if (segments.size() > 2 && segments.get(1).getPath().equals("documents")) {
-            return of(new DocumentId(segments.get(2).getPath()));
-        }
-        return empty();
+        Stream<PathSegment> documentPath = uriInfo.getPathSegments().stream().skip(1);
+        return ofNullable(documentPath.iterator())
+            .filter(Iterator::hasNext)
+            .filter(i -> i.next().getPath().equals("documents"))
+            .filter(Iterator::hasNext)
+            .map(Iterator::next)
+            .map(PathSegment::getPath)
+            .map(DocumentId::new);
     }
 
     private void setupPrincipal(ContainerRequestContext requestContext, Optional<DecodedToken> decodedToken) {

@@ -16,9 +16,15 @@
  */
 package cloud.imagey.infrastructure;
 
+import java.io.IOException;
+
 public class IoProblemException extends RuntimeException {
 
     public IoProblemException(String reason) {
         super(reason);
+    }
+
+    public IoProblemException(IOException cause) {
+        super(cause);
     }
 }

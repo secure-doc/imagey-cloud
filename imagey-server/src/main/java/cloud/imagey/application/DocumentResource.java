@@ -16,11 +16,15 @@
  */
 package cloud.imagey.application;
 
+import static cloud.imagey.domain.document.DocumentId.CONTENT;
+import static cloud.imagey.domain.document.DocumentId.PREVIEW;
+import static cloud.imagey.domain.document.DocumentId.SMALL;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.List;
 
 import jakarta.annotation.security.RolesAllowed;
@@ -37,15 +41,16 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.UriInfo;
 
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.document.DocumentContent;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
@@ -82,44 +87,30 @@ public class DocumentResource {
         Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
         return documentRepository.findMetadata(user, documentId, callerEmail);
     }
-
+/*
     @PUT
     @RolesAllowed("owner")
     @Path("{documentId}")
-    @Consumes(APPLICATION_JSON)
-    public Response storeDocumentMetadata(
+    @Consumes(APPLICATION_OCTET_STREAM)
+    public Response storeEncryptedDocumentMetadata(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
-        DocumentMetadata metadata) throws IOException {
+        EncryptedContent metadata) throws IOException {
 
-        documentRepository.persist(user, metadata);
+        documentRepository.persist(user, documentId, metadata);
         return Response.ok().build();
     }
-
+*/
     @GET
     @RolesAllowed({"owner", "recipient"})
     @Path("{documentId}/files/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
-    public DocumentContent getDocumentContent(
+    public EncryptedContent getDocumentContent(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("contentId") DocumentId contentId) throws IOException {
 
         return documentRepository.loadContent(user, documentId, contentId).orElseThrow(NotFoundException::new);
-    }
-
-    @PUT
-    @RolesAllowed("owner")
-    @Path("{documentId}/files/{contentId}")
-    @Consumes(APPLICATION_OCTET_STREAM)
-    public Response storeDocumentContent(
-        @PathParam("email") User user,
-        @PathParam("documentId") DocumentId documentId,
-        @PathParam("contentId") DocumentId contentId,
-        DocumentContent content) throws IOException {
-
-        documentRepository.persist(user, documentId, contentId, content);
-        return Response.ok().build();
     }
 
     @GET
@@ -162,26 +153,31 @@ public class DocumentResource {
     @RolesAllowed("owner")
     @Consumes(MULTIPART_FORM_DATA)
     public Response uploadDocument(
+        @Context UriInfo uriInfo,
         @PathParam("email") User user,
-        @Multipart("metadata") DocumentMetadata metadata,
+        @Multipart("metadata") byte[] metadataBytes,
         @Multipart("sharedKey") EncryptedSharedKey sharedKey,
-        @Multipart("content") DocumentContent content,
-        @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
-        @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
+        @Multipart("content") byte[] contentBytes,
+        @Multipart(value = "smallImage", required = false) byte[] smallImageBytes,
+        @Multipart(value = "previewImage", required = false) byte[] previewImageBytes)
             throws IOException {
 
-        documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
-        documentRepository.persist(user, metadata);
-        documentRepository.persist(user, metadata.documentId(), metadata.documentId(), content);
+        EncryptedContent metadata = new EncryptedContent(metadataBytes);
+        DocumentId documentId = documentRepository.persist(user, metadata);
+        documentRepository.persist(user, documentId, user.email(), sharedKey);
 
-        if (smallImage != null) {
-            documentRepository.persist(user, metadata.documentId(), metadata.smallImageId(), smallImage);
+        EncryptedContent content = new EncryptedContent(contentBytes);
+        documentRepository.persist(user, documentId, CONTENT, content);
+
+        if (smallImageBytes != null) {
+            documentRepository.persist(user, documentId, SMALL, new EncryptedContent(smallImageBytes));
         }
 
-        if (previewImage != null) {
-            documentRepository.persist(user, metadata.documentId(), metadata.previewImageId(), previewImage);
+        if (previewImageBytes != null) {
+            documentRepository.persist(user, documentId, PREVIEW, new EncryptedContent(previewImageBytes));
         }
 
-        return Response.ok().build();
+        URI location = uriInfo.getAbsolutePathBuilder().path(documentId.id()).build();
+        return Response.created(location).build();
     }
 }

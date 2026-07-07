@@ -1,22 +1,21 @@
-import DocumentMetadata from "./DocumentMetadata";
+import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
 
 const cache: Map<string, ArrayBuffer> = new Map();
 
 export const documentRepository = {
   uploadDocument: async (
     email: string,
-    metadata: DocumentMetadata,
+    metadata: ArrayBuffer,
     sharedKey: { issuer: string; kid: string; sharedKey: string },
     content: ArrayBuffer[],
-  ) => {
+  ): Promise<string> => {
     if (content.length === 0) {
       throw new Error("content must be provided");
     }
     const formData = new FormData();
     formData.append(
       "metadata",
-      new Blob([JSON.stringify(metadata)], { type: "application/json" }),
-      "metadata.json",
+      new Blob([metadata], { type: "application/octet-stream" }),
     );
     formData.append(
       "sharedKey",
@@ -27,13 +26,13 @@ export const documentRepository = {
       "content",
       new Blob([content[0]], { type: "application/octet-stream" }),
     );
-    if (content.length > 1 && metadata.smallImageId) {
+    if (content.length > 1) {
       formData.append(
         "smallImage",
         new Blob([content[1]], { type: "application/octet-stream" }),
       );
     }
-    if (content.length > 2 && metadata.previewImageId) {
+    if (content.length > 2) {
       formData.append(
         "previewImage",
         new Blob([content[2]], { type: "application/octet-stream" }),
@@ -45,13 +44,17 @@ export const documentRepository = {
       credentials: "same-origin",
       body: formData,
     });
-    return resolve(response, () => Promise.resolve());
+    return resolve(response, () => {
+      const location = response.headers.get("Location");
+      if (!location) throw new Error("No location header");
+      return Promise.resolve(location.substring(location.lastIndexOf("/") + 1));
+    });
   },
 
   loadDocumentMetadata: async (
     email: string,
     documentId: string,
-  ): Promise<DocumentMetadata> => {
+  ): Promise<EncryptedDocumentMetadata> => {
     const response = await fetch(`/users/${email}/documents/${documentId}`, {
       method: "GET",
       headers: {
@@ -62,7 +65,9 @@ export const documentRepository = {
     return resolve(response, () => response.json());
   },
 
-  loadDocuments: async (email: string): Promise<DocumentMetadata[]> => {
+  loadDocuments: async (
+    email: string,
+  ): Promise<EncryptedDocumentMetadata[]> => {
     const response = await fetch("/users/" + email + "/documents", {
       method: "GET",
       headers: {

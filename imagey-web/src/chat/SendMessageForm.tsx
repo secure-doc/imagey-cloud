@@ -5,7 +5,7 @@ import { messageService } from "./MessageService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
 
-import Document from "../document/Document";
+import DocumentMetadata from "../document/DocumentMetadata";
 import ImageList from "../components/ImageList";
 
 interface SendMessageFormProps {
@@ -28,7 +28,7 @@ export function SendMessageForm({
 
   const [inputMessage, setInputMessage] = useState("");
   const [showDialog, setShowDialog] = useState(false);
-  const [documents, setDocuments] = useState<Document[] | undefined>();
+  const [documents, setDocuments] = useState<DocumentMetadata[] | undefined>();
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export function SendMessageForm({
     }
   };
 
-  const handleShareDocument = async (document: Document) => {
+  const handleShareDocument = async (document: DocumentMetadata) => {
     setShowDialog(false);
     if (!publicKey || !privateKey) return;
     try {

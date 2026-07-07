@@ -365,6 +365,7 @@ public class ContractTest {
 
     @State("Mary has shared a document with alice")
     void aRequestToLoadSharedKeyAsRecipient() throws IOException, URISyntaxException {
+        user = new User(new Email("alice@imagey.cloud"));
         maryHasUploadedDocument(); // ensures bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3 exists
         File sharedKeyDir = new File(getMarysDocuments(), "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/alice@imagey.cloud");
         sharedKeyDir.mkdirs();
