@@ -73,6 +73,25 @@ export const documentRepository = {
     return resolve(response, () => response.json());
   },
 
+  storeEncryptedMetadata: async (
+    email: string,
+    documentId: string,
+    metadata: ArrayBuffer,
+  ): Promise<DocumentMetadata[]> => {
+    const response = await fetch(
+      "/users/" + email + "/documents/" + documentId + "/metadata.enc",
+      {
+        method: "PUT",
+        headers: {
+          Accept: "application/octet-stream",
+        },
+        credentials: "same-origin",
+        body: metadata,
+      },
+    );
+    return resolve(response, () => response.json());
+  },
+
   loadKey: async (
     email: string,
     documentId: string,

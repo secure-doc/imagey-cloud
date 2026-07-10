@@ -135,7 +135,35 @@ export const documentService = {
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<Document[]> => {
+    console.log("load documents");
     const metadata = await documentRepository.loadDocuments(user);
+    metadata.forEach(async (m) => {
+      console.log("encrypt metadata");
+      const decryptedDocumentKey = await cryptoService.decryptKey(
+        m.sharedKey?.sharedKey || "",
+        publicKey,
+        privateKey,
+      );
+      const encryptedDocument = await cryptoService.encryptDocument(
+        decryptedDocumentKey,
+        [
+          new TextEncoder().encode(
+            JSON.stringify({
+              name: m.name,
+              type: m.type,
+              size: m.size,
+              smallImageId: m.smallImageId,
+              previewImageId: m.previewImageId,
+            }),
+          ).buffer as ArrayBuffer,
+        ],
+      );
+      await documentRepository.storeEncryptedMetadata(
+        user,
+        m.documentId,
+        encryptedDocument[0],
+      );
+    });
     const validMetadata = metadata.filter(
       (meta) =>
         meta.documentId !== "profile" &&

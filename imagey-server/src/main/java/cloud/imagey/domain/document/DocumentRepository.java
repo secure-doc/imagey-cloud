@@ -83,6 +83,14 @@ public class DocumentRepository extends AbstractFileRepository {
         writeByteArrayToFile(contentFile, content.content());
     }
 
+    public void persist(User user, DocumentId documentId, byte[] metadata) throws IOException {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        File contentFile = new File(documentFolder, "metadata.enc");
+        writeByteArrayToFile(contentFile, metadata);
+    }
+
     public Optional<DocumentContent> loadContent(User user, DocumentId documentId, DocumentId contentId) throws IOException {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
@@ -157,7 +165,7 @@ public class DocumentRepository extends AbstractFileRepository {
         return sharedKey.exists();
     }
 
-    private File getUserHome(User user) {
+    public File getUserHome(User user) {
         return new File(rootPath, user.email().address());
     }
 

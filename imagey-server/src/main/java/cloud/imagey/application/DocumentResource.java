@@ -149,6 +149,19 @@ public class DocumentResource {
         return Response.ok().build();
     }
 
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{documentId}/metadata.enc")
+    @Consumes(APPLICATION_OCTET_STREAM)
+    public Response storeEncryptedMetadata(
+        @PathParam("email") User user,
+        @PathParam("documentId") DocumentId documentId,
+        byte[] metadata) throws IOException {
+
+        documentRepository.persist(user, documentId, metadata);
+        return Response.ok().build();
+    }
+
     /**
      * Uploads a document via multipart form data containing metadata, shared key,
      * and multiple content streams.
