@@ -1,5 +1,6 @@
 import PasswordDialog from "./PasswordDialog";
 import { authenticationService } from "./AuthenticationService";
+import { deviceRepository } from "../device/DeviceRepository";
 import { useTranslation } from "react-i18next";
 import { JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 
@@ -18,12 +19,31 @@ export default function RegistrationDialog({
   return (
     <PasswordDialog<string>
       message={t("Select a password for this device")}
+      email={email}
       requireConfirmation
+      showKeepLoggedIn
       validatePassword={(password) => Promise.resolve(password)}
-      onPasswordValid={(password) => {
+      onPasswordValid={(password, keepLoggedIn) => {
         authenticationService
           .register(email, password, inviter)
-          .then((keyPairs) => onKeysDecrypted(keyPairs));
+          .then(async (keyPairs) => {
+            if (keepLoggedIn) {
+              const deviceId = deviceRepository.loadDeviceId(email);
+              if (deviceId) {
+                try {
+                  await authenticationService.authenticateWithChallenge(
+                    email,
+                    deviceId,
+                    password,
+                    true,
+                  );
+                } catch (e) {
+                  console.warn("Failed to extend token to 30 days", e);
+                }
+              }
+            }
+            onKeysDecrypted(keyPairs);
+          });
       }}
     />
   );

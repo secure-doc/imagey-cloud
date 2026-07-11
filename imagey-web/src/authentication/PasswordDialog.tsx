@@ -21,7 +21,13 @@ export default function PasswordDialog<R>({
   onPasswordValid,
 }: PasswordDialogProperties<R>) {
   const { t } = useTranslation();
-  const [keepLoggedIn, setKeepLoggedIn] = useState(false);
+  const [keepLoggedIn, setKeepLoggedInState] = useState(
+    localStorage.getItem("trustedDevice") === "true",
+  );
+  const setKeepLoggedIn = (value: boolean) => {
+    localStorage.setItem("trustedDevice", String(value));
+    setKeepLoggedInState(value);
+  };
   const [passwordError, setPasswordError] = useState(false);
   const [passwordsDoNotMatch, setPasswordsDoNotMatch] = useState(false);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {

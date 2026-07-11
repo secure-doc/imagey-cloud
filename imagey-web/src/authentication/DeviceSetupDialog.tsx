@@ -33,22 +33,43 @@ export default function DeviceSetupDialog({
     <PasswordDialog<{
       privateMainKey: JsonWebKey;
       privateDeviceKey: JsonWebKey;
+      password: string;
     }>
       message={t("Unlock this device")}
       email={email}
       onWrongUser={onWrongUser}
+      showKeepLoggedIn
       validatePassword={(password) =>
         deviceService
           .unlockLocalDeviceKey(deviceId, password)
           .then((privateDeviceKey) =>
             authenticationService
               .loadPrivateMainKey(email, deviceId, privateDeviceKey)
-              .then((privateMainKey) => ({ privateMainKey, privateDeviceKey })),
+              .then((privateMainKey) => ({
+                privateMainKey,
+                privateDeviceKey,
+                password,
+              })),
           )
       }
-      onPasswordValid={({ privateMainKey, privateDeviceKey }) =>
-        onPrivateKeysDecrypted(privateMainKey, privateDeviceKey)
-      }
+      onPasswordValid={async (
+        { privateMainKey, privateDeviceKey, password },
+        keepLoggedIn,
+      ) => {
+        if (keepLoggedIn) {
+          try {
+            await authenticationService.authenticateWithChallenge(
+              email,
+              deviceId,
+              password,
+              true,
+            );
+          } catch (e) {
+            console.warn("Failed to extend token to 30 days", e);
+          }
+        }
+        onPrivateKeysDecrypted(privateMainKey, privateDeviceKey);
+      }}
     />
   );
 }

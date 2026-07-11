@@ -108,28 +108,11 @@ export const authenticationService = {
     }
 
     if (trustedDevice) {
-      const recoveryKeyArray = new Uint8Array(32);
-      crypto.getRandomValues(recoveryKeyArray);
-      const recoveryKey = Array.from(recoveryKeyArray)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
-      const encryptedRecoveryDeviceKey =
-        await cryptoService.encryptPrivatePasswordKey(
-          privateDeviceKey,
-          recoveryKey,
-        );
-      deviceRepository.storeRecoveryKey(deviceId, encryptedRecoveryDeviceKey);
-
-      try {
-        await authenticationRepository.storeRecoveryKey(
-          email,
-          deviceId,
-          recoveryKey,
-        );
-      } catch {
-        console.warn("Failed to store recovery key on server");
-      }
+      await authenticationService.enableAutoLogin(
+        email,
+        deviceId,
+        privateDeviceKey,
+      );
     }
 
     const privateMainKey = await authenticationService.loadPrivateMainKey(
@@ -157,6 +140,34 @@ export const authenticationService = {
       privateDeviceKey,
     );
     return decryptedPrivateMainKey;
+  },
+  enableAutoLogin: async (
+    email: Email,
+    deviceId: DeviceId,
+    privateDeviceKey: JsonWebKey,
+  ) => {
+    const recoveryKeyArray = new Uint8Array(32);
+    crypto.getRandomValues(recoveryKeyArray);
+    const recoveryKey = Array.from(recoveryKeyArray)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const encryptedRecoveryDeviceKey =
+      await cryptoService.encryptPrivatePasswordKey(
+        privateDeviceKey,
+        recoveryKey,
+      );
+    deviceRepository.storeRecoveryKey(deviceId, encryptedRecoveryDeviceKey);
+
+    try {
+      await authenticationRepository.storeRecoveryKey(
+        email,
+        deviceId,
+        recoveryKey,
+      );
+    } catch {
+      console.warn("Failed to store recovery key on server");
+    }
   },
   autoLogin: async (
     email: Email,
