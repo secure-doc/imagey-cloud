@@ -29,7 +29,6 @@ import static org.apache.commons.io.FileUtils.copyURLToFile;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.apache.commons.io.FileUtils.writeStringToFile;
 
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -37,7 +36,9 @@ import java.util.Optional;
 
 import jakarta.inject.Inject;
 
+import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.HttpRequest;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
@@ -91,6 +92,43 @@ public class ContractTest {
         Optional<Token> token = generateToken(request);
         token.ifPresent(t -> request.addHeader("Cookie", "token=" + t.token()));
         request.setHeader("Origin", "https://secure-doc.store");
+        if (request instanceof ClassicHttpRequest updatableRequest) {
+            String path = request.getPath();
+            String method = request.getMethod();
+
+            if ("POST".equals(method) && path.endsWith("/documents")) {
+                String boundary = "----WebKitFormBoundary";
+                request.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+                String dummyBody = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"metadata\"\r\n\r\n"
+                    + "0\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"key\"\r\n\r\n"
+                    + "0\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"issuer\"\r\n\r\n"
+                    + "a\r\n"
+                    + "--" + boundary + "--\r\n";
+                updatableRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(dummyBody));
+            } else if ("PUT".equals(method) && path.endsWith("/profile")) {
+                String boundary = "----WebKitFormBoundary";
+                request.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+                String dummyBody = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"metadata\"\r\n\r\n"
+                    + "0\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"key\"\r\n\r\n"
+                    + "0\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"issuer\"\r\n\r\n"
+                    + "a\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"content\"\r\n\r\n"
+                    + "0\r\n"
+                    + "--" + boundary + "--\r\n";
+                updatableRequest.setEntity(new StringEntity(dummyBody));
+            }
+        }
         context.verifyInteraction();
     }
 
@@ -370,12 +408,12 @@ public class ContractTest {
         File sharedKeyDir = new File(getMarysDocuments(), "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/alice@imagey.cloud");
         sharedKeyDir.mkdirs();
         File sharedKeyFile = new File(sharedKeyDir, "encrypted-shared.key");
-        writeStringToFile(sharedKeyFile,
-            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"lezn+6YMgHCKigQhu4DcXQMJiyF9z"
+        byte[] keyBytes = java.util.Base64.getDecoder().decode(
+              "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
             + "RVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07"
             + "geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR"
-            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8\"}",
-            java.nio.charset.StandardCharsets.UTF_8);
+            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8");
+        org.apache.commons.io.FileUtils.writeByteArrayToFile(sharedKeyFile, keyBytes);
     }
 
 

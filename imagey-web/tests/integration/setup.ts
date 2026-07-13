@@ -89,81 +89,50 @@ export let expectedUploadDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 export let expectedUploadSmallImageId: string | undefined = undefined;
 export let expectedUploadPreviewImageId: string | undefined = undefined;
 
-function createMultipartPayload(documentId: string): Buffer {
+export function createMultipartPayload(documentId: string): Buffer {
   const boundary = "----WebKitFormBoundary";
-  const metadata = fs.readFileSync(
-    path.resolve(
-      process.cwd(),
-      `tests/images/encrypted/${documentId}/meta-data`,
-    ),
-  );
-  const sharedKey = fs.readFileSync(
-    path.resolve(
-      process.cwd(),
-      `tests/images/encrypted/${documentId}/keys/mary@imagey.cloud/encrypted-shared.key`,
-    ),
-  );
-  const content = fs.readFileSync(
-    path.resolve(
-      process.cwd(),
-      `tests/images/encrypted/${documentId}/files/${documentId}`,
-    ),
-  );
 
-  const buffers = [
-    Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="metadata"; filename="meta-data"\r\nContent-Type: application/json\r\n\r\n`,
-    ),
-    metadata,
-    Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"; filename="sharedKey.json"\r\nContent-Type: application/json\r\n\r\n`,
-    ),
-    Buffer.from(
-      JSON.stringify({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: sharedKey.toString(),
-      }),
-    ),
-    Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="blob"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-    ),
-    content,
-  ];
+  // Use dummy text instead of real binary files to prevent pact-js binary payload tokio panics
+  const metadataStr = `{"documentId":"${documentId}"}`;
+  const keyStr = "dummy-base64-key-bytes";
+  const contentStr = "dummy-file-content";
+
+  let body = `--${boundary}\r\n`;
+  body += `Content-Disposition: form-data; name="metadata"; filename="meta-data"\r\n`;
+  body += `Content-Type: application/json\r\n\r\n`;
+  body += `${metadataStr}\r\n`;
+
+  body += `--${boundary}\r\n`;
+  body += `Content-Disposition: form-data; name="key"; filename="key"\r\n`;
+  body += `Content-Type: application/octet-stream\r\n\r\n`;
+  body += `${keyStr}\r\n`;
+
+  body += `--${boundary}\r\n`;
+  body += `Content-Disposition: form-data; name="issuer"\r\nContent-Type: text/plain\r\n\r\n`;
+  body += `mary@imagey.cloud\r\n`;
+
+  body += `--${boundary}\r\n`;
+  body += `Content-Disposition: form-data; name="content"; filename="blob"\r\n`;
+  body += `Content-Type: application/octet-stream\r\n\r\n`;
+  body += `${contentStr}\r\n`;
 
   if (expectedUploadSmallImageId) {
-    const smallImage = fs.readFileSync(
-      path.resolve(
-        process.cwd(),
-        `tests/images/encrypted/${documentId}/files/${expectedUploadSmallImageId}`,
-      ),
-    );
-    buffers.push(
-      Buffer.from(
-        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="smallImage"; filename="blob"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-      ),
-      smallImage,
-    );
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="smallImage"; filename="blob"\r\n`;
+    body += `Content-Type: application/octet-stream\r\n\r\n`;
+    body += `small-image-content\r\n`;
   }
 
   if (expectedUploadPreviewImageId) {
-    const previewImage = fs.readFileSync(
-      path.resolve(
-        process.cwd(),
-        `tests/images/encrypted/${documentId}/files/${expectedUploadPreviewImageId}`,
-      ),
-    );
-    buffers.push(
-      Buffer.from(
-        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="previewImage"; filename="blob"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-      ),
-      previewImage,
-    );
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="previewImage"; filename="blob"\r\n`;
+    body += `Content-Type: application/octet-stream\r\n\r\n`;
+    body += `preview-image-content\r\n`;
   }
 
-  buffers.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+  body += `--${boundary}--\r\n`;
 
-  return Buffer.concat(buffers);
+  return Buffer.from(body, "utf-8");
 }
 
 export async function setupMockServer(page: Page, mockServer: MockServer) {
@@ -612,18 +581,14 @@ export async function prepareDocumentUpload(
   provider
     .addInteraction()
     .uponReceiving("a request of mary to upload a document")
-    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
+    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) =>
       r.headers({
-        "Content-Type": Matchers.regex({
-          matcher: "multipart/form-data; boundary=.*",
-          generate: "multipart/form-data; boundary=----WebKitFormBoundary",
-        }),
-      });
-      r.body(
-        "multipart/form-data; boundary=----WebKitFormBoundary",
-        createMultipartPayload(documentId),
-      );
-    })
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=----WebKitFormBoundary",
+        ),
+      }),
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(

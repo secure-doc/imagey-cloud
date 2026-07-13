@@ -16,12 +16,12 @@
  */
 package cloud.imagey.application;
 
-import static cloud.imagey.domain.document.DocumentId.CONTENT;
-import static cloud.imagey.domain.document.DocumentId.PREVIEW;
-import static cloud.imagey.domain.document.DocumentId.SMALL;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
+import static java.util.Base64.getDecoder;
+import static java.util.Base64.getEncoder;
+import static java.util.Optional.ofNullable;
 
 import java.io.IOException;
 import java.net.URI;
@@ -43,6 +43,7 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
 
+import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.document.FileName;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
@@ -136,7 +138,8 @@ public class DocumentResource {
         @PathParam("share-email") Email userTheDocumentIsSharedWith,
         EncryptedSharedKey key) throws IOException {
 
-        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, key);
+        EncryptedContent keyContent = new EncryptedContent(getDecoder().decode(key.sharedKey()));
+        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, keyContent);
         return Response.ok().build();
     }
 
@@ -155,28 +158,22 @@ public class DocumentResource {
     public Response uploadDocument(
         @Context UriInfo uriInfo,
         @PathParam("email") User user,
-        @Multipart("metadata") byte[] metadataBytes,
-        @Multipart("sharedKey") EncryptedSharedKey sharedKey,
-        @Multipart("content") byte[] contentBytes,
-        @Multipart(value = "smallImage", required = false) byte[] smallImageBytes,
-        @Multipart(value = "previewImage", required = false) byte[] previewImageBytes)
-            throws IOException {
+        @Multipart(value = "metadata") EncryptedContent metadata,
+        @Multipart(value = "key") byte[] keyBytes,
+        @Multipart(value = "issuer") String issuer,
+        List<Attachment> files) throws IOException {
 
-        EncryptedContent metadata = new EncryptedContent(metadataBytes);
         DocumentId documentId = documentRepository.persist(user, metadata);
-        documentRepository.persist(user, documentId, user.email(), sharedKey);
 
-        EncryptedContent content = new EncryptedContent(contentBytes);
-        documentRepository.persist(user, documentId, CONTENT, content);
+        String encodedKey = getEncoder().encodeToString(keyBytes);
+        EncryptedSharedKey sharedKey = new EncryptedSharedKey(issuer, "0", encodedKey);
+        documentRepository.persist(user, documentId, new Email(issuer), new EncryptedContent(keyBytes));
 
-        if (smallImageBytes != null) {
-            documentRepository.persist(user, documentId, SMALL, new EncryptedContent(smallImageBytes));
-        }
-
-        if (previewImageBytes != null) {
-            documentRepository.persist(user, documentId, PREVIEW, new EncryptedContent(previewImageBytes));
-        }
-
+        ofNullable(files).ifPresent(f -> f.stream().filter(a -> a.getContentDisposition().getFilename() != null).forEach(attachment -> {
+            FileName name = new FileName(attachment.getContentDisposition().getFilename());
+            EncryptedContent content = new EncryptedContent(attachment.getObject(byte[].class));
+            documentRepository.persist(user, documentId, name, content);
+        }));
         URI location = uriInfo.getAbsolutePathBuilder().path(documentId.id()).build();
         return Response.created(location).build();
     }

@@ -1,3 +1,4 @@
+import { cryptoService } from "../authentication/CryptoService";
 import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
 
 const cache: Map<string, ArrayBuffer> = new Map();
@@ -18,24 +19,30 @@ export const documentRepository = {
       new Blob([metadata], { type: "application/octet-stream" }),
     );
     formData.append(
-      "sharedKey",
-      new Blob([JSON.stringify(sharedKey)], { type: "application/json" }),
-      "sharedKey.json",
+      "key",
+      new Blob([cryptoService.base64ToArrayBuffer(sharedKey.sharedKey)], {
+        type: "application/octet-stream",
+      }),
+      "key",
     );
+    formData.append("issuer", sharedKey.issuer);
     formData.append(
       "content",
       new Blob([content[0]], { type: "application/octet-stream" }),
+      "content",
     );
     if (content.length > 1) {
       formData.append(
         "smallImage",
         new Blob([content[1]], { type: "application/octet-stream" }),
+        "smallImage",
       );
     }
     if (content.length > 2) {
       formData.append(
         "previewImage",
         new Blob([content[2]], { type: "application/octet-stream" }),
+        "previewImage",
       );
     }
 
