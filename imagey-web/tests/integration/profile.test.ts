@@ -22,14 +22,14 @@ export async function prepareProfileUpload() {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to upload a profile picture")
-    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
+    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) =>
       r.headers({
         "Content-Type": MatchersV3.regex(
           "multipart/form-data.*",
           "multipart/form-data; boundary=----WebKitFormBoundary",
         ),
-      });
-    })
+      }),
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
@@ -52,15 +52,14 @@ export async function prepareProfileUpload() {
   return provider
     .addInteraction()
     .uponReceiving("a request of mary to update profile")
-    .withRequest("PUT", "/users/mary@imagey.cloud/profile", (r) => {
-      // The profile payload uses multipart/form-data
+    .withRequest("PUT", "/users/mary@imagey.cloud/profile", (r) =>
       r.headers({
         "Content-Type": MatchersV3.regex(
           "multipart/form-data.*",
           "multipart/form-data; boundary=----WebKitFormBoundary",
         ),
-      });
-    })
+      }),
+    )
     .willRespondWith(200);
 }
 

@@ -40,18 +40,13 @@ export const profileService = {
       new Blob([encryptedPayload[0]], { type: "application/octet-stream" }),
     );
     formData.append(
-      "sharedKey",
-      new Blob(
-        [
-          JSON.stringify({
-            issuer: email,
-            kid: "0",
-            sharedKey: encryptedDocumentKey,
-          }),
-        ],
-        { type: "application/json" },
-      ),
+      "key",
+      new Blob([cryptoService.base64ToArrayBuffer(encryptedDocumentKey)], {
+        type: "application/octet-stream",
+      }),
+      "key",
     );
+    formData.append("issuer", email);
     formData.append(
       "content",
       new Blob([encryptedDocuments[0]], { type: "application/octet-stream" }),

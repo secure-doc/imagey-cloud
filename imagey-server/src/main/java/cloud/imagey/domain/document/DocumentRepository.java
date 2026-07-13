@@ -16,7 +16,6 @@
  */
 package cloud.imagey.domain.document;
 
-import static jakarta.json.bind.JsonbBuilder.create;
 import static java.util.Base64.getEncoder;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
@@ -78,16 +77,20 @@ public class DocumentRepository extends AbstractFileRepository {
         writeByteArrayToFile(documentMetadataFile, metadata.content());
     }
 
-    public void persist(User user, DocumentId documentId, DocumentId contentId, EncryptedContent content) throws IOException {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File contentsFolder = new File(documentFolder, "files");
-        if (!contentsFolder.exists()) {
-            mkdir(contentsFolder);
+    public void persist(User user, DocumentId documentId, FileName fileName, EncryptedContent content) {
+        try {
+            File userHome = getUserHome(user);
+            File documentHome = new File(userHome, "documents");
+            File documentFolder = new File(documentHome, documentId.id());
+            File contentsFolder = new File(documentFolder, "files");
+            if (!contentsFolder.exists()) {
+                mkdir(contentsFolder);
+            }
+            File contentFile = new File(contentsFolder, fileName.name());
+            writeByteArrayToFile(contentFile, content.content());
+        } catch (IOException e) {
+            throw new IoProblemException(e);
         }
-        File contentFile = new File(contentsFolder, contentId.id());
-        writeByteArrayToFile(contentFile, content.content());
     }
 
     public Optional<EncryptedContent> loadContent(User user, DocumentId documentId, DocumentId contentId) throws IOException {
@@ -144,16 +147,25 @@ public class DocumentRepository extends AbstractFileRepository {
         if (!sharedKey.exists()) {
             return empty();
         }
-        return of(create().fromJson(readFileToString(sharedKey), EncryptedSharedKey.class));
+        try {
+            String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
+            return of(new EncryptedSharedKey(user.email().address(), "0", encodedKey));
+        } catch (IOException e) {
+            throw new IoProblemException(e);
+        }
     }
 
-    public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedSharedKey key) throws IOException {
+    public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedContent key) throws IOException {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         File sharedKeysFolder = new File(documentFolder, "keys");
         File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        createNewFileWithContent(sharedKeyFolder, "encrypted-shared.key", create().toJson(key));
+        if (!sharedKeyFolder.exists()) {
+            mkdir(sharedKeyFolder);
+        }
+        File sharedKeyFile = new File(sharedKeyFolder, "encrypted-shared.key");
+        writeByteArrayToFile(sharedKeyFile, key.content());
     }
 
     public boolean hasSharedKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {

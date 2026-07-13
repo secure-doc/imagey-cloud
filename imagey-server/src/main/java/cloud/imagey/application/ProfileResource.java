@@ -43,8 +43,8 @@ import org.apache.logging.log4j.Logger;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.document.FileName;
 import cloud.imagey.domain.encryption.EncryptedContent;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
@@ -67,7 +67,8 @@ public class ProfileResource {
     public Response uploadDocument(
         @PathParam("email") User user,
         @Multipart("metadata") byte[] metadataBytes,
-        @Multipart("sharedKey") EncryptedSharedKey sharedKey,
+        @Multipart("key") byte[] keyBytes,
+        @Multipart("issuer") String issuer,
         @Multipart("content") byte[] contentBytes,
         @Multipart(value = "smallImage", required = false) byte[] smallImageBytes,
         @Multipart(value = "previewImage", required = false) byte[] previewImageBytes)
@@ -75,17 +76,18 @@ public class ProfileResource {
 
         EncryptedContent metadata = new EncryptedContent(metadataBytes);
         DocumentId documentId = documentRepository.persist(user, metadata);
-        documentRepository.persist(user, documentId, user.email(), sharedKey);
+        EncryptedContent keyContent = new EncryptedContent(keyBytes);
+        documentRepository.persist(user, documentId, new Email(issuer), keyContent);
 
         EncryptedContent content = new EncryptedContent(contentBytes);
-        documentRepository.persist(user, documentId, CONTENT, content);
+        documentRepository.persist(user, documentId, new FileName(CONTENT.id()), content);
 
         if (smallImageBytes != null) {
-            documentRepository.persist(user, documentId, SMALL, new EncryptedContent(smallImageBytes));
+            documentRepository.persist(user, documentId, new FileName(SMALL.id()), new EncryptedContent(smallImageBytes));
         }
 
         if (previewImageBytes != null) {
-            documentRepository.persist(user, documentId, PREVIEW, new EncryptedContent(previewImageBytes));
+            documentRepository.persist(user, documentId, new FileName(PREVIEW.id()), new EncryptedContent(previewImageBytes));
         }
 
         return Response.ok().build();

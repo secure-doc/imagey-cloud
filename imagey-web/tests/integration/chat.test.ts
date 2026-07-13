@@ -399,7 +399,7 @@ test("share a document in chat", async ({ page }) => {
         r.jsonBody({
           issuer: MatchersV3.string("mary@imagey.cloud"),
           kid: MatchersV3.string("0"),
-          sharedKey: MatchersV3.string("dummy-key"), // Pact will just match the structure/type
+          sharedKey: MatchersV3.string("ZHVtbXkta2V5"), // Pact will just match the structure/type
         });
       },
     )
