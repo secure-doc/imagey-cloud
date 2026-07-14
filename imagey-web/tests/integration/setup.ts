@@ -395,6 +395,15 @@ export async function prepareMarysDocuments() {
           },
         },
         {
+          documentId: "mary@imagey.cloud",
+          metadata: "e30=",
+          sharedKey: {
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey: "ZHVtbXlTZXR0aW5nc1NoYXJlZEtleQ==",
+          },
+        },
+        {
           documentId: "profile",
           metadata:
             "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
@@ -973,7 +982,19 @@ export async function prepareAlicesLogin() {
     .given("Alice exists")
     .uponReceiving("a request to get Alices documents")
     .withRequest("GET", "/users/alice@imagey.cloud/documents")
-    .willRespondWith(200, (builder) => builder.jsonBody([]));
+    .willRespondWith(200, (builder) =>
+      builder.jsonBody([
+        {
+          documentId: "alice@imagey.cloud",
+          metadata: "e30=",
+          sharedKey: {
+            issuer: "alice@imagey.cloud",
+            kid: "0",
+            sharedKey: "ZHVtbXlTZXR0aW5nc1NoYXJlZEtleQ==",
+          },
+        },
+      ]),
+    );
 }
 
 export async function prepareAlicesChat(

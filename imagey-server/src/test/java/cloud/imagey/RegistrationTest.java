@@ -143,6 +143,12 @@ public class RegistrationTest {
                     "devicePublicKey": {
                         "device": "public",
                         "key": 2
+                    },
+                    "settings": "e30=",
+                    "settingsSharedKey": {
+                        "issuer": "joe@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "ZHVtbXlTZXR0aW5nc1NoYXJlZEtleQo="
                     }
                 }
             """));
@@ -197,6 +203,12 @@ public class RegistrationTest {
                     "devicePublicKey": {
                         "device": "public",
                         "key": 2
+                    },
+                    "settings": "e30=",
+                    "settingsSharedKey": {
+                        "issuer": "different@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "ZHVtbXlTZXR0aW5nc1NoYXJlZEtleQo="
                     }
                 }
             """));
@@ -225,6 +237,12 @@ public class RegistrationTest {
                     "devicePublicKey": {
                         "device": "public",
                         "key": 2
+                    },
+                    "settings": "e30=",
+                    "settingsSharedKey": {
+                        "issuer": "joe@imagey.cloud",
+                        "kid": "0",
+                        "sharedKey": "ZHVtbXlTZXR0aW5nc1NoYXJlZEtleQo="
                     }
                 }
             """));

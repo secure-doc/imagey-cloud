@@ -136,7 +136,8 @@ export const documentService = {
     const validMetadata = metadata.filter(
       (meta) =>
         meta.documentId !== "profile" &&
-        meta.documentId !== "profile-pic-doc-id",
+        meta.documentId !== "profile-pic-doc-id" &&
+        meta.documentId !== user,
     );
     return Promise.all(
       validMetadata.map((meta) =>

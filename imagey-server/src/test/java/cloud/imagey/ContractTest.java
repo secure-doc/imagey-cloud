@@ -23,6 +23,7 @@ import static cloud.imagey.ContractTest.TokenState.NO_TOKEN;
 import static cloud.imagey.ContractTest.TokenState.VALID_TOKEN;
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 import static java.net.URI.create;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.copyURLToFile;
@@ -109,7 +110,7 @@ public class ContractTest {
                     + "Content-Disposition: form-data; name=\"issuer\"\r\n\r\n"
                     + "a\r\n"
                     + "--" + boundary + "--\r\n";
-                updatableRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(dummyBody));
+                updatableRequest.setEntity(new StringEntity(dummyBody));
             } else if ("PUT".equals(method) && path.endsWith("/profile")) {
                 String boundary = "----WebKitFormBoundary";
                 request.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
@@ -137,6 +138,15 @@ public class ContractTest {
         joesData.mkdirs();
         File contacts = new File(joesData, "contacts");
         contacts.mkdirs();
+
+        File documents = new File(joesData, "documents");
+        File settingsDoc = new File(documents, "joe@imagey.cloud");
+        settingsDoc.mkdirs();
+        writeStringToFile(new File(settingsDoc, "metadata.enc"), "{}", UTF_8);
+        File settingsKeys = new File(settingsDoc, "keys");
+        File settingsEmailKeys = new File(settingsKeys, "joe@imagey.cloud");
+        settingsEmailKeys.mkdirs();
+        writeStringToFile(new File(settingsEmailKeys, "encrypted-shared.key"), "dummySettingsSharedKey", UTF_8);
 
         File devices = new File(joesData, "devices");
         devices.mkdirs();

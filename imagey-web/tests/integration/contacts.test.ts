@@ -151,7 +151,19 @@ test("invite contact from empty panel", async ({ page }) => {
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          documentId: "bill@imagey.cloud",
+          metadata: "e30=",
+          sharedKey: {
+            issuer: "bill@imagey.cloud",
+            kid: "0",
+            sharedKey: "ZHVtbXlTZXR0aW5nc1NoYXJlZEtleQ==",
+          },
+        },
+      ]),
+    );
 
   const addContactInteraction = provider
     .addInteraction()
