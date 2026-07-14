@@ -8,6 +8,8 @@ export const authenticationRepository = {
     publicMainKey: JsonWebKey,
     encryptedPrivateMainKey: string,
     publicDeviceKey: JsonWebKey,
+    settings: string,
+    settingsSharedKey: { issuer: string; kid: string; sharedKey: string },
   ) => {
     const response = await fetch("/users/", {
       method: "POST",
@@ -21,6 +23,8 @@ export const authenticationRepository = {
         mainPublicKey: publicMainKey,
         devicePublicKey: publicDeviceKey,
         encryptedPrivateKey: encryptedPrivateMainKey,
+        settings,
+        settingsSharedKey,
       }),
     });
 

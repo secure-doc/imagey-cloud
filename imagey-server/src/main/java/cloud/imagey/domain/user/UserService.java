@@ -17,6 +17,7 @@
 package cloud.imagey.domain.user;
 
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
+import static java.util.Base64.getDecoder;
 
 import java.io.IOException;
 import java.util.List;
@@ -30,6 +31,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
@@ -52,6 +56,8 @@ public class UserService {
     private UserRepository userRepository;
     @Inject
     private DeviceRepository deviceRepository;
+    @Inject
+    private DocumentRepository documentRepository;
     @Inject
     private Provider<DomainName> currentDomain;
     @Inject
@@ -111,6 +117,12 @@ public class UserService {
             user,
             registration.deviceId(),
             new PrivateKeyMetadata(new Kid("0"), registration.deviceId(), registration.encryptedPrivateKey()));
+
+        DocumentId settingsId = new DocumentId(user.email().address());
+        EncryptedContent settings = new EncryptedContent(getDecoder().decode(registration.settings().content()));
+        documentRepository.persist(user, settingsId, settings);
+        EncryptedContent settingsKey = new EncryptedContent(getDecoder().decode(registration.settingsSharedKey().sharedKey()));
+        documentRepository.persist(user, settingsId, user.email(), settingsKey);
     }
 
     public enum AuthenticationStatus {

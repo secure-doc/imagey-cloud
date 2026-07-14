@@ -32,12 +32,29 @@ export const authenticationService = {
       device.deviceKeyPair.publicKey,
       device.deviceKeyPair.privateKey,
     );
+
+    const settingsKey = await cryptoService.generateSymmetricKey();
+    const encryptedSettings = await cryptoService.encryptDocument(settingsKey, [
+      new TextEncoder().encode("{}").buffer,
+    ]);
+    const settingsContent = cryptoService.arrayBufferToBase64(
+      encryptedSettings[0],
+    );
+
+    const encryptedSettingsSharedKey = await cryptoService.encryptKey(
+      settingsKey,
+      mainKeyPair.publicKey,
+      mainKeyPair.privateKey,
+    );
+
     await authenticationRepository.register(
       email,
       device.deviceId,
       mainKeyPair.publicKey,
       encryptedPrivateMainKey,
       device.deviceKeyPair.publicKey,
+      settingsContent,
+      { issuer: email, kid: "0", sharedKey: encryptedSettingsSharedKey },
     );
     if (inviter) {
       await contactService.acceptContactRequest(email, inviter, mainKeyPair);

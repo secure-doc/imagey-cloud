@@ -135,6 +135,30 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
         })
         .jsonBody({
           email: "mary@imagey.cloud",
+          deviceId: Matchers.string("ab85c7ca-8288-4a67-9d7a-15b82e22e75b"),
+          devicePublicKey: {
+            crv: Matchers.string("P-256"),
+            ext: Matchers.boolean(true),
+            key_ops: [],
+            kty: Matchers.string("EC"),
+            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
+            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
+          },
+          mainPublicKey: {
+            crv: Matchers.string("P-256"),
+            ext: Matchers.boolean(true),
+            key_ops: [],
+            kty: Matchers.string("EC"),
+            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
+            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
+          },
+          encryptedPrivateKey: Matchers.string("dummyEncryptedPrivateKey"),
+          settings: Matchers.string("e30="),
+          settingsSharedKey: {
+            issuer: "mary@imagey.cloud",
+            kid: "0",
+            sharedKey: Matchers.string("ZHVtbXlTaGFyZWRLZXk="),
+          },
         }),
     )
     .willRespondWith(409)
@@ -204,6 +228,12 @@ test("new user clicks registration link", async ({ page }) => {
           encryptedPrivateKey: Matchers.string(
             "ca714722798563b39d9a75bd8d58e79cb81b78b7601d99d1725de64c437a551ffbf3b7dbb03babaeb58bf59305ad6674f91d0eccee6b73210d2d3134165530d0d512c40ae9a2a6c27829b5a5863d10591da8ee7032bbf2490c8f9b194cddc5537f3c2e1c0e0ba6bbce3f692103db085961cfcac38a87ef29b4340c69355f73d7ae527821478eff2e421d8693d50aae5ec253be5675796f9660984945d297500aca8108694b1cf2af4554670f88edb7f8de9c19ce48b254839bc9822456f949ee23718ac369102c70c994826827e36470c237cb",
           ),
+          settings: Matchers.string("e30="),
+          settingsSharedKey: {
+            issuer: "joe@imagey.cloud",
+            kid: "0",
+            sharedKey: Matchers.string("ZHVtbXlTaGFyZWRLZXk="),
+          },
         }),
     )
     .willRespondWith(200);
