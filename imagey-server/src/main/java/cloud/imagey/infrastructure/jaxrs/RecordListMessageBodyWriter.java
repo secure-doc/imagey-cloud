@@ -25,13 +25,11 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
@@ -63,8 +61,7 @@ public class RecordListMessageBodyWriter extends AbstractRecordMessageBodyWriter
         for (Record r: list) {
             result.add(write(r));
         }
-        Type genericListType = new GenericType<List<Map<String, Object>>>() { }.getType();
-        providers.getMessageBodyWriter(List.class, genericListType, annotations, mediaType)
-            .writeTo(result, Map.class, genericListType, annotations, mediaType, httpHeaders, entityStream);
+        providers.getMessageBodyWriter((Class)result.getClass(), result.getClass(), annotations, mediaType)
+            .writeTo(result, result.getClass(), result.getClass(), annotations, mediaType, httpHeaders, entityStream);
     }
 }

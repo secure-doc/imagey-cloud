@@ -14,16 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.contact;
 
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-import cloud.imagey.domain.chat.Channel.Adapter;
+import cloud.imagey.domain.contact.MessageContent.Adapter;
 import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
 @JsonbTypeAdapter(Adapter.class)
-public record Channel(String value) {
+public record MessageContent(String value) {
 
-    public static class Adapter extends AbstractSimpleRecordAdapter<Channel, String> {
-    }
+    public static class Adapter extends AbstractSimpleRecordAdapter<MessageContent, String> { }
 }

@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import jakarta.json.bind.JsonbBuilder;
+
 
 public abstract class AbstractRecordConverter {
 
@@ -53,8 +53,20 @@ public abstract class AbstractRecordConverter {
 
     protected Object instantiate(Class<?> type, Map<String, Object> value) {
         RecordComponent[] recordComponents = type.getRecordComponents();
+        if (recordComponents == null) {
+            if (Map.class.isAssignableFrom(type)) {
+                try {
+                    Map map = (Map) type.getDeclaredConstructor().newInstance();
+                    map.putAll(value);
+                    return map;
+                } catch (Exception e) {
+                    throw new IllegalArgumentException(e);
+                }
+            }
+            throw new IllegalArgumentException("Type is not a record: " + type);
+        }
         if (recordComponents.length == 1 && recordComponents[0].getType().equals(String.class)) {
-            return instantiate(type, JsonbBuilder.create().toJson(value));
+            return instantiate(type, jakarta.json.bind.JsonbBuilder.create().toJson(value));
         } else {
             return instantiate(type, value::get);
         }

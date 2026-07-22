@@ -29,13 +29,15 @@ export const activityService = {
     );
 
     const activities: Activity[] = [
-      ...contactRequests.map(
-        (request): InvitationActivity => ({
-          id: `invitation-${request.userId}`,
-          type: ActivityType.INVITATION,
-          userId: request.userId,
-        }),
-      ),
+      ...contactRequests
+        .filter((req) => req.invitee === user && req.sharedKey == null)
+        .map(
+          (request): InvitationActivity => ({
+            id: `invitation-${request.inviter}`,
+            type: ActivityType.INVITATION,
+            userId: request.inviter,
+          }),
+        ),
       ...images.map(
         (image): ImageActivity => ({
           id: `image-${image.documentId}`,

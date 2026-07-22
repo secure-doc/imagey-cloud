@@ -5,10 +5,12 @@ import { useActionIcons } from "../contexts/ActionBarContext";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
+
 import { Contact } from "../contact/Contact";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
+import { contactService } from "../contact/ContactService";
 
 export default function Chats() {
   return (
@@ -28,8 +30,10 @@ export function ChatsList({
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  const keyPair = authentication.keyPairs.mainKeyPair;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [contactRequests, setContactRequests] = useState<Contact[]>();
+  const [contactRequests, setContactRequests] =
+    useState<{ userId: string }[]>();
   const [contacts, setContacts] = useState<Contact[]>();
 
   const actionIcons = useMemo(
@@ -47,20 +51,38 @@ export function ChatsList({
   useActionIcons(actionIcons);
 
   useEffect(() => {
-    contactRepository
-      .getContacts(user)
+    contactService
+      .processAcceptedInvitations(user, keyPair)
+      .then(() => {
+        return contactRepository.getContacts(
+          user,
+          keyPair.publicKey,
+          keyPair.privateKey,
+        );
+      })
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));
     contactRepository
       .getContactRequests(user)
-      .then((contactRequests) => setContactRequests(contactRequests))
+      .then((contactExchanges) => {
+        // Only show pending incoming requests in the UI
+        setContactRequests(
+          contactExchanges
+            .filter((req) => req.invitee === user && req.sharedKey == null)
+            .map((req) => ({ userId: req.inviter })),
+        );
+      })
       .catch((e) => console.error("Failed to fetch contact requests", e));
-  }, [user]);
+  }, [user, keyPair]);
 
   const handleContactRequest = async (email: string) => {
     if (user) {
       try {
-        await contactRepository.sendContactRequest(user, email);
+        await contactRepository.sendContactRequest(
+          user,
+          email,
+          keyPair.publicKey,
+        );
         setIsDialogOpen(false);
       } catch (error) {
         console.error("Failed to send contact request", error);
@@ -96,14 +118,18 @@ export function ChatsList({
                   <AcceptInvitationButton
                     user={user}
                     contact={contactRequest.userId}
-                    onAccepted={() => {
+                    onAccepted={(documentId, key) => {
                       setContactRequests((contactRequests) =>
                         contactRequests?.filter(
                           (request) => request.userId !== contactRequest.userId,
                         ),
                       );
                       setContacts((contacts) =>
-                        contacts?.concat(contactRequest),
+                        (contacts || []).concat({
+                          userId: contactRequest.userId,
+                          documentId: documentId,
+                          key: key,
+                        }),
                       );
                     }}
                   />

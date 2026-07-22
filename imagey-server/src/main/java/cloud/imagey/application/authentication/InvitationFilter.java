@@ -34,7 +34,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.chat.ContactService;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
@@ -51,8 +50,6 @@ public class InvitationFilter extends HttpFilter {
     private TokenService tokenService;
     @Inject
     private UserService userService;
-    @Inject
-    private ContactService contactService;
 
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -69,7 +66,6 @@ public class InvitationFilter extends HttpFilter {
         User user = new User(email);
         User inviter = new User(new Email(request.getParameter("invited-by")));
         userService.create(user);
-        contactService.invite(inviter, user);
         Token authenticationToken = tokenService.generateToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
         response.sendRedirect("/?email=" + email.address() + "&inviter=" + inviter.email().address());

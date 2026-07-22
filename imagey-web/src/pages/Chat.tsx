@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
-import { contactService } from "../contact/ContactService";
 import { SendMessageForm } from "../chat/SendMessageForm";
 import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
+import { contactService } from "../contact/ContactService";
 import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
+import { contactRepository } from "../contact/ContactRepository";
 
 export default function Chat({ contactEmail }: { contactEmail: string }) {
   const authentication = useAuthentication();
@@ -13,9 +14,14 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   const publicKey = authentication.keyPairs?.mainKeyPair.publicKey;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
 
+  const [chatDocumentId, setChatDocumentId] = useState<string>();
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
   const [keyError, setKeyError] = useState(false);
-  const { messages, setMessages } = usePolling(user, contactEmail, sharedKey);
+  const { messages, setMessages } = usePolling(
+    user,
+    chatDocumentId ?? "",
+    sharedKey,
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -24,11 +30,21 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
 
   useEffect(() => {
     if (contactEmail && publicKey && privateKey) {
-      contactService
-        .loadSharedKey(user, contactEmail, publicKey, privateKey)
-        .then((decryptedKey) => {
-          setSharedKey(decryptedKey);
-          setKeyError(false);
+      contactRepository
+        .getContacts(user, publicKey, privateKey)
+        .then((contacts) => {
+          const contact = contacts.find((c) => c.userId === contactEmail);
+          if (contact) {
+            setChatDocumentId(contact.documentId);
+            if (contact.key) {
+              setSharedKey(contact.key);
+              setKeyError(false);
+            } else {
+              throw new Error("Decrypted key is undefined");
+            }
+          } else {
+            throw new Error("Contact not found");
+          }
         })
         .catch((e) => {
           console.error(e);
@@ -38,18 +54,19 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   }, [user, contactEmail, publicKey, privateKey]);
 
   const handleReissue = async () => {
-    if (contactEmail && publicKey && privateKey) {
+    if (contactEmail && chatDocumentId && publicKey && privateKey) {
       try {
-        const newSharedKey = await contactService.reissueKey(
+        const newKey = await contactService.reissueKey(
           user,
           contactEmail,
+          chatDocumentId,
           publicKey,
           privateKey,
         );
-        setSharedKey(newSharedKey);
+        setSharedKey(newKey);
         setKeyError(false);
       } catch (e) {
-        console.error("Failed to reissue key:", e);
+        console.error(e);
       }
     }
   };
@@ -137,6 +154,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
                 <SendMessageForm
                   userEmail={user}
                   contactEmail={contactEmail}
+                  chatDocumentId={chatDocumentId!}
                   sharedKey={sharedKey}
                   onMessageSent={(newMessage) =>
                     setMessages((prev) => [...(prev ?? []), newMessage])

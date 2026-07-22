@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.contact;
 
 import java.io.IOException;
 
@@ -25,6 +25,7 @@ import jakarta.inject.Inject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -37,8 +38,8 @@ public class MessageService {
     @Inject
     private Event<Message> messageEvent;
 
-    public Message sendMessage(User sender, User receiver, MessageContent encryptedContent) throws IOException {
-        Message message = messageRepository.persist(receiver, sender, encryptedContent);
+    public Message sendMessage(User user, User sender, DocumentId documentId, MessageContent encryptedContent) throws IOException {
+        Message message = messageRepository.persist(user, sender, documentId, encryptedContent);
         messageEvent.fire(message);
         return message;
     }

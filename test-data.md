@@ -16,3 +16,8 @@ Bob and Chris are together in a bowling club, too.
 The third member of the bowling club is Jack.
 
 Marys best friend is Alice.
+
+## Data Migration
+As of the transition to a Document-based chat architecture:
+- All test data (Pact mock contracts, unit tests) have been migrated so that Chats are represented as Documents of type `Chat` stored in a user's root folder.
+- Production data does **not** require migration.

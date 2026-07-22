@@ -25,7 +25,7 @@ export default function Activities() {
       .then((activities) => setActivities(activities))
       .catch((e) => console.error("Failed to fetch activities", e));
     contactRepository
-      .getContacts(user)
+      .getContacts(user, keyPair.publicKey, keyPair.privateKey)
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));
   }, [user, keyPair]);

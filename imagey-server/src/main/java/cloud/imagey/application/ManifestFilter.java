@@ -45,7 +45,6 @@ public class ManifestFilter extends HttpFilter {
         String appName = domain.getAppName();
         String shortName = appName;
         String id = appName.toLowerCase().replace(" ", "-");
-        String startUrl = domain.value() == null ? "https://imagey.cloud" : domain.value();
 
         String json = """
             {
@@ -100,7 +99,7 @@ public class ManifestFilter extends HttpFilter {
                 }
               ]
             }
-            """.formatted(id, appName + " - Your image vault", shortName, startUrl);
+            """.formatted(id, appName + " - Your image vault", shortName, domain.value());
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");

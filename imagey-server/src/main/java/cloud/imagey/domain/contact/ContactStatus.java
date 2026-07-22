@@ -14,8 +14,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.contact;
 
 public enum ContactStatus {
-    INVITATION_SENT, INVITATION_RECEIVED, DENIAL_SENT, DENIAL_RECEIVED;
+    INVITED, DENIED;
 }

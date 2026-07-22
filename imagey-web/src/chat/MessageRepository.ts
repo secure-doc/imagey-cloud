@@ -3,11 +3,11 @@ import { Message } from "./Message";
 export const messageRepository = {
   sendMessage: async (
     senderEmail: string,
-    contactEmail: string,
+    chatDocumentId: string,
     encryptedContent: string,
   ): Promise<string> => {
     const response = await fetch(
-      `/users/${senderEmail}/contacts/${contactEmail}/messages`,
+      `/users/${senderEmail}/documents/${chatDocumentId}/messages`,
       {
         method: "POST",
         headers: {
@@ -29,7 +29,7 @@ export const messageRepository = {
   },
   receiveMessages: async (
     receiverEmail: string,
-    senderEmail: string,
+    chatDocumentId: string,
     sinceId?: string,
     wait?: number,
   ): Promise<Message[]> => {
@@ -41,7 +41,7 @@ export const messageRepository = {
     }
 
     const response = await fetch(
-      `/users/${receiverEmail}/contacts/${senderEmail}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
+      `/users/${receiverEmail}/documents/${chatDocumentId}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
       {
         method: "GET",
         headers,

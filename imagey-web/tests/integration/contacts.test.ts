@@ -9,6 +9,7 @@ import {
   prepareMarysContactRequests,
   runningPactRequests,
   prepareMarysEmptyContactRequests,
+  TestData,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -76,7 +77,10 @@ test("send contact request", async ({ page }) => {
     .withRequest("POST", "/users/mary@imagey.cloud/contact-requests", (r) => {
       r.headers({
         "Content-Type": "application/json",
-      }).jsonBody({ email: "alice@imagey.cloud" });
+      }).jsonBody({
+        recipient: "alice@imagey.cloud",
+        key: TestData.mary.publicMainKey,
+      });
     })
     .willRespondWith(201);
 
@@ -122,16 +126,7 @@ test("invite contact from empty panel", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
 
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts returning empty")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareEmptyMarysDocuments();
 
   provider
     .addInteraction()
@@ -152,7 +147,10 @@ test("invite contact from empty panel", async ({ page }) => {
     .withRequest("POST", "/users/mary@imagey.cloud/contact-requests", (r) => {
       r.headers({
         "Content-Type": "application/json",
-      }).jsonBody({ email: "alice@imagey.cloud" });
+      }).jsonBody({
+        recipient: "alice@imagey.cloud",
+        key: TestData.mary.publicMainKey,
+      });
     })
     .willRespondWith(201);
 

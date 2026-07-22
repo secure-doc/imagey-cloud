@@ -155,18 +155,23 @@ public class DocumentRepositoryTest {
     }
 
     @Test
-    @DisplayName("findDocumentKey with folderId sets issuerType to FOLDER")
-    void findDocumentKeyWithFolderId() {
-        User folderUser = new User(new Email("folder123"));
-        Email lookupEmail = new Email("friend@example.com");
+    @DisplayName("findDocumentKey falls back to FOLDER when user is self and key missing")
+    void findDocumentKeyFallbackToFolder() throws IOException {
+        Email me = user.email();
+        File userHome = new File(rootPath, me.address());
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        File sharedKeysFolder = new File(documentFolder, "keys");
+        File folderKeyFolder = new File(sharedKeysFolder, "folder-owner-id");
+        folderKeyFolder.mkdirs();
+        File folderKeyFile = new File(folderKeyFolder, "encrypted-shared.key");
 
-        // First, persist the key so it exists
-        EncryptedContent key = new EncryptedContent(new byte[]{7, 8, 9});
-        documentRepository.persist(folderUser, documentId, lookupEmail, key);
+        EncryptedContent key = new EncryptedContent(new byte[]{1, 2, 3});
+        org.apache.commons.io.FileUtils.writeByteArrayToFile(folderKeyFile, key.content());
 
-        Optional<EncryptedSharedKey> sharedKey = documentRepository.findDocumentKey(folderUser, documentId, lookupEmail);
+        Optional<EncryptedSharedKey> sharedKey = documentRepository.findDocumentKey(user, documentId, me);
         assertThat(sharedKey).isPresent();
-        assertThat(sharedKey.get().issuerType()).isEqualTo("USER");
-        assertThat(sharedKey.get().issuer()).isEqualTo("friend@example.com");
+        assertThat(sharedKey.get().issuerType()).isEqualTo("FOLDER");
+        assertThat(sharedKey.get().issuer()).isEqualTo("folder-owner-id");
     }
 }

@@ -75,7 +75,7 @@ public class UserResource {
     }
 
     @GET
-    @RolesAllowed({"owner", "contact", "contact-request"})
+    @RolesAllowed("owner")
     @Path("{email}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {

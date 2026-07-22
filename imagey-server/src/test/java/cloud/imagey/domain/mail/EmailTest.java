@@ -14,22 +14,26 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.encryption;
+package cloud.imagey.domain.mail;
 
-public class PublicKey extends java.util.LinkedHashMap<String, Object> {
-    public PublicKey() {
-    }
+import static org.assertj.core.api.Assertions.assertThat;
 
-    public PublicKey(String json) {
-        if (json != null && !json.isBlank()) {
-            this.putAll(jakarta.json.bind.JsonbBuilder.create().fromJson(json, java.util.Map.class));
+import jakarta.json.bind.Jsonb;
+import jakarta.json.bind.JsonbBuilder;
+
+import org.junit.jupiter.api.Test;
+
+class EmailTest {
+
+    @Test
+    void testEmailAdapter() throws Exception {
+        try (Jsonb jsonb = JsonbBuilder.create()) {
+            Email email = new Email("Test@Example.com");
+            String json = jsonb.toJson(email);
+            assertThat(json).isEqualTo("\"test@example.com\"");
+
+            Email deserialized = jsonb.fromJson("\"Upper@Example.com\"", Email.class);
+            assertThat(deserialized.address()).isEqualTo("upper@example.com");
         }
-    }
-
-    public String key() {
-        if (this.isEmpty()) {
-            return null;
-        }
-        return jakarta.json.bind.JsonbBuilder.create().toJson(this);
     }
 }

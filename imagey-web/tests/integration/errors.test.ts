@@ -51,14 +51,16 @@ async function mockMarysBackend(page: Page) {
       });
     },
   );
-  // Contacts
+  // Documents without folderId
   await page.route(
-    "**/users/mary*imagey.cloud/contacts",
+    (url) =>
+      url.pathname === "/users/mary@imagey.cloud/documents" &&
+      !url.searchParams.has("folderId"),
     async (route: Route) => {
       await route.fulfill({
         status: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
-        json: [],
+        json: [{ documentId: "root-folder-id" }],
       });
     },
   );
@@ -224,12 +226,17 @@ test("private key loading error", async ({ page }) => {
 test("contact repository error handling", async ({ page }) => {
   await mockMarysBackend(page);
   // Mock 500 errors for contacts
-  await page.route("**/users/mary*imagey.cloud/contacts", async (route) => {
-    await route.fulfill({
-      status: 500,
-      headers: { "Access-Control-Allow-Origin": "*" },
-    });
-  });
+  await page.route(
+    (url) =>
+      url.pathname === "/users/mary@imagey.cloud/documents" &&
+      !url.searchParams.has("folderId"),
+    async (route) => {
+      await route.fulfill({
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    },
+  );
   await page.route(
     "**/users/mary*imagey.cloud/contact-requests",
     async (route) => {

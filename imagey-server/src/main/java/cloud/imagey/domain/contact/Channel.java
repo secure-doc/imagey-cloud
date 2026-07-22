@@ -14,22 +14,16 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.encryption;
+package cloud.imagey.domain.contact;
 
-public class PublicKey extends java.util.LinkedHashMap<String, Object> {
-    public PublicKey() {
-    }
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-    public PublicKey(String json) {
-        if (json != null && !json.isBlank()) {
-            this.putAll(jakarta.json.bind.JsonbBuilder.create().fromJson(json, java.util.Map.class));
-        }
-    }
+import cloud.imagey.domain.contact.Channel.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
-    public String key() {
-        if (this.isEmpty()) {
-            return null;
-        }
-        return jakarta.json.bind.JsonbBuilder.create().toJson(this);
+@JsonbTypeAdapter(Adapter.class)
+public record Channel(String value) {
+
+    public static class Adapter extends AbstractSimpleRecordAdapter<Channel, String> {
     }
 }

@@ -97,7 +97,7 @@ public class ProfileResource {
     }
 
     @GET
-    @RolesAllowed({"owner", "contact", "contact-request"})
+    @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
     public DocumentMetadata getProfileMetadata(@PathParam("email") User user) throws IOException {
         Email callerEmail = new Email(securityContext.getUserPrincipal().getName());

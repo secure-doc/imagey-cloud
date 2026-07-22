@@ -5,14 +5,14 @@ import { Message } from "./Message";
 export const messageService = {
   receiveDecryptedMessages: async (
     userEmail: string,
-    contactEmail: string,
+    chatDocumentId: string,
     sinceId: string | undefined,
     sharedKey: JsonWebKey,
     wait?: number,
   ): Promise<Message[]> => {
     const newMessages = await messageRepository.receiveMessages(
       userEmail,
-      contactEmail,
+      chatDocumentId,
       sinceId,
       wait,
     );
@@ -33,7 +33,7 @@ export const messageService = {
 
   sendEncryptedMessage: async (
     userEmail: string,
-    contactEmail: string,
+    chatDocumentId: string,
     content: string,
     sharedKey: JsonWebKey,
   ): Promise<Message> => {
@@ -43,7 +43,7 @@ export const messageService = {
     );
     const id = await messageRepository.sendMessage(
       userEmail,
-      contactEmail,
+      chatDocumentId,
       encryptedContent,
     );
 

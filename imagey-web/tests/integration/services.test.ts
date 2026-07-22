@@ -102,7 +102,7 @@ test.describe("Service Branch Coverage", () => {
   });
 
   test("ContactService - missing key entry", async ({ page }) => {
-    await page.route("**/users/*/contacts/*/key", async (route) => {
+    await page.route("**/users/*/documents/*/keys/*", async (route) => {
       await route.fulfill({
         status: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
@@ -111,19 +111,15 @@ test.describe("Service Branch Coverage", () => {
       });
     });
     await page.goto("/");
-    const error = await page.evaluate(async () => {
-      try {
-        await window.contactService.loadSharedKey(
-          "a",
-          "b",
-          {} as unknown,
-          {} as unknown,
-        );
-      } catch (e) {
-        return (e as Error).message || String(e);
-      }
+    const result = await page.evaluate(async () => {
+      return await window.documentService.loadKey(
+        "a",
+        "b",
+        {} as unknown,
+        {} as unknown,
+      );
     });
-    expect(error).toBe("Shared key not found");
+    expect(result).toBeUndefined();
   });
 
   test("ContactService - fallback decryption", async ({ page }) => {
@@ -154,9 +150,9 @@ test.describe("Service Branch Coverage", () => {
 
     await page.evaluate(async () => {
       try {
-        await window.contactService.loadSharedKey(
-          "user",
-          "contact",
+        await window.documentService.loadKey(
+          "user@imagey.cloud",
+          "chat-contact",
           {} as unknown,
           {} as unknown,
         );

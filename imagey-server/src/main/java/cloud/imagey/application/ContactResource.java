@@ -29,7 +29,6 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -43,10 +42,11 @@ import jakarta.ws.rs.core.UriInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.chat.ContactKeys;
-import cloud.imagey.domain.chat.ContactRepository;
-import cloud.imagey.domain.chat.ContactService;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.contact.ContactExchange;
+import cloud.imagey.domain.contact.ContactRepository;
+import cloud.imagey.domain.contact.ContactService;
+import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 @Path("/")
@@ -64,11 +64,11 @@ public class ContactResource {
     @RolesAllowed("owner")
     @Path("{email}/contact-requests")
     @Consumes(APPLICATION_JSON)
-    public Response requestContact(@PathParam("email") User sender, User recipient, @Context UriInfo uriInfo) throws IOException {
-        boolean created = contactService.invite(sender, recipient);
+    public Response requestContact(@PathParam("email") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
+        boolean created = contactService.invite(inviter, new Email(request.recipient()), request.key());
         if (created) {
             UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
-            contactRequest.path(recipient.email().address());
+            contactRequest.path(request.recipient());
             return created(contactRequest.build()).build();
         } else {
             return noContent().build();
@@ -78,7 +78,8 @@ public class ContactResource {
     @GET
     @RolesAllowed("owner")
     @Path("{email}/contact-requests")
-    public List<User> getContactRequests(@PathParam("email") User user) {
+    @Produces(APPLICATION_JSON)
+    public List<ContactExchange> getContactRequests(@PathParam("email") User user) {
         return contactRepository.findContactRequests(user);
     }
 
@@ -89,43 +90,18 @@ public class ContactResource {
         contactService.declineInvitation(user, contact);
     }
 
-    @GET
-    @RolesAllowed("owner")
-    @Path("{email}/contacts")
-    @Produces(APPLICATION_JSON)
-    public List<User> getContacts(@PathParam("email") User user) {
-        return contactRepository.findContacts(user);
-    }
-
     @PUT
     @RolesAllowed("owner")
     @Path("{email}/contacts/{contact}")
     @Consumes(APPLICATION_JSON)
-    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, ContactKeys keys)
+    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contactUser, Contact contactObj)
             throws IOException {
-
-        contactService.acceptInvitation(user, contact, keys);
+        contactService.acceptInvitation(user, contactUser, contactObj.documentId(), contactObj.key());
     }
 
-    @GET
-    @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
-    @Produces(APPLICATION_JSON)
-    public EncryptedSharedKey getContactKey(@PathParam("email") User user, @PathParam("contact") User contact) {
-        return contactRepository.getContactKey(user, contact).orElseThrow(NotFoundException::new);
+    public record ContactRequest(String recipient, PublicKey key) {
     }
 
-
-
-    @PUT
-    @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
-    @Consumes(APPLICATION_JSON)
-    public void reissueContactKey(
-        @PathParam("email") User user,
-        @PathParam("contact") User contact,
-        ContactKeys keys) throws IOException {
-
-        contactService.reissueKey(user, contact, keys);
+    public record Contact(String documentId, String key) {
     }
 }

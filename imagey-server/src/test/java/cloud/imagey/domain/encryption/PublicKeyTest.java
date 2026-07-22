@@ -14,9 +14,26 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.encryption;
 
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public record ContactKeys(EncryptedSharedKey userKey, EncryptedSharedKey contactKey) {
+import org.junit.jupiter.api.Test;
+
+class PublicKeyTest {
+
+    @Test
+    void testPublicKeyConstructors() {
+        PublicKey emptyKey = new PublicKey();
+        assertThat(emptyKey.key()).isNull();
+
+        PublicKey nullKey = new PublicKey(null);
+        assertThat(nullKey.key()).isNull();
+
+        PublicKey blankKey = new PublicKey("   ");
+        assertThat(blankKey.key()).isNull();
+
+        PublicKey validKey = new PublicKey("{\"kty\":\"RSA\"}");
+        assertThat(validKey.key()).isEqualTo("{\"kty\":\"RSA\"}");
+    }
 }

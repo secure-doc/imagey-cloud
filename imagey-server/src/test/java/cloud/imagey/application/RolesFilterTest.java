@@ -19,7 +19,11 @@ package cloud.imagey.application;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.annotation.security.RolesAllowed;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.Response;
 
@@ -60,5 +64,51 @@ public class RolesFilterTest {
         // It might be 400 or something because of missing payload, but RolesFilter will process it with empty segments
 
         assertThat(rootResponse).isNotNull();
+    }
+
+    @Test
+    void testOwnerRoleForbidden() {
+        // Mary tries to get Joe's public key. The endpoint is @RolesAllowed("owner")
+        // So this tests that a non-owner is forbidden (403).
+        User mary = new User(new Email("mary@imagey.cloud"));
+        Cookie tokenCookie = new Cookie.Builder("token")
+            .value(tokenService.generateToken(mary, Integer.MAX_VALUE).token())
+            .build();
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/joe@imagey.cloud/public-keys/0")
+            .request()
+            .cookie(tokenCookie)
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void testUnknownRoleBranch() {
+        User mary = new User(new Email("mary@imagey.cloud"));
+        Cookie tokenCookie = new Cookie.Builder("token")
+            .value(tokenService.generateToken(mary, Integer.MAX_VALUE).token())
+            .build();
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/dummy")
+            .request()
+            .cookie(tokenCookie)
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Path("/dummy")
+    @ApplicationScoped
+    public static class DummyResource {
+        @GET
+        @RolesAllowed("unknown")
+        public String get() {
+            return "ok";
+        }
     }
 }

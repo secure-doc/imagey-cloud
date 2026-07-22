@@ -10,7 +10,7 @@ export default function AcceptInvitationButton({
   className?: string;
   user: string;
   contact: string;
-  onAccepted: () => void;
+  onAccepted: (documentId: string, key: JsonWebKey) => void;
 }) {
   const mainKeyPair = useAuthentication().keyPairs.mainKeyPair;
   return (
@@ -19,7 +19,7 @@ export default function AcceptInvitationButton({
       onClick={() => {
         contactService
           .acceptContactRequest(user, contact, mainKeyPair)
-          .then(() => onAccepted());
+          .then(({ documentId, key }) => onAccepted(documentId, key));
       }}
     >
       <i>check</i>

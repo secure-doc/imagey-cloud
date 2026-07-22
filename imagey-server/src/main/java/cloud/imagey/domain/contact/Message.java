@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.contact;
 
 import static java.util.Optional.ofNullable;
 
@@ -44,7 +44,7 @@ public record Message(
             new MessageContent(content));
     }
 
-    protected Message(User sender, MessageContent content) {
+    public Message(User sender, MessageContent content) {
         this(null, sender, null, content);
     }
 

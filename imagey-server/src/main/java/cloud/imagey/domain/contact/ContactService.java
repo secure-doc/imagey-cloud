@@ -14,11 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.contact;
 
-import static cloud.imagey.domain.chat.ContactStatus.DENIAL_RECEIVED;
-import static cloud.imagey.domain.chat.ContactStatus.DENIAL_SENT;
-import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
+import static cloud.imagey.domain.contact.ContactStatus.DENIED;
+import static cloud.imagey.domain.contact.ContactStatus.INVITED;
 import static cloud.imagey.domain.token.TokenService.ONE_WEEK;
 
 import java.io.IOException;
@@ -33,7 +32,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
@@ -71,29 +72,27 @@ public class ContactService {
     @ConfigProperty(name = "mail.invitation.body")
     private EmailBody invitationBody;
 
-    public boolean invite(User sender, User recipient) throws IOException {
+    public boolean invite(User sender, Email recipient, PublicKey key) throws IOException {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL");
         }
 
-        if (userRepository.exists(recipient)) {
-            ContactStatus currentStatus = contactRepository.getContactStatus(sender, recipient).orElse(null);
-            if (currentStatus == DENIAL_RECEIVED) {
+        if (userRepository.exists(new User(recipient))) {
+            ContactExchange currentExchange = contactRepository.getContactExchange(sender, new User(recipient)).orElse(null);
+            if (currentExchange != null && currentExchange.status() == DENIED) {
                 throw new ResourceConflictException("Contact request rejected");
             }
-            if (currentStatus == null || currentStatus == DENIAL_SENT) {
-                contactRepository.persist(sender, recipient, ContactStatus.INVITATION_SENT);
-                contactRepository.persist(recipient, sender, ContactStatus.INVITATION_RECEIVED);
+            if (currentExchange == null) {
+                contactRepository.persist(new ContactExchange(sender, recipient, INVITED, key, null, null));
                 return true;
             }
-            contactRepository.persist(recipient, sender, ContactStatus.INVITATION_RECEIVED);
             return false;
         } else {
-            contactRepository.persist(sender, recipient, ContactStatus.INVITATION_SENT);
-            Token token = tokenService.generateToken(recipient, ONE_WEEK);
+            contactRepository.persist(new ContactExchange(sender, recipient, INVITED, key, null, null));
+            Token token = tokenService.generateToken(new User(recipient), ONE_WEEK); // TODO add public key to token
             String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.email().address();
-            mailService.send(recipient.email(), new EmailTemplate(
+            mailService.send(recipient, new EmailTemplate(
                 new Email("invitation@" + domain.getHost()),
                 invitationSubject,
                 invitationBody
@@ -102,24 +101,25 @@ public class ContactService {
         }
     }
 
-    public void acceptInvitation(User user, User contact, ContactKeys keys) throws IOException {
-        if (contactRepository.getContactStatus(user, contact).filter(INVITATION_RECEIVED::equals).isPresent()) {
-            contactRepository.persist(user, contact, keys.userKey());
-            contactRepository.persist(contact, user, keys.contactKey());
-        } else {
-            throw new ResourceConflictException("Contact request rejected");
-        }
+    public void acceptInvitation(User user, User inviter, String documentId, String key) throws IOException {
+        ContactExchange exchange = contactRepository.getContactExchange(user, inviter)
+            .filter(e -> e.status() == INVITED)
+            .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
+
+        EncryptedSharedKey encryptedSharedKey = new EncryptedSharedKey("USER", inviter.email().address(), "0", key);
+        ContactExchange accepted = new ContactExchange(
+            exchange.inviter(), exchange.invitee(), exchange.status(), exchange.publicKey(),
+            new DocumentId(documentId), encryptedSharedKey);
+        contactRepository.persist(accepted);
     }
 
     public void declineInvitation(User user, User requestor) throws IOException {
-        contactRepository.persist(user, requestor, ContactStatus.DENIAL_SENT);
-        contactRepository.persist(requestor, user, ContactStatus.DENIAL_RECEIVED);
-    }
-
-    public void reissueKey(User user, User contact, ContactKeys keys) throws IOException {
-        if (!contactRepository.isContact(user, contact)) {
-            throw new ResourceConflictException("Not a contact");
+        ContactExchange exchange = contactRepository.getContactExchange(user, requestor).orElse(null);
+        if (exchange != null) {
+            contactRepository.persist(new ContactExchange(
+                exchange.inviter(), exchange.invitee(), DENIED, exchange.publicKey(), exchange.documentId(), exchange.sharedKey()));
+        } else {
+            contactRepository.persist(new ContactExchange(requestor, user.email(), DENIED, null, null, null));
         }
-        contactRepository.reissueKey(user, contact, keys);
     }
 }

@@ -32,7 +32,7 @@ public abstract class AbstractRecordMessageBodyWriter {
         }
         RecordComponent[] recordComponents = r.getClass().getRecordComponents();
         if (recordComponents.length == 1) {
-            return read((Record)r, recordComponents[0]);
+            return write(read((Record)r, recordComponents[0]));
         }
         Map<String, Object> values = new HashMap<>();
         for (RecordComponent component: recordComponents) {

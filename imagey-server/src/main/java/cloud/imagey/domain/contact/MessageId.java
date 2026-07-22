@@ -14,13 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.chat;
+package cloud.imagey.domain.contact;
 
 import java.util.UUID;
 
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-import cloud.imagey.domain.chat.MessageId.Adapter;
+import cloud.imagey.domain.contact.MessageId.Adapter;
 import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
 @JsonbTypeAdapter(Adapter.class)

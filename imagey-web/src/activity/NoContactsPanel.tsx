@@ -12,12 +12,13 @@ export default function NoContactsPanel({ className }: { className?: string }) {
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  const publicMainKey = authentication.keyPairs.mainKeyPair.publicKey;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleContactRequest = async (userId: UserId) => {
     if (user) {
       try {
-        await contactRepository.sendContactRequest(user, userId);
+        await contactRepository.sendContactRequest(user, userId, publicMainKey);
         setIsDialogOpen(false);
       } catch (error) {
         console.error("Failed to send contact request", error);
