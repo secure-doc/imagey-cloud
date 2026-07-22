@@ -5,6 +5,7 @@ import { useActionIcons } from "../contexts/ActionBarContext";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
+import { ContactRequest } from "../contact/ContactRequest";
 import { Contact } from "../contact/Contact";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
@@ -28,8 +29,9 @@ export function ChatsList({
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  const keyPair = authentication.keyPairs.mainKeyPair;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [contactRequests, setContactRequests] = useState<Contact[]>();
+  const [contactRequests, setContactRequests] = useState<ContactRequest[]>();
   const [contacts, setContacts] = useState<Contact[]>();
 
   const actionIcons = useMemo(
@@ -48,14 +50,14 @@ export function ChatsList({
 
   useEffect(() => {
     contactRepository
-      .getContacts(user)
+      .getContacts(user, keyPair.publicKey, keyPair.privateKey)
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));
     contactRepository
       .getContactRequests(user)
       .then((contactRequests) => setContactRequests(contactRequests))
       .catch((e) => console.error("Failed to fetch contact requests", e));
-  }, [user]);
+  }, [user, keyPair]);
 
   const handleContactRequest = async (email: string) => {
     if (user) {
@@ -96,14 +98,18 @@ export function ChatsList({
                   <AcceptInvitationButton
                     user={user}
                     contact={contactRequest.userId}
-                    onAccepted={() => {
+                    onAccepted={(documentId, key) => {
                       setContactRequests((contactRequests) =>
                         contactRequests?.filter(
                           (request) => request.userId !== contactRequest.userId,
                         ),
                       );
                       setContacts((contacts) =>
-                        contacts?.concat(contactRequest),
+                        (contacts || []).concat({
+                          userId: contactRequest.userId,
+                          documentId: documentId,
+                          key: key,
+                        }),
                       );
                     }}
                   />

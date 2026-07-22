@@ -22,17 +22,6 @@ test("navigate to chats", async ({ page }) => {
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
 
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
   const given = provider
     .addInteraction()
     .given("Mary has declined lauras invitation")
@@ -104,16 +93,6 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
   await prepareMarysLogin(page);
 
   await prepareMarysDocuments();
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
 
   const given = provider
     .addInteraction()

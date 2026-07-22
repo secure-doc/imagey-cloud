@@ -29,7 +29,6 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -43,10 +42,8 @@ import jakarta.ws.rs.core.UriInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.chat.ContactKeys;
 import cloud.imagey.domain.chat.ContactRepository;
 import cloud.imagey.domain.chat.ContactService;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.user.User;
 
 @Path("/")
@@ -93,39 +90,16 @@ public class ContactResource {
     @RolesAllowed("owner")
     @Path("{email}/contacts")
     @Produces(APPLICATION_JSON)
-    public List<User> getContacts(@PathParam("email") User user) {
+    public List<String> getContacts(@PathParam("email") User user) {
         return contactRepository.findContacts(user);
     }
 
     @PUT
     @RolesAllowed("owner")
     @Path("{email}/contacts/{contact}")
-    @Consumes(APPLICATION_JSON)
-    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, ContactKeys keys)
+    @Consumes("text/plain")
+    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, String documentId)
             throws IOException {
-
-        contactService.acceptInvitation(user, contact, keys);
-    }
-
-    @GET
-    @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
-    @Produces(APPLICATION_JSON)
-    public EncryptedSharedKey getContactKey(@PathParam("email") User user, @PathParam("contact") User contact) {
-        return contactRepository.getContactKey(user, contact).orElseThrow(NotFoundException::new);
-    }
-
-
-
-    @PUT
-    @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
-    @Consumes(APPLICATION_JSON)
-    public void reissueContactKey(
-        @PathParam("email") User user,
-        @PathParam("contact") User contact,
-        ContactKeys keys) throws IOException {
-
-        contactService.reissueKey(user, contact, keys);
+        contactService.acceptInvitation(user, contact, documentId);
     }
 }

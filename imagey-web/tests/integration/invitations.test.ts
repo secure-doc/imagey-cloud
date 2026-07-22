@@ -34,7 +34,7 @@ test("accept open invitations", async ({ page }) => {
     })
     .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
 
-  const builder = provider
+  provider
     .addInteraction()
     .given("mary has no contacts and a contact request from bill")
     .uponReceiving("a request of mary to accept bills invitation")
@@ -43,26 +43,59 @@ test("accept open invitations", async ({ page }) => {
       "/users/mary@imagey.cloud/contacts/bill@imagey.cloud",
       (r) => {
         r.headers({
-          "Content-Type": "application/json",
-        });
-        // We don't exact-match the encrypted key because it changes dynamically
-        r.jsonBody({
-          userKey: MatchersV3.like({
-            issuerType: "USER",
-            issuer: "mary@imagey.cloud",
-            kid: "0",
-            sharedKey: "dummy-encrypted-key",
-          }),
-          contactKey: MatchersV3.like({
-            issuerType: "USER",
-            issuer: "bill@imagey.cloud",
-            kid: "0",
-            sharedKey: "dummy-encrypted-key",
-          }),
+          "Content-Type": "text/plain",
         });
       },
     )
     .willRespondWith(204);
+
+  provider
+    .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request to create the chat document for bill")
+    .withRequest(
+      "PUT",
+      MatchersV3.regex(
+        "\\/users\\/mary@imagey\\.cloud\\/documents\\/[a-f0-9\\-]+",
+        "/users/mary@imagey.cloud/documents/e5b33d75-00c7-4e9f-a332-0a296ab84c93",
+      ),
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(200);
+
+  provider
+    .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request to upload marys key for the chat")
+    .withRequest(
+      "PUT",
+      MatchersV3.regex(
+        "\\/users\\/mary@imagey\\.cloud\\/documents\\/[a-f0-9\\-]+\\/keys\\/mary@imagey\\.cloud",
+        "/users/mary@imagey.cloud/documents/e5b33d75-00c7-4e9f-a332-0a296ab84c93/keys/mary@imagey.cloud",
+      ),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({ sharedKey: MatchersV3.string("AAAA") });
+      },
+    )
+    .willRespondWith(200);
+
+  const builder = provider
+    .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request to upload bills key for the chat")
+    .withRequest(
+      "PUT",
+      MatchersV3.regex(
+        "\\/users\\/mary@imagey\\.cloud\\/documents\\/[a-f0-9\\-]+\\/keys\\/bill@imagey\\.cloud",
+        "/users/mary@imagey.cloud/documents/e5b33d75-00c7-4e9f-a332-0a296ab84c93/keys/bill@imagey.cloud",
+      ),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({ sharedKey: MatchersV3.string("AAAA") });
+      },
+    )
+    .willRespondWith(200);
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -135,7 +168,7 @@ test("accept open invitations fails", async ({ page }) => {
   await prepareEmptyMarysDocuments();
   await prepareMarysContactRequests();
 
-  const builder = provider
+  provider
     .addInteraction()
     .uponReceiving("a request of mary to get bills public key (fail case)")
     .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) => {
@@ -144,6 +177,54 @@ test("accept open invitations fails", async ({ page }) => {
       });
     })
     .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
+
+  provider
+    .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request to create the chat document for bill (fail case)")
+    .withRequest(
+      "PUT",
+      MatchersV3.regex(
+        "\\/users\\/mary@imagey\\.cloud\\/documents\\/[a-f0-9\\-]+",
+        "/users/mary@imagey.cloud/documents/e5b33d75-00c7-4e9f-a332-0a296ab84c93",
+      ),
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(200);
+
+  provider
+    .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request to upload marys key for the chat (fail case)")
+    .withRequest(
+      "PUT",
+      MatchersV3.regex(
+        "\\/users\\/mary@imagey\\.cloud\\/documents\\/[a-f0-9\\-]+\\/keys\\/mary@imagey\\.cloud",
+        "/users/mary@imagey.cloud/documents/e5b33d75-00c7-4e9f-a332-0a296ab84c93/keys/mary@imagey.cloud",
+      ),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({ sharedKey: MatchersV3.string("AAAA") });
+      },
+    )
+    .willRespondWith(200);
+
+  const builder = provider
+    .addInteraction()
+    .given("mary has no contacts and a contact request from bill")
+    .uponReceiving("a request to upload bills key for the chat (fail case)")
+    .withRequest(
+      "PUT",
+      MatchersV3.regex(
+        "\\/users\\/mary@imagey\\.cloud\\/documents\\/[a-f0-9\\-]+\\/keys\\/bill@imagey\\.cloud",
+        "/users/mary@imagey.cloud/documents/e5b33d75-00c7-4e9f-a332-0a296ab84c93/keys/bill@imagey.cloud",
+      ),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({ sharedKey: MatchersV3.string("AAAA") });
+      },
+    )
+    .willRespondWith(200);
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -172,10 +253,14 @@ test("accept open invitations fails", async ({ page }) => {
     await expect(invitationPanel).toBeVisible();
 
     // Act: Accept Alice
+    const responsePromise = page.waitForResponse(
+      (r) => r.url().includes("/contacts/") && r.status() === 500,
+    );
     const acceptAliceBtn = invitationPanel.getByRole("button", {
       name: "check",
     });
     await acceptAliceBtn.click();
+    await responsePromise;
 
     // Panel should still be visible because it threw an error
     await expect(invitationPanel).toBeVisible();
@@ -215,10 +300,14 @@ test("decline open invitations fails", async ({ page }) => {
     await expect(invitationPanel).toBeVisible();
 
     // Act: Decline Alice
+    const responsePromise = page.waitForResponse(
+      (r) => r.url().includes("/contact-requests/") && r.status() === 500,
+    );
     const declineAliceBtn = invitationPanel.getByRole("button", {
       name: "close",
     });
     await declineAliceBtn.click();
+    await responsePromise;
 
     // Panel should still be visible because it threw an error
     await expect(invitationPanel).toBeVisible();

@@ -87,13 +87,16 @@ public class InvitationTest {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/mary@imagey.cloud/contact-requests")
+            .path("users/mary@imagey.cloud/documents/chat-1234/keys/luise@imagey.cloud")
             .request()
             .header("Origin", "https://secure-doc.store")
             .cookie(marysToken)
-            .post(json("""
+            .put(json("""
                 {
-                    "email": "luise@imagey.cloud"
+                    "issuerType": "USER",
+                    "issuer": "mary@imagey.cloud",
+                    "kid": "0",
+                    "sharedKey": "ZHVtbXktYmFzZTY0LWtleQ=="
                 }
             """));
 

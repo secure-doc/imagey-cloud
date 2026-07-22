@@ -17,14 +17,11 @@
 package cloud.imagey.application.authentication;
 
 import static cloud.imagey.application.authentication.DefaultSecurityContext.forPrincipal;
-import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
-import static cloud.imagey.domain.chat.ContactStatus.INVITATION_SENT;
 import static jakarta.ws.rs.Priorities.AUTHENTICATION;
 import static java.util.Optional.ofNullable;
 
 import java.io.IOException;
 import java.security.Principal;
-import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -45,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import cloud.imagey.domain.chat.ContactRepository;
+import cloud.imagey.domain.chat.ContactStatus;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
@@ -63,9 +61,9 @@ public class RolesFilter implements ContainerRequestFilter {
     @Inject
     private TokenService tokenService;
     @Inject
-    private ContactRepository contactRepository;
-    @Inject
     private DocumentRepository documentRepository;
+    @Inject
+    private ContactRepository contactRepository;
     @Inject
     private HttpServletRequest request;
 
@@ -116,15 +114,15 @@ public class RolesFilter implements ContainerRequestFilter {
     private boolean hasRole(User currentPrincipal, User contextUser, UriInfo uriInfo, String role) {
         if ("owner".equals(role)) {
             return currentPrincipal.equals(contextUser);
+        } else if ("recipient".equals(role)) {
+            return extractDocumentId(uriInfo)
+                .map(docId -> documentRepository.hasSharedKey(contextUser, docId, currentPrincipal.email()))
+                .orElse(false);
         } else if ("contact".equals(role)) {
             return contactRepository.isContact(contextUser, currentPrincipal);
         } else if ("contact-request".equals(role)) {
             return contactRepository.getContactStatus(contextUser, currentPrincipal)
-                .filter(status -> EnumSet.of(INVITATION_SENT, INVITATION_RECEIVED).contains(status))
-                .isPresent();
-        } else if ("recipient".equals(role)) {
-            return extractDocumentId(uriInfo)
-                .map(docId -> documentRepository.hasSharedKey(contextUser, docId, currentPrincipal.email()))
+                .map(status -> status == ContactStatus.INVITATION_RECEIVED || status == ContactStatus.INVITATION_SENT)
                 .orElse(false);
         }
         return false;

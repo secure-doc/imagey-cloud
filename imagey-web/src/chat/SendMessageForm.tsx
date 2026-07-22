@@ -11,6 +11,7 @@ import ImageList from "../components/ImageList";
 interface SendMessageFormProps {
   userEmail: string;
   contactEmail: string;
+  chatDocumentId: string;
   sharedKey: JsonWebKey;
   onMessageSent: (message: Message) => void;
 }
@@ -18,6 +19,7 @@ interface SendMessageFormProps {
 export function SendMessageForm({
   userEmail,
   contactEmail,
+  chatDocumentId,
   sharedKey,
   onMessageSent,
 }: SendMessageFormProps) {
@@ -59,7 +61,7 @@ export function SendMessageForm({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !userEmail || !contactEmail || !sharedKey)
+    if (!inputMessage.trim() || !userEmail || !chatDocumentId || !sharedKey)
       return;
 
     const messageText = inputMessage;
@@ -67,7 +69,7 @@ export function SendMessageForm({
     try {
       const newMessage = await messageService.sendEncryptedMessage(
         userEmail,
-        contactEmail,
+        chatDocumentId,
         messageText,
         sharedKey,
       );
@@ -97,7 +99,7 @@ export function SendMessageForm({
 
       const newMessage = await messageService.sendEncryptedMessage(
         userEmail,
-        contactEmail,
+        chatDocumentId,
         payload,
         sharedKey,
       );

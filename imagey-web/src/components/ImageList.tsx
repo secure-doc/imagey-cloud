@@ -26,6 +26,10 @@ export default function ImageList({
           );
         }
 
+        if (doc.type?.toLowerCase() === "chat") {
+          return null;
+        }
+
         if (onImageClick) {
           return (
             <a

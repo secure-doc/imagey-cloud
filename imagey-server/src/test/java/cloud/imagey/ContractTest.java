@@ -139,7 +139,15 @@ public class ContractTest {
                     = path.indexOf("users/mary%40imagey.cloud/documents") + "users/mary%40imagey.cloud/documents".length() + 1;
                 String documentId = path.substring(documentIdStart);
                 documentRepository.getTimestamp(new User(new Email("mary@imagey.cloud")), new DocumentId(documentId))
-                    .ifPresent(etag -> updatableRequest.setHeader("If-Match", etag));
+                    .ifPresent(etag -> {
+                        java.util.logging.Logger.getLogger(ContractTest.class.getName())
+                            .info("FOUND TIMESTAMP FOR " + documentId + ": " + etag);
+                        updatableRequest.setHeader("If-Match", etag);
+                    });
+                if (documentRepository.getTimestamp(new User(new Email("mary@imagey.cloud")), new DocumentId(documentId)).isEmpty()) {
+                    java.util.logging.Logger.getLogger(ContractTest.class.getName())
+                        .info("NO TIMESTAMP FOUND FOR " + documentId);
+                }
             }
         }
         context.verifyInteraction();
@@ -262,19 +270,15 @@ public class ContractTest {
 
     @State("mary has no contacts and a contact request from bill")
     void maryHasNoContactsAndBillRequest() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
-        File marysContactRequests = new File(getMarysData(), "contact-requests");
-        deleteQuietly(marysContactRequests);
-        File billReq = new File(marysContactRequests, "bill@imagey.cloud");
-        billReq.mkdirs();
-        writeStringToFile(new File(billReq, "status.txt"), "INVITATION_RECEIVED", UTF_8);
+        File contactRequests = new File(new File(rootPath, "mary@imagey.cloud"), "contact-requests");
+        File billRequest = new File(contactRequests, "bill@imagey.cloud");
+        billRequest.mkdirs();
+        java.nio.file.Files.writeString(new File(billRequest, "status.txt").toPath(), "INVITATION_RECEIVED");
     }
 
     @State("mary has no contacts")
     void maryHasNoContacts() throws IOException {
-        deleteQuietly(new File(getMarysData(), "contacts"));
-        deleteQuietly(new File(getMarysData(), "contact-requests"));
+        // Nothing to do for Documents logic, except ensuring no chats exist.
     }
 
     @State("mary has no documents")
@@ -306,30 +310,65 @@ public class ContractTest {
 
     @State("Mary has a chat with alice")
     void maryHasChatWithAlice() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
-        File aliceChat = new File(marysContacts, "alice@imagey.cloud");
-        aliceChat.mkdirs();
-        writeStringToFile(new File(aliceChat, "key.json"),
-            "{\"issuerType\":\"USER\",\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
-            + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
-            + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
-            + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
-            UTF_8);
+        File chatAlice = new File(getMarysDocuments(), "chat-alice");
+        chatAlice.mkdirs();
+        File aliceKeysDir = new File(chatAlice, "keys/alice@imagey.cloud");
+        aliceKeysDir.mkdirs();
+        File maryKeysDir = new File(chatAlice, "keys/mary@imagey.cloud");
+        maryKeysDir.mkdirs();
+        byte[] keyBytes = java.util.Base64.getDecoder().decode(
+            "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3I"
+            + "FKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0U"
+            + "Ce1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf");
+        java.nio.file.Files.write(new File(aliceKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+        java.nio.file.Files.write(new File(maryKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+
+        File metadataEnc = new File(chatAlice, "metadata.enc");
+        java.nio.file.Files.write(metadataEnc.toPath(), java.util.Base64.getDecoder().decode(
+            "SvwyuvGK490PcZkvPvA3AiKeIehXCWjrEDomT57qgNdEVzRexUtOi7EpvekQPmQJSVIjB"
+            + "p/3A6fUXLYIvlOElC326VhFbiA="));
+    }
+
+    @State("Mary has a chat with laura")
+    void maryHasChatWithLaura() throws IOException {
+        File chatLaura = new File(getMarysDocuments(), "chat-laura");
+        chatLaura.mkdirs();
+        File lauraKeysDir = new File(chatLaura, "keys/laura@imagey.cloud");
+        lauraKeysDir.mkdirs();
+        File maryKeysDir = new File(chatLaura, "keys/mary@imagey.cloud");
+        maryKeysDir.mkdirs();
+        byte[] keyBytes = java.util.Base64.getDecoder().decode(
+            "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3I"
+            + "FKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0U"
+            + "Ce1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf");
+        java.nio.file.Files.write(new File(lauraKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+        java.nio.file.Files.write(new File(maryKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+
+        File metadataEnc = new File(chatLaura, "metadata.enc");
+        java.nio.file.Files.write(metadataEnc.toPath(), java.util.Base64.getDecoder().decode(
+            "+2lw6hmPx/N/djM8ASn+kG5CI5TaL2nXMQZXO1mF6HXgZKobzxIi+eGIh96Hyw2tIaawc"
+            + "48GL69wePVfXDEl0o8BMmpdgHQ="));
     }
 
     @State("Mary has a chat with bill")
     void maryHasChatWithBill() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
-        File billChat = new File(marysContacts, "bill@imagey.cloud");
-        billChat.mkdirs();
-        writeStringToFile(new File(billChat, "key.json"),
-            "{\"issuerType\":\"USER\",\"issuer\":\"mary@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
-            + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
-            + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
-            + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
-            UTF_8);
+        File chatBill = new File(getMarysDocuments(), "chat-bill");
+        chatBill.mkdirs();
+        File billKeysDir = new File(chatBill, "keys/bill@imagey.cloud");
+        billKeysDir.mkdirs();
+        File maryKeysDir = new File(chatBill, "keys/mary@imagey.cloud");
+        maryKeysDir.mkdirs();
+        byte[] keyBytes = java.util.Base64.getDecoder().decode(
+            "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3I"
+            + "FKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0U"
+            + "Ce1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf");
+        java.nio.file.Files.write(new File(billKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+        java.nio.file.Files.write(new File(maryKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+
+        File metadataEnc = new File(chatBill, "metadata.enc");
+        java.nio.file.Files.write(metadataEnc.toPath(), java.util.Base64.getDecoder().decode(
+            "SvwyuvGK490PcZkvPvA3AiKeIehXCWjrEDomT57qgNdEVzRexUtOi7EpvekQPmQJSVIjB"
+            + "p/3A6fUXLYIvlOElC326VhFbiA="));
     }
 
     @State("marys second device unlocked")
@@ -413,16 +452,25 @@ public class ContractTest {
 
     @State("Alice has a chat with mary")
     void aliceHasChatWithMary() throws IOException {
-        File aliceContacts = new File(getAlicesData(), "contacts");
-        File maryChat = new File(aliceContacts, "mary@imagey.cloud");
+        File alicesDocuments = new File(getAlicesData(), "documents");
+        File maryChat = new File(alicesDocuments, "chat-mary");
         maryChat.mkdirs();
-        writeStringToFile(new File(maryChat, "key.json"),
-            "{\"issuer\":\"alice@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\""
-            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
-            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
-            UTF_8);
+        File maryKeysDir = new File(maryChat, "keys/mary@imagey.cloud");
+        maryKeysDir.mkdirs();
+        File aliceKeysDir = new File(maryChat, "keys/alice@imagey.cloud");
+        aliceKeysDir.mkdirs();
+        byte[] keyBytes = java.util.Base64.getDecoder().decode(
+            "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
+            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf");
+        java.nio.file.Files.write(new File(maryKeysDir, "encrypted-shared.key").toPath(), keyBytes);
+        java.nio.file.Files.write(new File(aliceKeysDir, "encrypted-shared.key").toPath(), keyBytes);
 
-        File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
+        File metadataEnc = new File(maryChat, "metadata.enc");
+        java.nio.file.Files.write(metadataEnc.toPath(), java.util.Base64.getDecoder().decode(
+            "3JS7BGWaI//XsrMv2abdE+Sx+sGGG8dthuI2NlfqoTx66dyvSXt6ahEw3aCMl5cs+POVLy"
+            + "ZBA8NzjzNqpqrD7r9Weyo3MA=="));
+
+        File messagesDir = new File(maryChat, "messages");
         messagesDir.mkdirs();
         File messageFile = new File(messagesDir, "msg-123.json");
         writeStringToFile(messageFile,
@@ -433,7 +481,9 @@ public class ContractTest {
 
     @State("Alice has received a message from Mary with shared doc")
     void aRequestToReceiveMessagesWithSharedDoc() throws IOException {
-        File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
+        File alicesDocuments = new File(getAlicesData(), "documents");
+        File maryChat = new File(alicesDocuments, "chat-mary");
+        File messagesDir = new File(maryChat, "messages");
         messagesDir.mkdirs();
         File messageFile = new File(messagesDir, "msg-999.json");
         writeStringToFile(messageFile,

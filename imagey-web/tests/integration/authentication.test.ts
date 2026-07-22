@@ -241,9 +241,9 @@ test("new user clicks registration link", async ({ page }) => {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of joe to get contacts")
-    .withRequest("GET", "/users/joe@imagey.cloud/contacts", (r) =>
-      r.headers({
+    .uponReceiving("a request of joe to get documents with folderId")
+    .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
+      r.query({ folderId: Matchers.string("some-uuid") }).headers({
         Accept: "application/json",
       }),
     )
@@ -251,9 +251,9 @@ test("new user clicks registration link", async ({ page }) => {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of joe to get documents with folderId")
+    .uponReceiving("a request of joe to get root documents")
     .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
-      r.query({ folderId: Matchers.string("some-uuid") }).headers({
+      r.headers({
         Accept: "application/json",
       }),
     )
@@ -302,9 +302,6 @@ test("new user clicks registration link", async ({ page }) => {
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill(TestData.mary.password);
 
-      const contactsResponse = page.waitForResponse(
-        "**/users/joe@imagey.cloud/contacts",
-      );
       const documentsResponse = page.waitForResponse((r) =>
         r.url().includes("/users/joe@imagey.cloud/documents"),
       );
@@ -315,11 +312,7 @@ test("new user clicks registration link", async ({ page }) => {
       await page.getByLabel("Confirm Password").fill(TestData.mary.password);
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
-      await Promise.all([
-        contactsResponse,
-        documentsResponse,
-        contactRequestsResponse,
-      ]);
+      await Promise.all([documentsResponse, contactRequestsResponse]);
 
       // Then
       await expect(page.getByText(/Upload Images/)).toBeVisible();
@@ -717,16 +710,6 @@ test("existing user authenticates via challenge-response on existing device", as
     .given("marys second device registered")
     .given("marys second device unlocked")
     .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts after challenge")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  await provider
-    .addInteraction()
-    .given("marys second device registered")
-    .given("marys second device unlocked")
     .uponReceiving("a request of mary to get contact requests after challenge")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({ Accept: "application/json" }),
@@ -911,18 +894,6 @@ test("existing user authenticates via challenge-response and selects keep me log
     .given("marys second device registered")
     .given("marys second device unlocked")
     .given("mary has no contacts")
-    .uponReceiving(
-      "a request of mary to get contacts after challenge with keep me logged in",
-    )
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  await provider
-    .addInteraction()
-    .given("marys second device registered")
-    .given("marys second device unlocked")
     .given("mary has no contacts")
     .uponReceiving(
       "a request of mary to get contact requests after challenge with keep me logged in",
