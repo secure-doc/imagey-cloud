@@ -25,6 +25,7 @@ import jakarta.inject.Inject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -37,8 +38,8 @@ public class MessageService {
     @Inject
     private Event<Message> messageEvent;
 
-    public Message sendMessage(User sender, User receiver, MessageContent encryptedContent) throws IOException {
-        Message message = messageRepository.persist(receiver, sender, encryptedContent);
+    public Message sendMessage(User user, User sender, DocumentId documentId, MessageContent encryptedContent) throws IOException {
+        Message message = messageRepository.persist(user, sender, documentId, encryptedContent);
         messageEvent.fire(message);
         return message;
     }

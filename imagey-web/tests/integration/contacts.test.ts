@@ -122,16 +122,7 @@ test("invite contact from empty panel", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
 
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts returning empty")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareEmptyMarysDocuments();
 
   provider
     .addInteraction()

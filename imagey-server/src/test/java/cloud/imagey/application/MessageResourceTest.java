@@ -45,6 +45,9 @@ import org.junit.jupiter.api.Test;
 
 import cloud.imagey.domain.chat.Message;
 import cloud.imagey.domain.chat.MessageId;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -64,6 +67,8 @@ public class MessageResourceTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private DocumentRepository documentRepository;
 
     private Cookie receiverCookie;
     private Cookie senderCookie;
@@ -83,13 +88,16 @@ public class MessageResourceTest {
         receiver = new User(new Email("receiver@example.com"));
         sender = new User(new Email("sender@example.com"));
 
+        documentRepository.persist(sender, new DocumentId("chat-1234"), new EncryptedContent(new byte[0]));
+        documentRepository.persist(sender, new DocumentId("chat-1234"), receiver.email(), new EncryptedContent(new byte[0]));
+
         receiverCookie = new Cookie.Builder("token").value(tokenService.generateToken(receiver, Integer.MAX_VALUE).token()).build();
         receiverClient = path -> newClient()
                 .register(RecordMessageBodyReader.class)
                 .register(RecordListMessageBodyWriter.class)
                 .register(RecordMessageBodyWriter.class)
                 .target("http://localhost:" + config.getHttpPort())
-                .path("users").path(receiver.email().address()).path(path)
+                .path("users").path(sender.email().address()).path(path) // using sender as document owner
                 .request()
                 .cookie(receiverCookie);
 
@@ -108,13 +116,13 @@ public class MessageResourceTest {
     @DisplayName("Send and receive messages")
     void sendAndReceiveMessages() throws Exception {
         // Send a message
-        Response response = senderClient.path("contacts/receiver@example.com/messages")
+        Response response = senderClient.path("documents/chat-1234/messages")
             .post(text("encrypted-content"));
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-        assertThat(response.getLocation().toString()).matches(".*/users/sender@example.com/contacts/receiver@example.com/messages/.*");
+        assertThat(response.getLocation().toString()).matches(".*/users/sender@example.com/documents/chat-1234/messages/.*");
 
         // Receive the message
-        List<Message> messages = receiverClient.path("contacts/sender@example.com/messages")
+        List<Message> messages = receiverClient.path("documents/chat-1234/messages")
             .get(new GenericType<List<Message>>() { });
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content().value()).isEqualTo("encrypted-content");
@@ -124,7 +132,7 @@ public class MessageResourceTest {
     @DisplayName("Receive multiple messages with sinceId")
     void receiveMultipleMessagesWithSinceId() throws Exception {
         // Send first message
-        Response firstMessage = senderClient.path("contacts/receiver@example.com/messages")
+        Response firstMessage = senderClient.path("documents/chat-1234/messages")
             .post(text("first-content"));
         assertThat(firstMessage.getStatus()).isEqualTo(CREATED.getStatusCode());
 
@@ -132,12 +140,12 @@ public class MessageResourceTest {
         Thread.sleep(10);
 
         // Send second message
-        Response secondMessage = senderClient.path("contacts/receiver@example.com/messages")
+        Response secondMessage = senderClient.path("documents/chat-1234/messages")
             .post(text("second-content"));
         assertThat(secondMessage.getStatus()).isEqualTo(CREATED.getStatusCode());
 
         // Receive all messages
-        List<Message> allMessages = receiverClient.path("contacts/sender@example.com/messages")
+        List<Message> allMessages = receiverClient.path("documents/chat-1234/messages")
             .get(new GenericType<List<Message>>() { });
         assertThat(allMessages).hasSize(2);
         assertThat(allMessages.get(0).content().value()).isEqualTo("first-content");
@@ -148,8 +156,9 @@ public class MessageResourceTest {
         // Receive messages with sinceId
         List<Message> newMessages = newClient()
             .register(RecordListMessageBodyWriter.class)
+            .register(RecordMessageBodyReader.class)
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(receiver.email().address()).path("contacts/sender@example.com/messages")
+            .path("users").path(sender.email().address()).path("documents/chat-1234/messages")
             .queryParam("sinceId", firstId.value())
             .request()
             .cookie(receiverCookie)
@@ -163,7 +172,7 @@ public class MessageResourceTest {
     @DisplayName("Receive messages with long polling")
     void receiveMessagesLongPolling() throws Exception {
         // Start long polling
-        Future<List<Message>> futureMessages = receiverClient.path("contacts/sender@example.com/messages")
+        Future<List<Message>> futureMessages = receiverClient.path("documents/chat-1234/messages")
             .header("Prefer", "wait=30")
             .async()
             .get(new GenericType<List<Message>>() { });
@@ -172,7 +181,7 @@ public class MessageResourceTest {
         Thread.sleep(500);
 
         // Send a message
-        Response response = senderClient.path("contacts/receiver@example.com/messages")
+        Response response = senderClient.path("documents/chat-1234/messages")
             .post(text("delayed-content"));
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
 
@@ -185,7 +194,7 @@ public class MessageResourceTest {
     @Test
     @DisplayName("Prefer header with number format exception falls back to 0 timeout")
     void testPreferHeaderNumberFormatException() throws Exception {
-        Response response = receiverClient.path("contacts/sender@example.com/messages")
+        Response response = receiverClient.path("documents/chat-1234/messages")
             .header("Prefer", "wait=999999999999999999999999999999999999999")
             .get();
 
@@ -195,7 +204,7 @@ public class MessageResourceTest {
     @Test
     @DisplayName("Invalid Prefer header format falls back to 0 timeout")
     void testInvalidPreferHeaderFormat() throws Exception {
-        Response response = receiverClient.path("contacts/sender@example.com/messages")
+        Response response = receiverClient.path("documents/chat-1234/messages")
             .header("Prefer", "invalid-prefer-value")
             .get();
 

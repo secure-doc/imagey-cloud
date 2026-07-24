@@ -2,7 +2,6 @@ import { authenticationRepository } from "../authentication/AuthenticationReposi
 import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
-import { ContactKeys } from "./Contact";
 import { contactRepository } from "./ContactRepository";
 
 export const contactService = {
@@ -10,43 +9,73 @@ export const contactService = {
     userId: UserId,
     contactId: UserId,
     mainKeyPair: JsonWebKeyPair,
-  ): Promise<void> => {
+  ): Promise<{ documentId: string; key: JsonWebKey }> => {
     try {
       const contactPublicKey =
         await authenticationRepository.loadPublicMainKey(contactId);
-      const sharedKey = await cryptoService.generateSymmetricKey();
+
+      const chatDocumentKey = await cryptoService.generateSymmetricKey();
+      const documentId = cryptoService.generateUuid();
+
+      const chatFolderPayload = JSON.stringify({
+        name: contactId,
+        type: "Chat",
+      });
+      const chatFolderPayloadBuffer = new TextEncoder().encode(
+        chatFolderPayload,
+      ).buffer;
+      const encryptedChatFolderPayload = await cryptoService.encryptDocument(
+        chatDocumentKey,
+        [chatFolderPayloadBuffer],
+      );
 
       const contactEncryptedSharedKey = await cryptoService.encryptKey(
-        sharedKey,
+        chatDocumentKey,
         contactPublicKey,
         mainKeyPair.privateKey,
       );
       const myEncryptedSharedKey = await cryptoService.encryptKey(
-        sharedKey,
+        chatDocumentKey,
         mainKeyPair.publicKey,
         mainKeyPair.privateKey,
       );
 
-      const contactKeys: ContactKeys = {
-        userKey: {
-          issuerType: "USER",
-          issuer: userId,
-          kid: "0",
-          sharedKey: myEncryptedSharedKey,
+      await fetch(`/users/${userId}/documents/${documentId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/octet-stream",
         },
-        contactKey: {
-          issuerType: "USER",
-          issuer: contactId,
-          kid: "0",
-          sharedKey: contactEncryptedSharedKey,
+        body: encryptedChatFolderPayload[0],
+      });
+
+      // Upload my key
+      await fetch(`/users/${userId}/documents/${documentId}/keys/${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
-      };
+        body: JSON.stringify({ sharedKey: myEncryptedSharedKey }),
+      });
+
+      // Upload contact key
+      await fetch(
+        `/users/${userId}/documents/${documentId}/keys/${contactId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sharedKey: contactEncryptedSharedKey }),
+        },
+      );
 
       await contactRepository.acceptContactRequest(
         userId,
         contactId,
-        contactKeys,
+        documentId,
       );
+
+      return { documentId, key: chatDocumentKey };
     } catch (e) {
       console.error(
         "Error in acceptContactRequest",
@@ -57,46 +86,11 @@ export const contactService = {
       throw e;
     }
   },
-  loadSharedKey: async (
-    userEmail: string,
-    contactEmail: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-  ): Promise<JsonWebKey> => {
-    const myKeyEntry = await contactRepository.getSharedContactKey(
-      userEmail,
-      contactEmail,
-    );
-    if (!myKeyEntry) {
-      throw new Error("Shared key not found");
-    }
 
-    try {
-      return await cryptoService.decryptKey(
-        myKeyEntry.sharedKey,
-        publicKey,
-        privateKey,
-      );
-    } catch (e) {
-      console.warn("Decryption failed, attempting fallback", e);
-      try {
-        const contactPublicKey =
-          await authenticationRepository.loadPublicMainKey(contactEmail);
-        return await cryptoService.decryptKey(
-          myKeyEntry.sharedKey,
-          contactPublicKey,
-          privateKey,
-        );
-      } catch (fallbackError) {
-        console.error("Fallback decryption failed", fallbackError);
-      }
-    }
-
-    throw new Error("Could not decrypt shared key");
-  },
   reissueKey: async (
     userEmail: string,
     contactEmail: string,
+    chatDocumentId: string,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
@@ -113,20 +107,39 @@ export const contactService = {
       publicKey,
       privateKey,
     );
-    await contactRepository.reissueContactKey(userEmail, contactEmail, {
-      userKey: {
-        issuerType: "USER",
-        issuer: userEmail,
-        kid: "0",
-        sharedKey: myEncryptedSharedKey,
+    const responseUser = await fetch(
+      `/users/${userEmail}/documents/${chatDocumentId}/keys/${userEmail}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issuerType: "USER",
+          issuer: userEmail,
+          kid: "0",
+          sharedKey: myEncryptedSharedKey,
+        }),
       },
-      contactKey: {
-        issuerType: "USER",
-        issuer: contactEmail,
-        kid: "0",
-        sharedKey: contactEncryptedSharedKey,
+    );
+    if (!responseUser.ok) {
+      throw new Error("Failed to reissue key");
+    }
+
+    const responseContact = await fetch(
+      `/users/${userEmail}/documents/${chatDocumentId}/keys/${contactEmail}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issuerType: "USER",
+          issuer: contactEmail,
+          kid: "0",
+          sharedKey: contactEncryptedSharedKey,
+        }),
       },
-    });
+    );
+    if (!responseContact.ok) {
+      throw new Error("Failed to reissue key");
+    }
     return sharedKey;
   },
 };

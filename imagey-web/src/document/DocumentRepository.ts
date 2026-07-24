@@ -137,6 +137,13 @@ export const documentRepository = {
     sharedKey: string;
   }> => {
     const targetEmail = shareEmail ?? email;
+    console.error(
+      "CALLED LOAD KEY FOR",
+      email,
+      documentId,
+      targetEmail,
+      new Error().stack,
+    );
     const response = await fetch(
       "/users/" + email + "/documents/" + documentId + "/keys/" + targetEmail,
       {

@@ -155,7 +155,7 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
         requestUrl.pathname === "/users/mary@imagey.cloud/profile"
       ) {
         await route.fulfill({ status: 404 });
-        return;
+        return provider;
       }
 
       if (
@@ -348,8 +348,8 @@ export async function prepareJoesLogin(page: Page) {
   );
 }
 
-export async function prepareMarysDocuments() {
-  await prepareMarysRootFolder();
+export async function prepareMarysDocuments(chats: string[] = []) {
+  await prepareMarysRootFolder(chats);
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get documents")
@@ -360,40 +360,24 @@ export async function prepareMarysDocuments() {
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
-        {
-          documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-          metadata:
-            "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
-          sharedKey: {
-            issuerType: "FOLDER",
-            issuer: "root-folder-id",
-            kid: "0",
-            sharedKey: fs.readFileSync(
-              path.resolve(
-                process.cwd(),
-                `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
-              ),
-              "base64",
-            ),
-          },
-        },
-        {
-          documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-          metadata:
-            "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
-          sharedKey: {
-            issuerType: "FOLDER",
-            issuer: "root-folder-id",
-            kid: "0",
-            sharedKey: fs.readFileSync(
-              path.resolve(
-                process.cwd(),
-                `tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/root-folder-id/encrypted-shared.key`,
-              ),
-              "base64",
-            ),
-          },
-        },
+        ...chats.map((chatEmail) => {
+          const contactName = chatEmail.split(
+            "@",
+          )[0] as keyof TestDataStructure;
+          const chatData = TestData.mary.chats?.find(
+            (c) => c.contactEmail === chatEmail,
+          );
+          return {
+            documentId: `chat-${contactName}`,
+            name: chatEmail,
+            type: "Chat",
+            sharedKey: {
+              issuer: "mary@imagey.cloud",
+              kid: "0",
+              sharedKey: chatData ? chatData.encryptedSharedKey : "AAAA",
+            },
+          };
+        }),
       ]),
     );
 
@@ -466,85 +450,8 @@ export async function prepareMarysDocuments() {
         },
       }),
     );
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of mary to get content with id 6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-      ),
-    );
 
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a second request of mary to get content with id 6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
-      ),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
-      ),
-    );
-
-  return provider
-    .addInteraction()
-    .uponReceiving(
-      "a second request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
-      ),
-    );
+  return provider;
 }
 
 export async function prepareMarysProfileContents() {
@@ -585,9 +492,114 @@ export async function prepareMarysProfileContents() {
     );
 }
 
-export async function prepareMarysRootFolder() {
-  provider
-    .addInteraction()
+export async function prepareMarysRootFolder(
+  chats: string[] = [],
+  invalidKeyChats: string[] = [],
+) {
+  const documents: Record<string, unknown>[] = [
+    {
+      documentId: "mary@imagey.cloud",
+      metadata:
+        "ha98ll38YW1LOvkWzjoBhu23W2LGxFWY27WtOBlkN1XYG0Wppxv9dlgSLV+EmvK7rPJM/nMRkRvdIw==",
+      sharedKey: {
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey:
+          "Y9OiX5TpQKGrD3wI/7wHE+hA9x2xHRx6//VWnSGEUOvhAunrZxYUPYCVo/KcbjemPTdMVd78ABur1eFbMaCgyHHRirTZdh4Fc7gFABb8dPH6tPVyYVRBtArgMDu5fZsR5pP+hK10eAUCjBr6lApf/AuNlDmeve4QjoyCY0Om/PvU1xZbhWylpa7knm9iN83/3R3rdRa7",
+      },
+    },
+    {
+      documentId: "profile",
+      metadata:
+        "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
+      sharedKey: {
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey:
+          "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+      },
+    },
+    {
+      documentId: "profile-pic-doc-id",
+      metadata:
+        "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
+      sharedKey: {
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey:
+          "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+      },
+    },
+    {
+      documentId: "root-folder-id",
+      sharedKey: {
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: fs.readFileSync(
+          path.resolve(
+            process.cwd(),
+            "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
+          ),
+          "base64",
+        ),
+      },
+    },
+  ];
+
+  chats.forEach((chat) => {
+    const contactName = chat.split("@")[0] as keyof TestDataStructure;
+    const chatData = TestData.mary.chats?.find((c) => c.contactEmail === chat);
+    let metadata: string | undefined;
+    if (chat === "laura@imagey.cloud") {
+      metadata =
+        "+2lw6hmPx/N/djM8ASn+kG5CI5TaL2nXMQZXO1mF6HXgZKobzxIi+eGIh96Hyw2tIaawc48GL69wePVfXDEl0o8BMmpdgHQ=";
+    } else if (chat === "alice@imagey.cloud") {
+      metadata =
+        "SvwyuvGK490PcZkvPvA3AiKeIehXCWjrEDomT57qgNdEVzRexUtOi7EpvekQPmQJSVIjBp/3A6fUXLYIvlOElC326VhFbiA=";
+    }
+
+    documents.push({
+      documentId: `chat-${contactName}`,
+      ...(metadata ? { metadata } : {}),
+      sharedKey: {
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey:
+          chatData && !invalidKeyChats.includes(chat)
+            ? chatData.encryptedSharedKey
+            : "invalid-dummy-key",
+      },
+    });
+  });
+
+  documents.sort((a, b) =>
+    (a.documentId as string).localeCompare(b.documentId as string),
+  );
+
+  const getState = () => {
+    let interaction = provider
+      .addInteraction()
+      .given("marys second device registered");
+    chats.forEach((chat) => {
+      interaction = interaction.given(
+        `Mary has a chat with ${chat.split("@")[0]}`,
+      );
+    });
+    return interaction;
+  };
+
+  getState()
+    .uponReceiving(
+      "a request of mary to get root documents" +
+        (chats.length ? " with chats " + chats.join("-") : ""),
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(documents));
+  getState()
     .uponReceiving(
       "a request of mary to get root folder document metadata for empty folder",
     )
@@ -661,19 +673,46 @@ export async function prepareMarysRootFolder() {
     );
 }
 
-export async function prepareEmptyMarysDocuments() {
-  await prepareMarysRootFolder();
+export async function prepareEmptyMarysDocuments(
+  chats: string[] = [],
+  invalidKeyChats: string[] = [],
+) {
+  await prepareMarysRootFolder(chats, invalidKeyChats);
+
+  const documents: Record<string, unknown>[] = [];
+  chats.forEach((chatEmail) => {
+    const contactName = chatEmail.split("@")[0] as keyof TestDataStructure;
+    const chatData = TestData.mary.chats?.find(
+      (c) => c.contactEmail === chatEmail,
+    );
+    const encryptedSharedKey =
+      chatData && !invalidKeyChats.includes(chatEmail)
+        ? chatData.encryptedSharedKey
+        : "invalid-dummy-key";
+
+    documents.push({
+      documentId: `chat-${contactName}`,
+      sharedKey: {
+        issuer: "mary@imagey.cloud",
+        kid: "0",
+        sharedKey: encryptedSharedKey,
+      },
+    });
+  });
 
   return provider
     .addInteraction()
     .given("mary has no documents")
-    .uponReceiving("a request of mary to get empty documents")
+    .uponReceiving(
+      "a request of mary to get empty documents" +
+        (chats.length ? " with chats " + chats.join("-") : ""),
+    )
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r.query({ folderId: "root-folder-id" }).headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+    .willRespondWith(200, (r) => r.jsonBody(documents));
 }
 
 export async function prepareDocumentUpload(
@@ -895,17 +934,6 @@ export async function inputMarysPassword(page: Page) {
 }
 
 export async function prepareMarysContactRequests() {
-  provider
-    .addInteraction()
-    .given("mary has no contacts and a contact request from bill")
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
   return provider
     .addInteraction()
     .given("mary has no contacts and a contact request from bill")
@@ -919,17 +947,6 @@ export async function prepareMarysContactRequests() {
 }
 
 export async function prepareMarysEmptyContactRequests() {
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get empty contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
   return provider
     .addInteraction()
     .given("mary has no contacts")
@@ -960,9 +977,6 @@ export async function prepareMarysChat(
   suffix: string = "",
   validKey: boolean = true,
 ) {
-  const chat = TestData.mary.chats!.find(
-    (c) => c.contactEmail === contactEmail,
-  )!;
   const contactName = contactEmail.split("@")[0] as keyof TestDataStructure;
 
   let builder = provider.addInteraction();
@@ -993,38 +1007,6 @@ export async function prepareMarysChat(
         );
       }
     }
-  }
-
-  builder
-    .uponReceiving(`a request to get shared contact key${suffix}`)
-    .withRequest("GET", `/users/mary@imagey.cloud/contacts/${contactEmail}/key`)
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: Matchers.string(validKey ? chat.encryptedSharedKey : "AAAA"),
-      }),
-    );
-
-  builder = provider.addInteraction();
-  if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(
-      `Mary has a chat with ${contactEmail.split("@")[0]}`,
-    );
-  }
-
-  builder
-    .uponReceiving(`a request of mary to get contacts in chat${suffix}`)
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) => {
-      r.headers({ Accept: "application/json" });
-    })
-    .willRespondWith(200, (r) => r.jsonBody([contactEmail]));
-
-  builder = provider.addInteraction();
-  if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(
-      `Mary has a chat with ${contactEmail.split("@")[0]}`,
-    );
   }
 
   return builder
@@ -1073,10 +1055,40 @@ export async function loginAsAlice(page: Page) {
   await expect(homeLink).toBeVisible();
 }
 
-export async function prepareAlicesLogin() {
-  provider
-    .addInteraction()
-    .given("Alice exists")
+export async function prepareAlicesLogin(chats: string[] = []) {
+  const documents: Record<string, unknown>[] = [];
+  chats.forEach((chatEmail) => {
+    const contactName = chatEmail.split("@")[0] as keyof TestDataStructure;
+    const chatData = TestData.mary.chats?.find(
+      (c) => c.contactEmail === "alice@imagey.cloud",
+    );
+    const encryptedSharedKey = chatData ? chatData.encryptedSharedKey : "AAAA";
+    let metadata: string | undefined;
+    if (chatEmail === "mary@imagey.cloud") {
+      metadata =
+        "3JS7BGWaI//XsrMv2abdE+Sx+sGGG8dthuI2NlfqoTx66dyvSXt6ahEw3aCMl5cs+POVLyZBA8NzjzNqpqrD7r9Weyo3MA==";
+    }
+
+    documents.push({
+      documentId: `chat-${contactName}`,
+      ...(metadata ? { metadata } : {}),
+      sharedKey: {
+        issuer: "alice@imagey.cloud",
+        kid: "0",
+        sharedKey: encryptedSharedKey,
+      },
+    });
+  });
+
+  const getState = () => {
+    let interaction = provider.addInteraction().given("Alice exists");
+    if (chats.includes("mary@imagey.cloud")) {
+      interaction = interaction.given("Alice has a chat with mary");
+    }
+    return interaction;
+  };
+
+  getState()
     .uponReceiving("a request to get Alices public main key")
     .withRequest("GET", "/users/alice@imagey.cloud/public-keys/0", (r) =>
       r.headers({
@@ -1087,9 +1099,7 @@ export async function prepareAlicesLogin() {
       builder.jsonBody(TestData.alice.publicMainKey),
     );
 
-  provider
-    .addInteraction()
-    .given("Alice exists")
+  getState()
     .uponReceiving("a request to get Alices public device key")
     .withRequest(
       "GET",
@@ -1103,9 +1113,7 @@ export async function prepareAlicesLogin() {
       builder.jsonBody(TestData.alice.devices[0].publicDeviceKey),
     );
 
-  provider
-    .addInteraction()
-    .given("Alice exists")
+  getState()
     .uponReceiving("a request to get Alices encrypted private device key")
     .withRequest(
       "GET",
@@ -1123,16 +1131,12 @@ export async function prepareAlicesLogin() {
       }),
     );
 
-  provider
-    .addInteraction()
-    .given("Alice exists")
+  getState()
     .uponReceiving("a request to get Alices contact requests")
     .withRequest("GET", "/users/alice@imagey.cloud/contact-requests")
     .willRespondWith(200, (builder) => builder.jsonBody([]));
 
-  provider
-    .addInteraction()
-    .given("Alice exists")
+  getState()
     .uponReceiving("a request to get Alices settings document")
     .withRequest(
       "GET",
@@ -1140,9 +1144,7 @@ export async function prepareAlicesLogin() {
     )
     .willRespondWith(404);
 
-  provider
-    .addInteraction()
-    .given("Alice exists")
+  getState()
     .uponReceiving("a request to create Alices documents")
     .withRequest(
       "PUT",
@@ -1153,9 +1155,12 @@ export async function prepareAlicesLogin() {
     )
     .willRespondWith(200);
 
-  provider
-    .addInteraction()
-    .given("Alice exists")
+  getState()
+    .uponReceiving("a request to get Alices root documents")
+    .withRequest("GET", "/users/alice@imagey.cloud/documents")
+    .willRespondWith(200, (builder) => builder.jsonBody(documents));
+
+  getState()
     .uponReceiving("a request to get Alices documents")
     .withRequest("GET", "/users/alice@imagey.cloud/documents", (r) =>
       r.query({ folderId: Matchers.string("some-uuid") }),
@@ -1168,28 +1173,6 @@ export async function prepareAlicesChat(
   suffix: string = "",
   returnValidKey: boolean = true,
 ) {
-  provider
-    .addInteraction()
-    .given("Alice has a chat with mary")
-    .uponReceiving("a request to get the contacts" + suffix)
-    .withRequest("GET", "/users/alice@imagey.cloud/contacts")
-    .willRespondWith(200, (builder) => builder.jsonBody([contact]));
-
-  provider
-    .addInteraction()
-    .given("Alice has a chat with mary")
-    .uponReceiving("a request to get contact key" + suffix)
-    .withRequest("GET", `/users/alice@imagey.cloud/contacts/${contact}/key`)
-    .willRespondWith(200, (builder) =>
-      builder.jsonBody({
-        issuer: "alice@imagey.cloud",
-        kid: "0",
-        sharedKey: returnValidKey
-          ? TestData.mary.chats![1].encryptedSharedKey
-          : "invalid-dummy-key",
-      }),
-    );
-
   if (!returnValidKey) {
     provider
       .addInteraction()

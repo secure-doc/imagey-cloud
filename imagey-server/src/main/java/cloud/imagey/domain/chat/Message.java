@@ -44,7 +44,7 @@ public record Message(
             new MessageContent(content));
     }
 
-    protected Message(User sender, MessageContent content) {
+    public Message(User sender, MessageContent content) {
         this(null, sender, null, content);
     }
 

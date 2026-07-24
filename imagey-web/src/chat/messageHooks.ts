@@ -4,7 +4,7 @@ import { messageService } from "./MessageService";
 
 export function usePolling(
   userEmail: string,
-  contactEmail: string,
+  chatDocumentId: string,
   sharedKey?: JsonWebKey,
 ) {
   const [messages, setMessages] = useState<Message[]>();
@@ -20,7 +20,7 @@ export function usePolling(
         try {
           const newMessages = await messageService.receiveDecryptedMessages(
             userEmail,
-            contactEmail,
+            chatDocumentId,
             sinceId,
             sharedKey,
             sinceId === undefined ? 0 : 30, // wait=0 for initial load, wait=30 for long polling
@@ -58,7 +58,7 @@ export function usePolling(
     return () => {
       mounted = false;
     };
-  }, [userEmail, contactEmail, sharedKey]);
+  }, [userEmail, chatDocumentId, sharedKey]);
 
   return { messages, setMessages };
 }

@@ -17,7 +17,6 @@
 package cloud.imagey.domain.chat;
 
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
-import static jakarta.json.bind.JsonbBuilder.create;
 import static java.nio.charset.Charset.defaultCharset;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
@@ -36,7 +35,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
@@ -57,18 +55,30 @@ public class ContactRepository extends AbstractFileRepository {
         writeStringToFile(new File(recipientRequests, "status.txt"), newStatus.name(), defaultCharset());
     }
 
-    public void persist(User user, User contact, EncryptedSharedKey key) {
+    public void persist(User user, User contact, String documentId) {
         File userHome = getUserHome(user);
         File contactHome = new File(userHome, "contacts");
         File contactFolder = new File(contactHome, contact.email().address());
         contactFolder.mkdirs();
-        File keyFile = new File(contactFolder, "key.json");
-        writeStringToFile(keyFile, create().toJson(key), UTF_8, false);
+        File docIdFile = new File(contactFolder, "documentId.txt");
+        writeStringToFile(docIdFile, documentId, UTF_8, false);
 
         // Delete any pending invitations since they are now a contact
         File requestDirectory = new File(new File(userHome, "contact-requests"), contact.email().address());
         if (requestDirectory.exists()) {
             deleteDirectory(requestDirectory);
+        }
+
+        File otherHome = getUserHome(contact);
+        File otherContactHome = new File(otherHome, "contacts");
+        File otherContactFolder = new File(otherContactHome, user.email().address());
+        otherContactFolder.mkdirs();
+        File otherDocIdFile = new File(otherContactFolder, "documentId.txt");
+        writeStringToFile(otherDocIdFile, documentId, UTF_8, false);
+
+        File otherRequestDirectory = new File(new File(otherHome, "contact-requests"), user.email().address());
+        if (otherRequestDirectory.exists()) {
+            deleteDirectory(otherRequestDirectory);
         }
     }
 
@@ -97,41 +107,7 @@ public class ContactRepository extends AbstractFileRepository {
         return of(readStatus(statusFile));
     }
 
-    public Optional<EncryptedSharedKey> getContactKey(User user, User contact) {
-        File userHome = getUserHome(user);
-        File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
-        File keyFile = new File(contactFolder, "key.json");
-        LOG.info("key file found: " + keyFile.exists());
-        if (keyFile.exists()) {
-            try {
-                return of(create().fromJson(readFileToString(keyFile), EncryptedSharedKey.class));
-            } catch (Exception e) {
-                LOG.error("Failed to read key", e);
-                return empty();
-            }
-        }
-        return empty();
-    }
 
-    public void updateContactKey(User user, User contact, EncryptedSharedKey key) {
-        File userHome = getUserHome(user);
-        File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
-        File keyFile = new File(contactFolder, "key.json");
-        writeStringToFile(keyFile, create().toJson(key), UTF_8);
-    }
-
-    public void reissueKey(User user, User contact, ContactKeys keys) {
-        updateContactKey(user, contact, keys.userKey());
-
-        File contactHome = getUserHome(contact);
-        File contactFolder = new File(new File(contactHome, "contacts"), user.email().address());
-        if (!contactFolder.exists()) {
-            mkdir(contactFolder);
-        }
-
-        File keyFile = new File(contactFolder, "key.json");
-        writeStringToFile(keyFile, create().toJson(keys.contactKey()), UTF_8, false);
-    }
 
     public boolean isContact(User user, User contact) {
         File userHome = getUserHome(user);
@@ -139,18 +115,22 @@ public class ContactRepository extends AbstractFileRepository {
         return new File(contactsHome, contact.email().address()).exists();
     }
 
-    public List<User> findContacts(User user) {
+    public List<String> findContacts(User user) {
         File userHome = getUserHome(user);
         File contactsHome = new File(userHome, "contacts");
         if (!contactsHome.exists() || !contactsHome.isDirectory()) {
+            LOG.info("findContacts: contactsHome does not exist or is not directory: " + contactsHome.getAbsolutePath());
             return emptyList();
         }
-        return Stream.of(contactsHome.listFiles())
+        File[] files = contactsHome.listFiles();
+        LOG.info("findContacts: contactsHome files: " + (files != null ? files.length : "null"));
+        if (files == null) {
+            return emptyList();
+        }
+        return Stream.of(files)
                 .filter(File::isDirectory)
                 .map(File::getName)
                 .sorted()
-                .map(Email::new)
-                .map(User::new)
                 .toList();
     }
 

@@ -102,10 +102,9 @@ public class ContactService {
         }
     }
 
-    public void acceptInvitation(User user, User contact, ContactKeys keys) throws IOException {
+    public void acceptInvitation(User user, User contact, String documentId) throws IOException {
         if (contactRepository.getContactStatus(user, contact).filter(INVITATION_RECEIVED::equals).isPresent()) {
-            contactRepository.persist(user, contact, keys.userKey());
-            contactRepository.persist(contact, user, keys.contactKey());
+            contactRepository.persist(user, contact, documentId);
         } else {
             throw new ResourceConflictException("Contact request rejected");
         }
@@ -116,10 +115,5 @@ public class ContactService {
         contactRepository.persist(requestor, user, ContactStatus.DENIAL_RECEIVED);
     }
 
-    public void reissueKey(User user, User contact, ContactKeys keys) throws IOException {
-        if (!contactRepository.isContact(user, contact)) {
-            throw new ResourceConflictException("Not a contact");
-        }
-        contactRepository.reissueKey(user, contact, keys);
-    }
+
 }

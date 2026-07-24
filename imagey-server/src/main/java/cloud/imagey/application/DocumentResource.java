@@ -23,6 +23,7 @@ import static jakarta.ws.rs.core.Response.created;
 import static jakarta.ws.rs.core.Response.ok;
 import static java.util.Base64.getDecoder;
 import static java.util.Optional.ofNullable;
+import static cloud.imagey.domain.token.TokenService.ONE_WEEK;
 
 import java.io.IOException;
 import java.net.URI;
@@ -32,6 +33,7 @@ import java.util.Optional;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
@@ -53,6 +55,7 @@ import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentMetadata;
@@ -61,7 +64,15 @@ import cloud.imagey.domain.document.FileName;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.mail.EmailBody;
+import cloud.imagey.domain.mail.EmailSubject;
+import cloud.imagey.domain.mail.EmailTemplate;
+import cloud.imagey.domain.mail.MailService;
+import cloud.imagey.domain.token.Token;
+import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.user.DomainName;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserRepository;
 
 @ApplicationScoped
 @Path("{email}/documents")
@@ -71,6 +82,20 @@ public class DocumentResource {
 
     @Inject
     private DocumentRepository documentRepository;
+    @Inject
+    private UserRepository userRepository;
+    @Inject
+    private TokenService tokenService;
+    @Inject
+    private MailService mailService;
+    @Inject
+    private Provider<DomainName> currentDomain;
+    @Inject
+    @ConfigProperty(name = "mail.invitation.subject")
+    private EmailSubject invitationSubject;
+    @Inject
+    @ConfigProperty(name = "mail.invitation.body")
+    private EmailBody invitationBody;
 
     @Context
     private SecurityContext securityContext;
@@ -161,6 +186,19 @@ public class DocumentResource {
 
         EncryptedContent keyContent = new EncryptedContent(getDecoder().decode(key.sharedKey()));
         documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, keyContent);
+
+        User recipient = new User(userTheDocumentIsSharedWith);
+        if (!userRepository.exists(recipient)) {
+            DomainName domain = currentDomain.get();
+            Token token = tokenService.generateToken(recipient, ONE_WEEK);
+            String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + user.email().address();
+            mailService.send(userTheDocumentIsSharedWith, new EmailTemplate(
+                new Email("invitation@" + domain.getHost()),
+                invitationSubject,
+                invitationBody
+            ).formatted(domain.getAppName(), user.email().address(), link));
+        }
+
         return ok().build();
     }
 

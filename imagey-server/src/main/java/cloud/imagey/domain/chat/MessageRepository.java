@@ -23,12 +23,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
@@ -39,54 +41,44 @@ public class MessageRepository extends AbstractFileRepository {
     @ConfigProperty(name = "root.path")
     private String rootPath;
 
-    Message persist(User receiver, User sender, MessageContent encryptedContent) {
+    public Message persist(User user, User sender, DocumentId documentId, MessageContent encryptedContent) {
         MessageId id = new MessageId();
         Message message = new Message(sender, encryptedContent);
         String jsonContent = create().toJson(message);
 
-        File receiverHome = new File(rootPath, receiver.email().address());
-        if (!receiverHome.exists()) {
-            mkdir(receiverHome);
+        File userHome = new File(rootPath, user.email().address());
+        if (!userHome.exists()) {
+            mkdir(userHome);
         }
-        File messagesHome = new File(receiverHome, "messages");
-        if (!messagesHome.exists()) {
-            mkdir(messagesHome);
+        File documentsHome = new File(userHome, "documents");
+        if (!documentsHome.exists()) {
+            mkdir(documentsHome);
         }
-        File senderFolder = new File(messagesHome, sender.email().address());
-        if (!senderFolder.exists()) {
-            mkdir(senderFolder);
+        File documentFolder = new File(documentsHome, documentId.id());
+        if (!documentFolder.exists()) {
+            mkdir(documentFolder);
         }
-        File messageFile = new File(senderFolder, id.value() + ".json");
+        File messagesFolder = new File(documentFolder, "messages");
+        if (!messagesFolder.exists()) {
+            mkdir(messagesFolder);
+        }
+        File messageFile = new File(messagesFolder, id.value() + ".json");
         writeStringToFile(messageFile, jsonContent, UTF_8, false);
-
-        File senderHome = new File(rootPath, sender.email().address());
-        if (!senderHome.exists()) {
-            mkdir(senderHome);
-        }
-        File senderMessagesHome = new File(senderHome, "messages");
-        if (!senderMessagesHome.exists()) {
-            mkdir(senderMessagesHome);
-        }
-        File receiverFolder = new File(senderMessagesHome, receiver.email().address());
-        if (!receiverFolder.exists()) {
-            mkdir(receiverFolder);
-        }
-        File senderMessageFile = new File(receiverFolder, id.value() + ".json");
-        writeStringToFile(senderMessageFile, jsonContent, UTF_8, false);
 
         return new Message(sender, encryptedContent)
             .withId(id)
-            .inChannel(new Channel(sender.email().address() + ":" + receiver.email().address()));
+            .inChannel(new Channel(documentId.id()));
     }
 
-    public List<Message> fetchMessages(User receiver, User sender, java.util.Optional<MessageId> sinceId) {
-        File receiverHome = new File(rootPath, receiver.email().address());
-        File messagesHome = new File(receiverHome, "messages");
-        File senderFolder = new File(messagesHome, sender.email().address());
+    public List<Message> fetchMessages(User user, DocumentId documentId, Optional<MessageId> sinceId) {
+        File userHome = new File(rootPath, user.email().address());
+        File documentsHome = new File(userHome, "documents");
+        File documentFolder = new File(documentsHome, documentId.id());
+        File messagesFolder = new File(documentFolder, "messages");
 
         List<Message> messages = new ArrayList<>();
-        if (senderFolder.exists() && senderFolder.isDirectory()) {
-            File[] files = senderFolder.listFiles((dir, name) -> name.endsWith(".json"));
+        if (messagesFolder.exists() && messagesFolder.isDirectory()) {
+            File[] files = messagesFolder.listFiles((dir, name) -> name.endsWith(".json"));
             Arrays.sort(files, Comparator.comparing(File::getName));
             for (File file : files) {
                 String id = file.getName().replace(".json", "");

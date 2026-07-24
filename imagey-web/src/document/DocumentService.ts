@@ -6,6 +6,28 @@ import { documentRepository } from "./DocumentRepository";
 import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
 
 export const documentService = {
+  loadKey: async (
+    user: string,
+    documentId: string,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+  ): Promise<JsonWebKey | undefined> => {
+    try {
+      const encryptedKey = await documentRepository.loadKey(user, documentId);
+      if (!encryptedKey) return undefined;
+      return await cryptoService.decryptKey(
+        encryptedKey.sharedKey,
+        publicKey,
+        privateKey,
+      );
+    } catch (e) {
+      if ((e as Error).message.includes("404")) {
+        return undefined;
+      }
+      throw e;
+    }
+  },
+
   storeFolder: async (
     email: string,
     name: string,
@@ -314,6 +336,18 @@ export const documentService = {
     } catch (e) {
       console.error(e);
     }
+    const unencrypted = metadata as unknown as Record<string, unknown>;
+    if (!metadata.metadata && unencrypted.type) {
+      return {
+        documentId: metadata.documentId,
+        name: unencrypted.name as string,
+        type: unencrypted.type as "Image" | "Folder",
+        size: unencrypted.size as number,
+        smallImageId: unencrypted.smallImageId as string,
+        previewImageId: unencrypted.previewImageId as string,
+        documents: unencrypted.documents as string[],
+      } as unknown as DocumentMetadata;
+    }
     return {
       documentId: metadata.documentId,
       name: "Encrypted Document",
@@ -371,7 +405,7 @@ export const documentService = {
         meta.documentId !== "profile-pic-doc-id" &&
         meta.documentId !== user,
     );
-    return Promise.all(
+    const results = await Promise.allSettled(
       validMetadata.map((meta) =>
         documentService.loadDocument(
           user,
@@ -382,6 +416,12 @@ export const documentService = {
         ),
       ),
     );
+    return results
+      .filter(
+        (r): r is PromiseFulfilledResult<DocumentMetadata> =>
+          r.status === "fulfilled",
+      )
+      .map((r) => r.value);
   },
   shareDocument: async (
     user: string,
@@ -534,6 +574,7 @@ export async function decryptDocumentMetadata(
       previewImageId: unencrypted.previewImageId as string,
       documents: unencrypted.documents as string[],
       sharedKey: metadata.sharedKey,
+      key: decryptedDocumentKey,
     };
   }
 
@@ -565,7 +606,10 @@ async function decryptDocumentContent(
 ): Promise<Document> {
   let decryptedContent: ArrayBuffer | undefined = undefined;
   let etag: string | undefined = undefined;
-  if (metadata.type?.toLowerCase() === "folder") {
+  if (
+    metadata.type?.toLowerCase() === "folder" ||
+    metadata.type?.toLowerCase() === "chat"
+  ) {
     return {
       content: undefined,
       documentId: metadata.documentId!,

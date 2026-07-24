@@ -18,15 +18,14 @@ package cloud.imagey;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.client.Entity.text;
 import static jakarta.ws.rs.core.Response.Status.CONFLICT;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
-import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static java.lang.Integer.MAX_VALUE;
-import static java.util.Map.entry;
 import static java.util.Map.of;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
@@ -36,7 +35,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
-import java.util.Map;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.client.Invocation.Builder;
@@ -54,8 +52,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import cloud.imagey.domain.chat.ContactKeys;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -156,38 +152,12 @@ public class ContactRequestTest {
         marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
         assertThat(marysContactRequests).isEmpty();
         // mary cannot accept the request
-        Response contactRequestNotAccepted = marysClient.path("contacts/laura@imagey.cloud").put(json("""
-                {
-                    "userKey": {
-                        "issuer": "mary@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    },
-                    "contactKey": {
-                        "issuer": "mary@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    }
-                }
-            """));
+        Response contactRequestNotAccepted = marysClient.path("contacts/laura@imagey.cloud").put(text("chat-document-id"));
         assertThat(contactRequestNotAccepted.getStatus()).isEqualTo(CONFLICT.getStatusCode());
 
         // When
         // laura accepts the contact request
-        Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
-                {
-                    "userKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    },
-                    "contactKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    }
-                }
-            """));
+        Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(text("chat-document-id"));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
 
         // Then
@@ -201,12 +171,6 @@ public class ContactRequestTest {
         assertThat(laurasContacts).contains("mary@imagey.cloud");
         marysPublicKeyResponse = marysPublicKey.request().header("Origin", "https://secure-doc.store").cookie(laurasCookie).get();
         assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(OK.getStatusCode());
-
-        // Verify getContactKeys endpoint
-        Response keysResponse = laurasClient.path("contacts/mary@imagey.cloud/key").get();
-        Map<String, Object> key = keysResponse.readEntity(new GenericType<Map<String, Object>>() { });
-        assertThat(key).contains(entry("sharedKey", "public-shared-key"));
-
 
 
         File marysContactRequestsFolder = getMarysContactRequests();
@@ -272,20 +236,7 @@ public class ContactRequestTest {
         assertThat(laurasRequestResponse.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
         // When
         // laura accepts the contact request
-        Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
-                {
-                    "userKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    },
-                    "contactKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    }
-                }
-            """));
+        Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(text("chat-document-id"));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
 
         // Then
@@ -329,51 +280,6 @@ public class ContactRequestTest {
         assertThat(response.getStatusInfo().getFamily()).isEqualTo(Family.CLIENT_ERROR);
     }
 
-    @Test
-    @DisplayName("Invalid JSON in key file returns NOT_FOUND")
-    void testGetContactKeyWithInvalidJson() throws IOException {
-        File contactFolder = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
-        contactFolder.mkdirs();
-        java.nio.file.Files.writeString(new File(contactFolder, "key.json").toPath(), "{invalid json");
-
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key").get();
-
-        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
-    }
-
-    @Test
-    @DisplayName("Reissue key creates directory if it doesn't exist")
-    void testReissueKeyCreatesDirectory() throws IOException {
-        File marysContacts = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
-        marysContacts.mkdirs();
-
-        ContactKeys keys = new ContactKeys(
-            new EncryptedSharedKey("USER", "m", "1", "k1"),
-            new EncryptedSharedKey("USER", "l", "1", "k2")
-        );
-
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key")
-            .put(json(keys));
-
-        assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
-        File laurasContactFolder = new File(new File(getLaurasData(), "contacts"), getMary().email().address());
-        assertThat(laurasContactFolder).exists();
-
-        response = marysClient.path("contacts/laura@imagey.cloud/key").put(json(keys));
-        assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
-    }
-
-    @Test
-    @DisplayName("Fetch contact key when key file does not exist")
-    void testGetContactKeyWhenFileDoesNotExist() throws IOException {
-        File contactFolder = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
-        contactFolder.mkdirs(); // folder exists, but no key.json
-
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key").get();
-
-        // The method getContactKey returns empty(), which mapped by ContactResource results in 404 NOT_FOUND
-        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
-    }
 
     @Test
     @DisplayName("Find contacts when contactsHome is a file instead of directory")
@@ -412,20 +318,7 @@ public class ContactRequestTest {
         joesClient.path("contact-requests").post(json(of("email", "mary@imagey.cloud")));
 
         // Mary accepts joe
-        Response contactRequestAccepted = marysClient.path("contacts/joe@imagey.cloud").put(json("""
-            {
-                "userKey": {
-                    "issuer": "mary@imagey.cloud",
-                    "kid": "0",
-                    "sharedKey": "public-shared-key"
-                },
-                "contactKey": {
-                    "issuer": "mary@imagey.cloud",
-                    "kid": "0",
-                    "sharedKey": "public-shared-key"
-                }
-            }
-            """));
+        Response contactRequestAccepted = marysClient.path("contacts/joe@imagey.cloud").put(text("chat-document-id"));
         assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
     }
 
@@ -444,22 +337,7 @@ public class ContactRequestTest {
         assertThat(requestResponse.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
     }
 
-    @Test
-    @DisplayName("Cannot reissue key for a user who is not a contact")
-    public void interactWithNonContact() throws IOException {
-        // Mary tries to reissue keys for Laura, but Laura is not a contact yet
-        ContactKeys keys = new ContactKeys(
-            new EncryptedSharedKey("USER", "m", "1", "k1"),
-            new EncryptedSharedKey("USER", "l", "1", "k2")
-        );
 
-        // the endpoint /contacts/{email}/key handles reissue
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key").put(json(keys));
-
-        // Since she's not a contact, ContactService.reissueKey throws Exception or returns false.
-        // The resource maps it to 400 or 404 or 403.
-        assertThat(response.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
-    }
 
     private User getMary() {
         return new User(new Email("mary@imagey.cloud"));
