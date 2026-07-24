@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 
 public record ContactKeys(EncryptedSharedKey userKey, EncryptedSharedKey contactKey) {

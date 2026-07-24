@@ -16,6 +16,7 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
+
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static org.apache.commons.io.IOUtils.toByteArray;
 

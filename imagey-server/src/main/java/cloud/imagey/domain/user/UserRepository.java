@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.user;
 
+
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
@@ -52,7 +53,7 @@ public class UserRepository extends AbstractFileRepository {
     }
 
     public void persist(User user) {
-        File userHome = createNewFile(new File(rootPath), user.email().address());
+        File userHome = createNewFile(new File(rootPath), user.id().id());
         mkdir(userHome);
     }
 
@@ -80,6 +81,6 @@ public class UserRepository extends AbstractFileRepository {
     }
 
     private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
+        return new File(rootPath, user.id().id());
     }
 }

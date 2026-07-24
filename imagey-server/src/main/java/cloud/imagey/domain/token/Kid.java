@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.token;
 
+
 import static java.util.Objects.requireNonNull;
 
 public record Kid(String id) {

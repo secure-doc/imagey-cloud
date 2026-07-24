@@ -16,6 +16,7 @@
  */
 package cloud.imagey.infrastructure.common;
 
+
 import static org.apache.commons.lang3.ClassUtils.primitiveToWrapper;
 
 import java.lang.reflect.Constructor;

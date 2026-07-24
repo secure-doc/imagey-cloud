@@ -40,7 +40,7 @@ export const documentRepository = {
       );
     }
 
-    const response = await fetch(`/users/${email}/documents`, {
+    const response = await fetch(`/users/${userId}/documents`, {
       method: "POST",
       credentials: "same-origin",
       body: formData,
@@ -52,7 +52,7 @@ export const documentRepository = {
     email: string,
     documentId: string,
   ): Promise<DocumentMetadata> => {
-    const response = await fetch(`/users/${email}/documents/${documentId}`, {
+    const response = await fetch(`/users/${userId}/documents/${documentId}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -96,7 +96,7 @@ export const documentRepository = {
     documentId: string,
     contentId: string,
   ): Promise<ArrayBuffer> => {
-    const path = `/users/${email}/documents/${documentId}/files/${contentId}`;
+    const path = `/users/${userId}/documents/${documentId}/files/${contentId}`;
     const cachedValue = cache.get(path);
     if (cachedValue) {
       return cachedValue;

@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.token;
 
+
 import com.nimbusds.jwt.JWTClaimsSet;
 
 public record DecodedToken(JWTClaimsSet jwt) {

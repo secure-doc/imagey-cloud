@@ -16,13 +16,13 @@
  */
 package cloud.imagey.domain.user;
 
+
 import cloud.imagey.domain.encryption.EncryptedPrivateKey;
 import cloud.imagey.domain.encryption.PublicKey;
-import cloud.imagey.domain.mail.Email;
 
 public record UserRegistration(
     DeviceId deviceId,
-    Email email,
+    UserId userId,
     EncryptedPrivateKey encryptedPrivateKey,
     PublicKey mainPublicKey,
     PublicKey devicePublicKey) {

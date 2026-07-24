@@ -16,6 +16,7 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
+
 import java.io.IOException;
 import java.lang.reflect.RecordComponent;
 import java.util.HashMap;

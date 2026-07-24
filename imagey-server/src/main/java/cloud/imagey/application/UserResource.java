@@ -16,6 +16,8 @@
  */
 package cloud.imagey.application;
 
+
+
 import static cloud.imagey.domain.user.UserService.AuthenticationStatus.REGISTRATION_STARTED;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.Response.Status.ACCEPTED;
@@ -44,10 +46,12 @@ import org.apache.logging.log4j.Logger;
 
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 import cloud.imagey.domain.user.UserRegistration;
 import cloud.imagey.domain.user.UserRepository;
 import cloud.imagey.domain.user.UserService;
 import cloud.imagey.domain.user.UserService.AuthenticationStatus;
+import cloud.imagey.domain.user.VerificationRequest;
 
 @Path("/")
 @ApplicationScoped
@@ -66,7 +70,7 @@ public class UserResource {
     @PermitAll
     @Consumes(APPLICATION_JSON)
     public Response registerUser(UserRegistration registration) throws IOException {
-        if (!registration.email().address().equals(currentPrincipal.get().getName())) {
+        if (!registration.userId().id().equals(currentPrincipal.get().getName())) {
             LOG.warn("Current user is trying to register another user.");
             throw new ForbiddenException("User is only allowed to register itself.");
         }
@@ -76,18 +80,20 @@ public class UserResource {
 
     @GET
     @RolesAllowed({"owner", "contact", "contact-request"})
-    @Path("{email}/public-keys/{kid}")
+    @Path("{userId}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
-    public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {
+    public String getKey(@PathParam("userId") UserId userId, @PathParam("kid") Kid kid) throws IOException {
+        User user = new User(userId, null);
         LOG.info("Loading public key");
         return userRepository.loadPublicKey(user, kid).orElseThrow(() -> new NotFoundException());
     }
 
     @POST
     @PermitAll
-    @Path("{email}/verifications")
+    @Path("verifications")
     @Consumes(APPLICATION_JSON)
-    public Response verfiyUser(@PathParam("email") User user) throws IOException {
+    public Response verfiyUser(VerificationRequest request) throws IOException {
+        User user = new User(request.email());
 
         AuthenticationStatus status = userService.startAuthenticationProcess(user);
         return status == REGISTRATION_STARTED ? Response.status(CREATED).build() : Response.status(ACCEPTED).build();

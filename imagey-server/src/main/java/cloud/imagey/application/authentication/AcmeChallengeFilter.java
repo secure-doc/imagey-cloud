@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.authentication;
 
+
 import static jakarta.servlet.http.HttpServletResponse.SC_NOT_FOUND;
 import static org.apache.commons.io.IOUtils.copy;
 

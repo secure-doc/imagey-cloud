@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.infrastructure;
 
+
 import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 
 import jakarta.enterprise.context.ApplicationScoped;

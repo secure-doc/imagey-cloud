@@ -3,12 +3,12 @@ import { useAuthentication } from "../contexts/AuthenticationContext";
 
 export default function AcceptInvitationButton({
   className = "",
-  user,
+  userId,
   contact,
   onAccepted,
 }: {
   className?: string;
-  user: string;
+  userId: string;
   contact: string;
   onAccepted: () => void;
 }) {
@@ -18,7 +18,7 @@ export default function AcceptInvitationButton({
       className={`${className} circle transparent`}
       onClick={() => {
         contactService
-          .acceptContactRequest(user, contact, mainKeyPair)
+          .acceptContactRequest(userId, contact, mainKeyPair)
           .then(() => onAccepted());
       }}
     >

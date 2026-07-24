@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import static cloud.imagey.domain.chat.ContactStatus.DENIAL_RECEIVED;
 import static cloud.imagey.domain.chat.ContactStatus.DENIAL_SENT;
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
@@ -32,7 +33,6 @@ import jakarta.validation.ValidationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
@@ -91,13 +91,13 @@ public class ContactService {
             return false;
         } else {
             contactRepository.persist(sender, recipient, ContactStatus.INVITATION_SENT);
-            Token token = tokenService.generateToken(recipient, ONE_WEEK);
-            String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.email().address();
+            Token token = tokenService.generateRegistrationToken(recipient.email(), ONE_WEEK);
+            String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.id().id();
             mailService.send(recipient.email(), new EmailTemplate(
                 new Email("invitation@" + domain.getHost()),
                 invitationSubject,
                 invitationBody
-            ).formatted(domain.getAppName(), sender.email().address(), link));
+            ).formatted(domain.getAppName(), sender.id().id(), link));
             return true;
         }
     }

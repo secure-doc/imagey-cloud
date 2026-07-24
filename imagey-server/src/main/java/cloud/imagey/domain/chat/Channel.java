@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
 import cloud.imagey.domain.chat.Channel.Adapter;

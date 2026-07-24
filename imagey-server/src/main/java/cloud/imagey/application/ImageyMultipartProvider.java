@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ext.Provider;
 

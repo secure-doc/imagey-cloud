@@ -16,9 +16,10 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
+
 import static jakarta.ws.rs.Priorities.AUTHORIZATION;
-import static jakarta.ws.rs.core.Response.status;
 import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
+import static jakarta.ws.rs.core.Response.status;
 
 import java.io.IOException;
 

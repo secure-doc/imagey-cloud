@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.mail;
 
+
 import java.util.Properties;
 
 import jakarta.enterprise.context.ApplicationScoped;

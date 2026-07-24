@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.authentication;
 
+
 import java.security.Principal;
 import java.util.function.Function;
 

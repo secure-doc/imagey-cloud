@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
@@ -49,9 +50,10 @@ import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 @ApplicationScoped
-@Path("{email}/documents")
+@Path("{userId}/documents")
 public class DocumentResource {
 
     private static final Logger LOG = LogManager.getLogger(DocumentResource.class);
@@ -66,7 +68,8 @@ public class DocumentResource {
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
     public List<DocumentMetadata> getDocumentMetadata(
-        @PathParam("email") User user) throws IOException {
+        @PathParam("userId") UserId userId) throws IOException {
+        User user = new User(userId, null);
 
         return documentRepository.findMetadata(user);
     }
@@ -76,8 +79,9 @@ public class DocumentResource {
     @Path("{documentId}")
     @Produces(APPLICATION_JSON)
     public DocumentMetadata getDocumentMetadata(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("documentId") DocumentId documentId) throws IOException {
+        User user = new User(userId, null);
 
         Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
         return documentRepository.findMetadata(user, documentId, callerEmail);
@@ -88,9 +92,10 @@ public class DocumentResource {
     @Path("{documentId}")
     @Consumes(APPLICATION_JSON)
     public Response storeDocumentMetadata(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("documentId") DocumentId documentId,
         DocumentMetadata metadata) throws IOException {
+        User user = new User(userId, null);
 
         documentRepository.persist(user, metadata);
         return Response.ok().build();
@@ -101,9 +106,10 @@ public class DocumentResource {
     @Path("{documentId}/files/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public DocumentContent getDocumentContent(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("contentId") DocumentId contentId) throws IOException {
+        User user = new User(userId, null);
 
         return documentRepository.loadContent(user, documentId, contentId).orElseThrow(NotFoundException::new);
     }
@@ -113,10 +119,11 @@ public class DocumentResource {
     @Path("{documentId}/files/{contentId}")
     @Consumes(APPLICATION_OCTET_STREAM)
     public Response storeDocumentContent(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("contentId") DocumentId contentId,
         DocumentContent content) throws IOException {
+        User user = new User(userId, null);
 
         documentRepository.persist(user, documentId, contentId, content);
         return Response.ok().build();
@@ -127,9 +134,10 @@ public class DocumentResource {
     @Path("{documentId}/keys/{share-email}")
     @Produces(APPLICATION_JSON)
     public EncryptedSharedKey getSharedKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
+        User user = new User(userId, null);
 
         return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
                 .orElseThrow(NotFoundException::new);
@@ -140,10 +148,11 @@ public class DocumentResource {
     @Path("{documentId}/keys/{share-email}")
     @Consumes(APPLICATION_JSON)
     public Response storeSharedKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("share-email") Email userTheDocumentIsSharedWith,
         EncryptedSharedKey key) throws IOException {
+        User user = new User(userId, null);
 
         documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, key);
         return Response.ok().build();
@@ -162,13 +171,14 @@ public class DocumentResource {
     @RolesAllowed("owner")
     @Consumes(MULTIPART_FORM_DATA)
     public Response uploadDocument(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @Multipart("metadata") DocumentMetadata metadata,
         @Multipart("sharedKey") EncryptedSharedKey sharedKey,
         @Multipart("content") DocumentContent content,
         @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
         @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
             throws IOException {
+        User user = new User(userId, null);
 
         documentRepository.persist(user, metadata.documentId(), user.email(), sharedKey);
         documentRepository.persist(user, metadata);

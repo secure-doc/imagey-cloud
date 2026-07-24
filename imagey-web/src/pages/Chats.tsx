@@ -20,14 +20,14 @@ export default function Chats() {
 
 export function ChatsList({
   className,
-  activeContactEmail,
+  activeContactId,
 }: {
   className?: string;
-  activeContactEmail?: string;
+  activeContactId?: string;
 }) {
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
-  const user = authentication.user;
+  const userId = authentication.userId;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<Contact[]>();
   const [contacts, setContacts] = useState<Contact[]>();
@@ -48,19 +48,19 @@ export function ChatsList({
 
   useEffect(() => {
     contactRepository
-      .getContacts(user)
+      .getContacts(userId)
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));
     contactRepository
-      .getContactRequests(user)
+      .getContactRequests(userId)
       .then((contactRequests) => setContactRequests(contactRequests))
       .catch((e) => console.error("Failed to fetch contact requests", e));
-  }, [user]);
+  }, [userId]);
 
   const handleContactRequest = async (email: string) => {
-    if (user) {
+    if (userId) {
       try {
-        await contactRepository.sendContactRequest(user, email);
+        await contactRepository.sendContactRequest(userId, email);
         setIsDialogOpen(false);
       } catch (error) {
         console.error("Failed to send contact request", error);
@@ -74,7 +74,7 @@ export function ChatsList({
         className ? className + " col scroll s12 m4 l4" : "col scroll s12 m4 l4"
       }
       style={
-        activeContactEmail
+        activeContactId
           ? { borderRight: "1px solid var(--surface-variant)" }
           : undefined
       }
@@ -94,7 +94,7 @@ export function ChatsList({
                 </div>
                 <div>
                   <AcceptInvitationButton
-                    user={user}
+                    userId={userId}
                     contact={contactRequest.userId}
                     onAccepted={() => {
                       setContactRequests((contactRequests) =>
@@ -108,7 +108,7 @@ export function ChatsList({
                     }}
                   />
                   <DeclineInvitationButton
-                    user={user}
+                    userId={userId}
                     contact={contactRequest.userId}
                     onDeclined={() =>
                       setContactRequests((contactRequests) =>

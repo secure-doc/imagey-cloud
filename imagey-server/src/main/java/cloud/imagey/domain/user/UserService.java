@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.user;
 
+
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
 
 import java.io.IOException;
@@ -77,9 +78,9 @@ public class UserService {
             throw new ValidationException("Invalid client URL: " + domain.value());
         }
 
-        Token token = tokenService.generateToken(user, ONE_DAY);
         if (userRepository.exists(user)) {
             LOG.info("User exists");
+            Token token = tokenService.generateLoginToken(user.email(), ONE_DAY);
             String link = domain.value() + "/authentications/" + token.token();
             mailService.send(user.email(), new EmailTemplate(
                 new Email("login@" + domain.getHost()),
@@ -89,6 +90,7 @@ public class UserService {
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
             LOG.info("User does not exist, starting registration...");
+            Token token = tokenService.generateRegistrationToken(user.email(), ONE_DAY);
             String link = domain.value() + "/registrations/" + token.token();
             mailService.send(user.email(), new EmailTemplate(
                 new Email("verification@" + domain.getHost()),
@@ -104,7 +106,7 @@ public class UserService {
     }
 
     public void register(UserRegistration registration) throws IOException {
-        User user = new User(registration.email());
+        User user = new User(registration.userId(), null);
         userRepository.storePublicKey(user, new Kid("0"), registration.mainPublicKey());
         deviceRepository.storeDevicePublicKey(user, registration.deviceId(), registration.devicePublicKey());
         deviceRepository.storeEncryptedPrivateKey(

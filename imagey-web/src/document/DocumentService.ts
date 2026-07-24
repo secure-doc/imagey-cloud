@@ -150,7 +150,7 @@ export const documentService = {
   shareDocument: async (
     user: string,
     documentId: string,
-    contactEmail: string,
+    contactId: string,
     userPublicKey: JsonWebKey,
     userPrivateKey: JsonWebKey,
     chatKey: JsonWebKey,
@@ -179,7 +179,7 @@ export const documentService = {
     await documentRepository.storeSharedKey(
       user,
       documentId,
-      contactEmail,
+      contactId,
       newEncryptedDocumentKey,
     );
   },

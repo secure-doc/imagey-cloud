@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import static jakarta.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.write;
 
@@ -46,7 +47,7 @@ public class MessageRepository extends AbstractFileRepository {
         Message message = new Message(sender, encryptedContent);
         String jsonContent = create().toJson(message);
 
-        File receiverHome = new File(rootPath, receiver.email().address());
+        File receiverHome = new File(rootPath, receiver.id().id());
         if (!receiverHome.exists()) {
             mkdir(receiverHome);
         }
@@ -54,14 +55,14 @@ public class MessageRepository extends AbstractFileRepository {
         if (!messagesHome.exists()) {
             mkdir(messagesHome);
         }
-        File senderFolder = new File(messagesHome, sender.email().address());
+        File senderFolder = new File(messagesHome, sender.id().id());
         if (!senderFolder.exists()) {
             mkdir(senderFolder);
         }
         File messageFile = new File(senderFolder, id.value() + ".json");
         write(messageFile, jsonContent, UTF_8, false);
 
-        File senderHome = new File(rootPath, sender.email().address());
+        File senderHome = new File(rootPath, sender.id().id());
         if (!senderHome.exists()) {
             mkdir(senderHome);
         }
@@ -69,7 +70,7 @@ public class MessageRepository extends AbstractFileRepository {
         if (!senderMessagesHome.exists()) {
             mkdir(senderMessagesHome);
         }
-        File receiverFolder = new File(senderMessagesHome, receiver.email().address());
+        File receiverFolder = new File(senderMessagesHome, receiver.id().id());
         if (!receiverFolder.exists()) {
             mkdir(receiverFolder);
         }
@@ -78,13 +79,13 @@ public class MessageRepository extends AbstractFileRepository {
 
         return new Message(sender, encryptedContent)
             .withId(id)
-            .inChannel(new Channel(sender.email().address() + ":" + receiver.email().address()));
+            .inChannel(new Channel(sender.id().id() + ":" + receiver.id().id()));
     }
 
     public List<Message> fetchMessages(User receiver, User sender, java.util.Optional<MessageId> sinceId) {
-        File receiverHome = new File(rootPath, receiver.email().address());
+        File receiverHome = new File(rootPath, receiver.id().id());
         File messagesHome = new File(receiverHome, "messages");
-        File senderFolder = new File(messagesHome, sender.email().address());
+        File senderFolder = new File(messagesHome, sender.id().id());
 
         List<Message> messages = new ArrayList<>();
         if (senderFolder.exists() && senderFolder.isDirectory()) {

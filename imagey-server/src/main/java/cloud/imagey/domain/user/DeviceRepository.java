@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.user;
 
+
 import static jakarta.json.bind.JsonbBuilder.create;
 import static java.util.Arrays.stream;
 import static java.util.Optional.empty;
@@ -108,7 +109,7 @@ public class DeviceRepository extends AbstractFileRepository {
     }
 
     private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
+        return new File(rootPath, user.id().id());
     }
 
     private PrivateKeyMetadata parse(String json) {

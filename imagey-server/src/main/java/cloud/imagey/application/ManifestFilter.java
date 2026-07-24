@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import java.io.IOException;
 
 import jakarta.enterprise.context.ApplicationScoped;

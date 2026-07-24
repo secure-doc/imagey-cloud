@@ -1,4 +1,5 @@
 // imagey.user contains the email address
+// imagey.userId contains the user id
 // imagey.deviceIds[email] contains the device id of the user
 // imagey.devices[deviceId].key contains the encrypted private device key
 export const deviceRepository = {
@@ -11,6 +12,16 @@ export const deviceRepository = {
   },
   removeUser: () => {
     localStorage.removeItem("imagey.user");
+  },
+  loadUserId: () => {
+    const userId = localStorage.getItem("imagey.userId");
+    return userId ? userId : undefined;
+  },
+  storeUserId: (userId: string) => {
+    localStorage.setItem("imagey.userId", userId);
+  },
+  removeUserId: () => {
+    localStorage.removeItem("imagey.userId");
   },
   loadDeviceId: (email: string) => {
     const deviceId = localStorage.getItem(`imagey.deviceIds[${email}]`);

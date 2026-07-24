@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 
 import java.io.IOException;
@@ -42,9 +43,10 @@ import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.DeviceRepository;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 @ApplicationScoped
-@Path("{email}/devices")
+@Path("{userId}/devices")
 public class DeviceResource {
 
     private static final Logger LOG = LogManager.getLogger(DeviceResource.class);
@@ -55,7 +57,8 @@ public class DeviceResource {
     @GET
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
-    public List<DeviceId> getDevices(@PathParam("email") User user) {
+    public List<DeviceId> getDevices(@PathParam("userId") UserId userId) {
+        User user = new User(userId, null);
         return deviceRepository.loadDevices(user);
     }
 
@@ -64,9 +67,10 @@ public class DeviceResource {
     @Path("{deviceId}/public-keys")
     @Consumes(APPLICATION_JSON)
     public Response storeDevicePublicKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("deviceId") DeviceId deviceId,
         String key) throws IOException {
+        User user = new User(userId, null);
 
         deviceRepository.storeDevicePublicKey(user, deviceId, new PublicKey(key));
         return Response.ok().build();
@@ -77,9 +81,10 @@ public class DeviceResource {
     @Path("{deviceId}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public PublicKey getDevicePublicKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {
+        User user = new User(userId, null);
 
         LOG.info("Loading public device key");
         return deviceRepository.loadDevicePublicKey(user, deviceId, kid).orElseThrow(NotFoundException::new);
@@ -90,9 +95,10 @@ public class DeviceResource {
     @Path("{deviceId}/private-keys")
     @Consumes(APPLICATION_JSON)
     public Response storeEncryptedPrivateKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("deviceId") DeviceId deviceId,
         String key) throws IOException {
+        User user = new User(userId, null);
 
         deviceRepository.storeEncryptedPrivateKey(
             user,
@@ -106,9 +112,10 @@ public class DeviceResource {
     @Path("{deviceId}/private-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public PrivateKeyMetadata getEncryptedPrivateKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {
+        User user = new User(userId, null);
 
         return deviceRepository.loadPrivateKey(user, deviceId, kid).orElseThrow(() -> new NotFoundException());
     }
@@ -118,9 +125,10 @@ public class DeviceResource {
     @Path("{deviceId}/recovery-key")
     @Consumes(APPLICATION_JSON)
     public Response storeDeviceRecoveryKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("deviceId") DeviceId deviceId,
         String recoveryKey) throws IOException {
+        User user = new User(userId, null);
 
         deviceRepository.storeDeviceRecoveryKey(user, deviceId, recoveryKey);
         return Response.ok().build();
@@ -131,8 +139,9 @@ public class DeviceResource {
     @Path("{deviceId}/recovery-key")
     @Produces(APPLICATION_JSON)
     public String getDeviceRecoveryKey(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @PathParam("deviceId") DeviceId deviceId) throws IOException {
+        User user = new User(userId, null);
 
         LOG.info("Loading device recovery key");
         return deviceRepository.loadDeviceRecoveryKey(user, deviceId).orElseThrow(NotFoundException::new);

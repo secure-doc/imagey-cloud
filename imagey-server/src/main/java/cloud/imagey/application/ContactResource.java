@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.Response.created;
 import static jakarta.ws.rs.core.Response.noContent;
@@ -48,6 +49,7 @@ import cloud.imagey.domain.chat.ContactRepository;
 import cloud.imagey.domain.chat.ContactService;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 @Path("/")
 @ApplicationScoped
@@ -62,13 +64,14 @@ public class ContactResource {
 
     @POST
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests")
+    @Path("{userId}/contact-requests")
     @Consumes(APPLICATION_JSON)
-    public Response requestContact(@PathParam("email") User sender, User recipient, @Context UriInfo uriInfo) throws IOException {
+    public Response requestContact(@PathParam("userId") UserId senderId, User recipient, @Context UriInfo uriInfo) throws IOException {
+        User sender = new User(senderId, null);
         boolean created = contactService.invite(sender, recipient);
         if (created) {
             UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
-            contactRequest.path(recipient.email().address());
+            contactRequest.path(recipient.id().id());
             return created(contactRequest.build()).build();
         } else {
             return noContent().build();
@@ -77,41 +80,49 @@ public class ContactResource {
 
     @GET
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests")
-    public List<User> getContactRequests(@PathParam("email") User user) {
+    @Path("{userId}/contact-requests")
+    public List<User> getContactRequests(@PathParam("userId") UserId userId) {
+        User user = new User(userId, null);
         return contactRepository.findContactRequests(user);
     }
 
     @DELETE
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests/{contact}")
-    public void declineInvitation(@PathParam("email") User user, @PathParam("contact") User contact) throws IOException {
+    @Path("{userId}/contact-requests/{contact}")
+    public void declineInvitation(@PathParam("userId") UserId userId, @PathParam("contactId") UserId contactId) throws IOException {
+        User contact = new User(contactId, null);
+        User user = new User(userId, null);
         contactService.declineInvitation(user, contact);
     }
 
     @GET
     @RolesAllowed("owner")
-    @Path("{email}/contacts")
+    @Path("{userId}/contacts")
     @Produces(APPLICATION_JSON)
-    public List<User> getContacts(@PathParam("email") User user) {
+    public List<User> getContacts(@PathParam("userId") UserId userId) {
+        User user = new User(userId, null);
         return contactRepository.findContacts(user);
     }
 
     @PUT
     @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}")
+    @Path("{userId}/contacts/{contact}")
     @Consumes(APPLICATION_JSON)
-    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, ContactKeys keys)
+    public void acceptInvitation(@PathParam("userId") UserId userId, @PathParam("contactId") UserId contactId, ContactKeys keys)
             throws IOException {
+        User contact = new User(contactId, null);
+        User user = new User(userId, null);
 
         contactService.acceptInvitation(user, contact, keys);
     }
 
     @GET
     @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
+    @Path("{userId}/contacts/{contact}/key")
     @Produces(APPLICATION_JSON)
-    public EncryptedSharedKey getContactKey(@PathParam("email") User user, @PathParam("contact") User contact) {
+    public EncryptedSharedKey getContactKey(@PathParam("userId") UserId userId, @PathParam("contactId") UserId contactId) {
+        User contact = new User(contactId, null);
+        User user = new User(userId, null);
         return contactRepository.getContactKey(user, contact).orElseThrow(NotFoundException::new);
     }
 
@@ -119,12 +130,14 @@ public class ContactResource {
 
     @PUT
     @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
+    @Path("{userId}/contacts/{contact}/key")
     @Consumes(APPLICATION_JSON)
     public void reissueContactKey(
-        @PathParam("email") User user,
-        @PathParam("contact") User contact,
+        @PathParam("userId") UserId userId,
+        @PathParam("contactId") UserId contactId,
         ContactKeys keys) throws IOException {
+        User contact = new User(contactId, null);
+        User user = new User(userId, null);
 
         contactService.reissueKey(user, contact, keys);
     }

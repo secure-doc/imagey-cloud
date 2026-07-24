@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.infrastructure;
 
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;

@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.infrastructure;
 
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;

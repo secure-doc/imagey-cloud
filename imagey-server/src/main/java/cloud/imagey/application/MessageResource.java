@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.TEXT_PLAIN;
 import static java.lang.Math.min;
@@ -61,8 +62,9 @@ import cloud.imagey.domain.chat.MessageId;
 import cloud.imagey.domain.chat.MessageRepository;
 import cloud.imagey.domain.chat.MessageService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
-@Path("{email}/contacts/{contact}/messages")
+@Path("{userId}/contacts/{contact}/messages")
 @ApplicationScoped
 public class MessageResource {
 
@@ -79,10 +81,12 @@ public class MessageResource {
     @RolesAllowed("owner")
     @Consumes(TEXT_PLAIN)
     public Response sendMessage(
-        @PathParam("email") User sender,
-        @PathParam("contact") User contact,
+        @PathParam("userId") UserId senderId,
+        @PathParam("contactId") UserId contactId,
         MessageContent messageContent,
         @Context UriInfo uriInfo) throws IOException {
+        User contact = new User(contactId, null);
+        User sender = new User(senderId, null);
 
         Message message = messageService.sendMessage(sender, contact, messageContent);
         return Response.created(uriInfo.getAbsolutePathBuilder().path(message.id().value()).build()).build();
@@ -92,11 +96,12 @@ public class MessageResource {
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
     public void receiveMessages(
-        @PathParam("email") User receiver,
+        @PathParam("userId") UserId receiverId,
         @PathParam("contact") User sender,
         @QueryParam("sinceId") MessageId sinceId,
         @HeaderParam("Prefer") Prefer prefer,
         @Suspended AsyncResponse asyncResponse) {
+        User receiver = new User(receiverId, null);
 
         long timeout = min(pollingTimeoutSeconds, ofNullable(prefer).map(Prefer::timeout).orElse(0L));
 
@@ -105,7 +110,7 @@ public class MessageResource {
             asyncResponse.setTimeout(timeout, SECONDS);
             asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.ok(emptyList()).build()));
 
-            Channel channel = new Channel(sender.email().address() + ":" + receiver.email().address());
+            Channel channel = new Channel(sender.id().id() + ":" + receiver.id().id());
             waitingRequests.computeIfAbsent(channel, c -> new ConcurrentLinkedQueue<>()).add(asyncResponse);
         } else {
             asyncResponse.resume(messages);

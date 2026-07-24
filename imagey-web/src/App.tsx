@@ -24,8 +24,8 @@ import Activities from "./pages/Activities";
 import { useParams } from "react-router";
 
 function ChatRoute() {
-  const { contactEmail } = useParams();
-  return contactEmail ? <Chat contactEmail={contactEmail} /> : null;
+  const { contactId } = useParams();
+  return contactId ? <Chat contactId={contactId} /> : null;
 }
 
 function BottomNavLayout() {
@@ -62,22 +62,24 @@ function App() {
      Create symmetric key, register device. User is logged in.
   */
   const [user, setUser] = useState<Email>();
+  const [userId, setUserId] = useState<string>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
   useEffect(() => {
     ui("theme", "#1176f3");
   }, []);
-  if (!user || !keyPairs) {
+  if (!user || !userId || !keyPairs) {
     return (
       <AuthenticationComponent
-        onKeysDecrypted={(user, keyPairs) => {
+        onKeysDecrypted={(user, userId, keyPairs) => {
           setUser(user);
+          setUserId(userId);
           setKeyPairs(keyPairs);
         }}
       />
     );
   }
   return (
-    <AuthenticationContext.Provider value={{ user, keyPairs }}>
+    <AuthenticationContext.Provider value={{ email: user, userId, keyPairs }}>
       <ActionBarContextProvider>
         <BrowserRouter>
           <AppBar />
@@ -97,7 +99,7 @@ function App() {
                 <Route path="devices" element={user && <Devices />} />
               </Route>
             </Route>
-            <Route path="chats/:contactEmail" element={<ChatRoute />} />
+            <Route path="chats/:contactId" element={<ChatRoute />} />
           </Routes>
           <aside></aside>
         </BrowserRouter>

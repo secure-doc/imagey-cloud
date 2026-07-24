@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import java.util.UUID;
 
 import jakarta.json.bind.annotation.JsonbTypeAdapter;

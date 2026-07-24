@@ -16,8 +16,9 @@
  */
 package cloud.imagey.application.infrastructure;
 
-import static jakarta.ws.rs.core.Response.status;
+
 import static jakarta.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
+import static jakarta.ws.rs.core.Response.status;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.WebApplicationException;

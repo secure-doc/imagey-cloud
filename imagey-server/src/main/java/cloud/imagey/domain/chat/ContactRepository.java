@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
 import static jakarta.json.bind.JsonbBuilder.create;
 import static java.nio.charset.Charset.defaultCharset;
@@ -55,7 +56,7 @@ public class ContactRepository extends AbstractFileRepository {
 
     public void persist(User sender, User recipient, ContactStatus newStatus) throws IOException {
         File contactRequests = new File(getUserHome(sender), "contact-requests");
-        File recipientRequests = new File(contactRequests, recipient.email().address());
+        File recipientRequests = new File(contactRequests, recipient.id().id());
         write(new File(recipientRequests, "status.txt"), newStatus.name(), defaultCharset());
     }
 
@@ -65,7 +66,7 @@ public class ContactRepository extends AbstractFileRepository {
         if (!contactHome.exists()) {
             contactHome.mkdirs();
         }
-        File contactFolder = new File(contactHome, contact.email().address());
+        File contactFolder = new File(contactHome, contact.id().id());
         if (!contactFolder.exists()) {
             mkdir(contactFolder);
         }
@@ -73,7 +74,7 @@ public class ContactRepository extends AbstractFileRepository {
         write(keyFile, create().toJson(key), UTF_8, false);
 
         // Delete any pending invitations since they are now a contact
-        File requestDirectory = new File(new File(userHome, "contact-requests"), contact.email().address());
+        File requestDirectory = new File(new File(userHome, "contact-requests"), contact.id().id());
         if (requestDirectory.exists()) {
             deleteDirectory(requestDirectory);
         }
@@ -96,7 +97,7 @@ public class ContactRepository extends AbstractFileRepository {
 
     public Optional<ContactStatus> getContactStatus(User user, User contact) {
         File userHome = getUserHome(user);
-        File contactFolder = new File(new File(userHome, "contact-requests"), contact.email().address());
+        File contactFolder = new File(new File(userHome, "contact-requests"), contact.id().id());
         File statusFile = new File(contactFolder, "status.txt");
         if (!statusFile.exists()) {
             return empty();
@@ -106,7 +107,7 @@ public class ContactRepository extends AbstractFileRepository {
 
     public Optional<EncryptedSharedKey> getContactKey(User user, User contact) {
         File userHome = getUserHome(user);
-        File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
+        File contactFolder = new File(new File(userHome, "contacts"), contact.id().id());
         File keyFile = new File(contactFolder, "key.json");
         LOG.info("key file found: " + keyFile.exists());
         if (keyFile.exists()) {
@@ -122,7 +123,7 @@ public class ContactRepository extends AbstractFileRepository {
 
     public void updateContactKey(User user, User contact, EncryptedSharedKey key) throws IOException {
         File userHome = getUserHome(user);
-        File contactFolder = new File(new File(userHome, "contacts"), contact.email().address());
+        File contactFolder = new File(new File(userHome, "contacts"), contact.id().id());
         File keyFile = new File(contactFolder, "key.json");
         write(keyFile, create().toJson(key), UTF_8);
     }
@@ -131,7 +132,7 @@ public class ContactRepository extends AbstractFileRepository {
         updateContactKey(user, contact, keys.userKey());
 
         File contactHome = getUserHome(contact);
-        File contactFolder = new File(new File(contactHome, "contacts"), user.email().address());
+        File contactFolder = new File(new File(contactHome, "contacts"), user.id().id());
         if (!contactFolder.exists()) {
             mkdir(contactFolder);
         }
@@ -143,7 +144,7 @@ public class ContactRepository extends AbstractFileRepository {
     public boolean isContact(User user, User contact) {
         File userHome = getUserHome(user);
         File contactsHome = new File(userHome, "contacts");
-        return new File(contactsHome, contact.email().address()).exists();
+        return new File(contactsHome, contact.id().id()).exists();
     }
 
     public List<User> findContacts(User user) {
@@ -166,6 +167,6 @@ public class ContactRepository extends AbstractFileRepository {
     }
 
     private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
+        return new File(rootPath, user.id().id());
     }
 }

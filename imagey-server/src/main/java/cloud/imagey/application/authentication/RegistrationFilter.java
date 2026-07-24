@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.authentication;
 
+
 import static cloud.imagey.domain.token.TokenService.ONE_HOUR;
 import static jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN;
 
@@ -39,6 +40,8 @@ import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
+import cloud.imagey.domain.user.UserMappingService;
 import cloud.imagey.domain.user.UserService;
 
 @ApplicationScoped
@@ -50,6 +53,8 @@ public class RegistrationFilter extends HttpFilter {
     private TokenService tokenService;
     @Inject
     private UserService userService;
+    @Inject
+    private UserMappingService userMappingService;
 
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -57,17 +62,18 @@ public class RegistrationFilter extends HttpFilter {
         LOG.info("Registration started");
         Token registrationToken = extractToken(request.getRequestURI());
         Optional<DecodedToken> decoded = tokenService.decode(registrationToken);
-        if (decoded.isEmpty()) {
+        if (decoded.isEmpty() || !"registration".equals(decoded.get().jwt().getClaim("type"))) {
             LOG.warn("Invalid registration token");
             response.sendError(SC_FORBIDDEN);
             return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
-        User user = new User(email);
+        UserId userId = userMappingService.registerUser(email);
+        User user = new User(userId, email);
         userService.create(user);
-        Token authenticationToken = tokenService.generateToken(user, ONE_HOUR);
+        Token authenticationToken = tokenService.generateAuthenticationToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
-        response.sendRedirect("/?email=" + email.address());
+        response.sendRedirect("/?email=" + email.address() + "&userId=" + userId.id());
         LOG.info("User registered");
     }
 

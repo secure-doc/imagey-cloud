@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.encryption;
 
+
 import jakarta.json.bind.annotation.JsonbCreator;
 
 import cloud.imagey.domain.token.Kid;

@@ -7,25 +7,25 @@ import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
 
-export default function Chat({ contactEmail }: { contactEmail: string }) {
+export default function Chat({ contactId }: { contactId: string }) {
   const authentication = useAuthentication();
-  const user = authentication.user;
+  const userId = authentication.userId;
   const publicKey = authentication.keyPairs?.mainKeyPair.publicKey;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
 
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
   const [keyError, setKeyError] = useState(false);
-  const { messages, setMessages } = usePolling(user, contactEmail, sharedKey);
+  const { messages, setMessages } = usePolling(userId, contactId, sharedKey);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useBackButton();
-  useTitle(contactEmail);
+  useTitle(contactId);
 
   useEffect(() => {
-    if (contactEmail && publicKey && privateKey) {
+    if (contactId && publicKey && privateKey) {
       contactService
-        .loadSharedKey(user, contactEmail, publicKey, privateKey)
+        .loadSharedKey(userId, contactId, publicKey, privateKey)
         .then((decryptedKey) => {
           setSharedKey(decryptedKey);
           setKeyError(false);
@@ -35,14 +35,14 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
           setKeyError(true);
         });
     }
-  }, [user, contactEmail, publicKey, privateKey]);
+  }, [userId, contactId, publicKey, privateKey]);
 
   const handleReissue = async () => {
-    if (contactEmail && publicKey && privateKey) {
+    if (contactId && publicKey && privateKey) {
       try {
         const newSharedKey = await contactService.reissueKey(
-          user,
-          contactEmail,
+          userId,
+          contactId,
           publicKey,
           privateKey,
         );
@@ -60,7 +60,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
 
   return (
     <main className="grid no-margin no-space no-padding">
-      <ChatsList className="m l" activeContactEmail={contactEmail} />
+      <ChatsList className="m l" activeContactId={contactId} />
       <div
         className="col s12 m8 l8 vertical"
         style={{
@@ -100,12 +100,12 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
                 <div
                   key={m.id}
                   className={`padding elevate ${
-                    m.sender === user
+                    m.sender === userId
                       ? "primary top-round left-round"
                       : "surface-container top-round right-round"
                   }`}
                   style={{
-                    alignSelf: m.sender === user ? "flex-end" : "flex-start",
+                    alignSelf: m.sender === userId ? "flex-end" : "flex-start",
                     maxWidth: "80%",
                     wordWrap: "break-word",
                   }}
@@ -131,12 +131,12 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
               ))}
               <div ref={messagesEndRef} />
             </div>
-            {user && contactEmail && (
+            {userId && contactId && (
               <>
                 <hr className="divider" />
                 <SendMessageForm
-                  userEmail={user}
-                  contactEmail={contactEmail}
+                  userId={userId}
+                  contactId={contactId}
                   sharedKey={sharedKey}
                   onMessageSent={(newMessage) =>
                     setMessages((prev) => [...(prev ?? []), newMessage])

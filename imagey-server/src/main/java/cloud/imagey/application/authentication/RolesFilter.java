@@ -16,13 +16,14 @@
  */
 package cloud.imagey.application.authentication;
 
+
 import static cloud.imagey.application.authentication.DefaultSecurityContext.forPrincipal;
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
 import static cloud.imagey.domain.chat.ContactStatus.INVITATION_SENT;
+import static jakarta.ws.rs.Priorities.AUTHENTICATION;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 import static java.util.Optional.ofNullable;
-import static jakarta.ws.rs.Priorities.AUTHENTICATION;
 
 import java.io.IOException;
 import java.security.Principal;

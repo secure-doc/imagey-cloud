@@ -6,6 +6,7 @@ export interface TestDevice {
 }
 
 export interface TestChat {
+  contactId: string;
   contactEmail: string;
   encryptedSharedKey: string;
   messages: { id: string; content: string }[];
@@ -20,6 +21,8 @@ export interface TestUser<
   TDevices extends TestDevice[] = TestDevice[],
   TDocs extends TestDocument[] = TestDocument[],
 > {
+  userId: string;
+  email: string;
   password: string;
   publicMainKey: JsonWebKey;
   privateMainKey?: JsonWebKey;

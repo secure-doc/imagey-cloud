@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.chat;
 
+
 import java.io.IOException;
 
 import jakarta.enterprise.context.ApplicationScoped;

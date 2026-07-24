@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 
 import java.io.IOException;
@@ -44,9 +45,10 @@ import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 @ApplicationScoped
-@Path("{email}/profile")
+@Path("{userId}/profile")
 public class ProfileResource {
 
     private static final Logger LOG = LogManager.getLogger(ProfileResource.class);
@@ -62,13 +64,14 @@ public class ProfileResource {
     @RolesAllowed("owner")
     @Consumes(MULTIPART_FORM_DATA)
     public Response updateProfile(
-        @PathParam("email") User user,
+        @PathParam("userId") UserId userId,
         @Multipart("metadata") DocumentMetadata metadata,
         @Multipart("sharedKey") EncryptedSharedKey sharedKey,
         @Multipart("content") DocumentContent content,
         @Multipart(value = "smallImage", required = false) DocumentContent smallImage,
         @Multipart(value = "previewImage", required = false) DocumentContent previewImage)
             throws IOException {
+        User user = new User(userId, null);
 
         // Ensure we are working with the profile document ID
         DocumentMetadata profileMetadata = new DocumentMetadata(
@@ -101,7 +104,8 @@ public class ProfileResource {
     @GET
     @RolesAllowed({"owner", "contact", "contact-request"})
     @Produces(jakarta.ws.rs.core.MediaType.APPLICATION_JSON)
-    public DocumentMetadata getProfileMetadata(@PathParam("email") User user) throws IOException {
+    public DocumentMetadata getProfileMetadata(@PathParam("userId") UserId userId) throws IOException {
+        User user = new User(userId, null);
         Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
         return documentRepository.findMetadata(user, PROFILE_ID, callerEmail);
     }

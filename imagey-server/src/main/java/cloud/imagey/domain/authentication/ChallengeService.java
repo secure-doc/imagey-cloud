@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.authentication;
 
+
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;

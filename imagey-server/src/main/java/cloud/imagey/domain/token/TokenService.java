@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.token;
 
+
 import static java.lang.System.currentTimeMillis;
 import static java.util.Optional.empty;
 
@@ -56,15 +57,56 @@ public class TokenService {
     @ConfigProperty(name = "authentication.secret")
     private String sharedSecret;
 
-    public Token generateToken(User user, long validityInMilliseconds) {
-        LOG.info("Generate token with validity {}", validityInMilliseconds);
+    public Token generateRegistrationToken(cloud.imagey.domain.mail.Email email, long validityInMilliseconds) {
+        LOG.info("Generate registration token with validity {}", validityInMilliseconds);
         try {
             JWSSigner signer = new MACSigner(Base64.getDecoder().decode(sharedSecret));
-            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder().subject(user.email().address()).issuer(ISSUER)
+            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .subject(email.address())
+                .claim("type", "registration")
+                .issuer(ISSUER)
                 .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds)).build();
             SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
             signedJWT.sign(signer);
-            LOG.info("Token generated.");
+            LOG.info("Registration token generated.");
+            return new Token(signedJWT.serialize());
+        } catch (JOSEException e) {
+            LOG.error("Token could not be generated", e);
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public Token generateLoginToken(cloud.imagey.domain.mail.Email email, long validityInMilliseconds) {
+        LOG.info("Generate login token with validity {}", validityInMilliseconds);
+        try {
+            JWSSigner signer = new MACSigner(Base64.getDecoder().decode(sharedSecret));
+            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .subject(email.address())
+                .claim("type", "login")
+                .issuer(ISSUER)
+                .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds)).build();
+            SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
+            signedJWT.sign(signer);
+            LOG.info("Login token generated.");
+            return new Token(signedJWT.serialize());
+        } catch (JOSEException e) {
+            LOG.error("Token could not be generated", e);
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public Token generateAuthenticationToken(User user, long validityInMilliseconds) {
+        LOG.info("Generate authentication token with validity {}", validityInMilliseconds);
+        try {
+            JWSSigner signer = new MACSigner(Base64.getDecoder().decode(sharedSecret));
+            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                .subject(user.id().id())
+                .claim("type", "authentication")
+                .issuer(ISSUER)
+                .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds)).build();
+            SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
+            signedJWT.sign(signer);
+            LOG.info("Authentication token generated.");
             return new Token(signedJWT.serialize());
         } catch (JOSEException e) {
             LOG.error("Token could not be generated", e);

@@ -67,7 +67,7 @@ export const profileService = {
       new Blob([encryptedDocuments[0]], { type: "application/octet-stream" }),
     );
 
-    const response = await fetch(`/users/${email}/profile`, {
+    const response = await fetch(`/users/${userId}/profile`, {
       method: "PUT",
       credentials: "same-origin",
       body: formData,

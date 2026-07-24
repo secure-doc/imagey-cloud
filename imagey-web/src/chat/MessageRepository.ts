@@ -2,12 +2,12 @@ import { Message } from "./Message";
 
 export const messageRepository = {
   sendMessage: async (
-    senderEmail: string,
-    contactEmail: string,
+    senderId: string,
+    contactId: string,
     encryptedContent: string,
   ): Promise<string> => {
     const response = await fetch(
-      `/users/${senderEmail}/contacts/${contactEmail}/messages`,
+      `/users/${senderId}/contacts/${contactId}/messages`,
       {
         method: "POST",
         headers: {
@@ -28,8 +28,8 @@ export const messageRepository = {
     return parts[parts.length - 1];
   },
   receiveMessages: async (
-    receiverEmail: string,
-    senderEmail: string,
+    receiverId: string,
+    senderId: string,
     sinceId?: string,
     wait?: number,
   ): Promise<Message[]> => {
@@ -41,7 +41,7 @@ export const messageRepository = {
     }
 
     const response = await fetch(
-      `/users/${receiverEmail}/contacts/${senderEmail}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
+      `/users/${receiverId}/contacts/${senderId}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
       {
         method: "GET",
         headers,

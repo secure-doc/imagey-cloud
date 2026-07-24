@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.authentication;
 
+
 import static cloud.imagey.domain.token.TokenService.ONE_HOUR;
 import static jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN;
 
@@ -40,6 +41,8 @@ import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
+import cloud.imagey.domain.user.UserMappingService;
 import cloud.imagey.domain.user.UserService;
 
 @ApplicationScoped
@@ -53,6 +56,8 @@ public class InvitationFilter extends HttpFilter {
     private UserService userService;
     @Inject
     private ContactService contactService;
+    @Inject
+    private UserMappingService userMappingService;
 
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -60,20 +65,24 @@ public class InvitationFilter extends HttpFilter {
         LOG.info("Registration via invitation started");
         Token invitationToken = extractToken(request.getRequestURI());
         Optional<DecodedToken> decoded = tokenService.decode(invitationToken);
-        if (decoded.isEmpty()) {
+        if (decoded.isEmpty() || !"registration".equals(decoded.get().jwt().getClaim("type"))) {
             LOG.warn("Invalid invitation token");
             response.sendError(SC_FORBIDDEN);
             return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
-        User user = new User(email);
-        User inviter = new User(new Email(request.getParameter("invited-by")));
+        UserId userId = userMappingService.registerUser(email);
+        User user = new User(userId, email);
+
+        String inviterIdString = request.getParameter("invited-by");
+        User inviter = new User(new UserId(inviterIdString), null);
+
         userService.create(user);
         contactService.invite(inviter, user);
-        Token authenticationToken = tokenService.generateToken(user, ONE_HOUR);
+        Token authenticationToken = tokenService.generateAuthenticationToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
-        response.sendRedirect("/?email=" + email.address() + "&inviter=" + inviter.email().address());
-        LOG.info("User registered");
+        response.sendRedirect("/?email=" + email.address() + "&inviter=" + inviter.id().id());
+        LOG.info("User registered via invitation");
     }
 
     private Token extractToken(String requestUri) {

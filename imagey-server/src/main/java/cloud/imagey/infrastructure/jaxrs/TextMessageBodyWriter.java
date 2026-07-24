@@ -16,6 +16,7 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
+
 import static jakarta.ws.rs.core.MediaType.TEXT_PLAIN;
 
 import java.io.IOException;

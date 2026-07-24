@@ -2,12 +2,12 @@ import { contactRepository } from "../contact/ContactRepository";
 
 export default function DeclineInvitationButton({
   className = "",
-  user,
+  userId,
   contact,
   onDeclined,
 }: {
   className?: string;
-  user: string;
+  userId: string;
   contact: string;
   onDeclined: () => void;
 }) {
@@ -16,7 +16,7 @@ export default function DeclineInvitationButton({
       className={className ?? "" + " circle transparent"}
       onClick={() => {
         contactRepository
-          .declineContactRequest(user, contact)
+          .declineContactRequest(userId, contact)
           .then(() => onDeclined());
       }}
     >

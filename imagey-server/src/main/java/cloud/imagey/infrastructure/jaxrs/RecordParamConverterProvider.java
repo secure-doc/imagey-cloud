@@ -16,6 +16,7 @@
  */
 package cloud.imagey.infrastructure.jaxrs;
 
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 

@@ -15,7 +15,11 @@ import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { authenticationService } from "./AuthenticationService";
 
 interface AuthenticationComponentProperties {
-  onKeysDecrypted: (user: Email, keyPairs: JsonWebKeyPairs) => void;
+  onKeysDecrypted: (
+    email: Email,
+    userId: string,
+    keyPairs: JsonWebKeyPairs,
+  ) => void;
 }
 
 export default function AuthenticationComponent({
@@ -29,15 +33,19 @@ export default function AuthenticationComponent({
   const [email, setEmail] = useState(
     params.get("email") ?? deviceRepository.loadUser(),
   );
+  const [userId, setUserId] = useState<string | undefined>(
+    params.get("userId") ?? deviceRepository.loadUserId(),
+  );
   const [deviceId, setDeviceId] = useState<string>();
   const [publicMainKey, setPublicMainKey] = useState<JsonWebKey>();
   useEffect(() => {
-    if (email) {
+    if (email && userId) {
       authenticationRepository
-        .loadPublicMainKey(email)
+        .loadPublicMainKey(userId)
         .then(async (publicMainKey) => {
           setPublicMainKey(publicMainKey);
           deviceRepository.storeUser(email);
+          deviceRepository.storeUserId(userId);
           const currentDeviceId = deviceRepository.loadDeviceId(email);
           setDeviceId(currentDeviceId);
 
@@ -47,12 +55,12 @@ export default function AuthenticationComponent({
             if (encryptedRecoveryDeviceKey) {
               try {
                 const keys = await authenticationService.autoLogin(
-                  email,
+                  userId,
                   currentDeviceId,
                   encryptedRecoveryDeviceKey,
                 );
 
-                onKeysDecrypted(email, {
+                onKeysDecrypted(email, userId, {
                   mainKeyPair: {
                     publicKey: publicMainKey,
                     privateKey: keys.privateMainKey,
@@ -88,13 +96,18 @@ export default function AuthenticationComponent({
             }
           }
         });
+    } else if (email && !userId) {
+      setAuthenticationStatus(AuthenticationStatus.UNAUTHENTICATED);
+      setDeviceId(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email]);
+  }, [email, userId]);
 
   const handleWrongUser = () => {
     deviceRepository.removeUser();
+    deviceRepository.removeUserId();
     setEmail(undefined);
+    setUserId(undefined);
   };
 
   const handleAuthenticated = async (
@@ -103,11 +116,11 @@ export default function AuthenticationComponent({
   ) => {
     try {
       const publicMainKey = await authenticationRepository.loadPublicMainKey(
-        email!,
+        userId!,
       );
       const publicDeviceKey =
-        await authenticationRepository.loadPublicDeviceKey(email!, deviceId!);
-      onKeysDecrypted(email!, {
+        await authenticationRepository.loadPublicDeviceKey(userId!, deviceId!);
+      onKeysDecrypted(email!, userId!, {
         mainKeyPair: {
           publicKey: publicMainKey,
           privateKey: privateMainKey,
@@ -141,7 +154,9 @@ export default function AuthenticationComponent({
       return (
         <RegistrationDialog
           email={email}
-          onKeysDecrypted={(keyPairs) => onKeysDecrypted(email, keyPairs)}
+          onKeysDecrypted={(keyPairs) =>
+            onKeysDecrypted(email, userId!, keyPairs)
+          }
         />
       );
     case AuthenticationStatus.AUTHENTICATED:
@@ -153,9 +168,9 @@ export default function AuthenticationComponent({
             onWrongUser={handleWrongUser}
             onPrivateKeysDecrypted={(privateMainKey, privateDeviceKey) =>
               authenticationRepository
-                .loadPublicDeviceKey(email, deviceId)
+                .loadPublicDeviceKey(userId!, deviceId)
                 .then((publicDeviceKey) =>
-                  onKeysDecrypted(email, {
+                  onKeysDecrypted(email, userId!, {
                     mainKeyPair: {
                       publicKey: publicMainKey,
                       privateKey: privateMainKey,
@@ -175,7 +190,7 @@ export default function AuthenticationComponent({
             email={email}
             onWrongUser={handleWrongUser}
             onKeysDecrypted={(privateMainKey, deviceKeyPair) =>
-              onKeysDecrypted(email, {
+              onKeysDecrypted(email, userId!, {
                 mainKeyPair: {
                   publicKey: publicMainKey,
                   privateKey: privateMainKey,

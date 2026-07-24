@@ -16,10 +16,11 @@
  */
 package cloud.imagey.domain.document;
 
+
+import static jakarta.json.bind.JsonbBuilder.create;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
-import static jakarta.json.bind.JsonbBuilder.create;
 import static org.apache.commons.io.FileUtils.readFileToByteArray;
 import static org.apache.commons.io.FileUtils.write;
 import static org.apache.commons.io.FileUtils.writeByteArrayToFile;
@@ -158,7 +159,7 @@ public class DocumentRepository extends AbstractFileRepository {
     }
 
     private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
+        return new File(rootPath, user.id().id());
     }
 
     public void deleteDocument(User user, DocumentId documentId) throws IOException {

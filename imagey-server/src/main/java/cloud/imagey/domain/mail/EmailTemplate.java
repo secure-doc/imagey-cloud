@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.mail;
 
+
 import static java.util.Objects.requireNonNull;
 
 public record EmailTemplate(Email sender, EmailSubject subject, EmailBody body) {

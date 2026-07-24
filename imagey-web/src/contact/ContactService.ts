@@ -56,14 +56,14 @@ export const contactService = {
     }
   },
   loadSharedKey: async (
-    userEmail: string,
-    contactEmail: string,
+    userId: UserId,
+    contactId: UserId,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
     const myKeyEntry = await contactRepository.getSharedContactKey(
-      userEmail,
-      contactEmail,
+      userId,
+      contactId,
     );
     if (!myKeyEntry) {
       throw new Error("Shared key not found");
@@ -79,7 +79,7 @@ export const contactService = {
       console.warn("Decryption failed, attempting fallback", e);
       try {
         const contactPublicKey =
-          await authenticationRepository.loadPublicMainKey(contactEmail);
+          await authenticationRepository.loadPublicMainKey(contactId);
         return await cryptoService.decryptKey(
           myKeyEntry.sharedKey,
           contactPublicKey,
@@ -93,13 +93,13 @@ export const contactService = {
     throw new Error("Could not decrypt shared key");
   },
   reissueKey: async (
-    userEmail: string,
-    contactEmail: string,
+    userId: UserId,
+    contactId: UserId,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
     const contactPublicKey =
-      await authenticationRepository.loadPublicMainKey(contactEmail);
+      await authenticationRepository.loadPublicMainKey(contactId);
     const sharedKey = await cryptoService.generateSymmetricKey();
     const contactEncryptedSharedKey = await cryptoService.encryptKey(
       sharedKey,
@@ -111,14 +111,14 @@ export const contactService = {
       publicKey,
       privateKey,
     );
-    await contactRepository.reissueContactKey(userEmail, contactEmail, {
+    await contactRepository.reissueContactKey(userId, contactId, {
       userKey: {
-        issuer: userEmail,
+        issuer: userId,
         kid: "0",
         sharedKey: myEncryptedSharedKey,
       },
       contactKey: {
-        issuer: contactEmail,
+        issuer: contactId,
         kid: "0",
         sharedKey: contactEncryptedSharedKey,
       },
