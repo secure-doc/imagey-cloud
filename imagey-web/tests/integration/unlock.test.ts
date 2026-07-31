@@ -302,7 +302,7 @@ test("mary logs into new device", async ({ page }) => {
     .uponReceiving("a request of mary to get documents for second device")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r
-        .query({ folderId: "root-folder-id" })
+        .query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" })
         .headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));

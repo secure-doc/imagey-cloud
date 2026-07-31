@@ -1,13 +1,15 @@
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
 import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
-import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
+import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { contactRepository } from "./ContactRepository";
+import { documentService } from "../document/DocumentService";
 
 export const contactService = {
   acceptContactRequest: async (
     userId: UserId,
     contactId: UserId,
+    settings: Settings,
     mainKeyPair: JsonWebKeyPair,
   ): Promise<{ documentId: string; key: JsonWebKey }> => {
     try {
@@ -40,10 +42,17 @@ export const contactService = {
         contactPublicKey,
         mainKeyPair.privateKey,
       );
-      const myEncryptedSharedKey = await cryptoService.encryptKey(
-        chatDocumentKey,
-        mainKeyPair.publicKey,
-        mainKeyPair.privateKey,
+
+      const chatFolder = await documentService.getFolder(
+        userId,
+        settings.chatFolderId,
+        settings.settingsKey,
+      );
+      const chatFolderKey = chatFolder.key;
+
+      const myEncryptedSharedKeyString = await cryptoService.encryptMessage(
+        JSON.stringify(chatDocumentKey),
+        chatFolderKey!,
       );
 
       await fetch(`/users/${userId}/documents/${documentId}`, {
@@ -54,14 +63,17 @@ export const contactService = {
         body: encryptedChatFolderPayload[0],
       });
 
-      // Upload my key
-      await fetch(`/users/${userId}/documents/${documentId}/keys/${userId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
+      // Upload my key (under chat folder)
+      await fetch(
+        `/users/${userId}/documents/${documentId}/keys/${settings.chatFolderId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sharedKey: myEncryptedSharedKeyString }),
         },
-        body: JSON.stringify({ sharedKey: myEncryptedSharedKey }),
-      });
+      );
 
       // Upload contact key
       await fetch(
@@ -98,7 +110,7 @@ export const contactService = {
     userEmail: string,
     contactEmail: string,
     chatDocumentId: string,
-    publicKey: JsonWebKey,
+    settings: Settings,
     privateKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
     const contactPublicKey =
@@ -109,21 +121,27 @@ export const contactService = {
       contactPublicKey,
       privateKey,
     );
-    const myEncryptedSharedKey = await cryptoService.encryptKey(
-      sharedKey,
-      publicKey,
-      privateKey,
+
+    const chatFolder = await documentService.getFolder(
+      userEmail,
+      settings.chatFolderId,
+      settings.settingsKey,
     );
+    const myEncryptedSharedKeyString = await cryptoService.encryptMessage(
+      JSON.stringify(sharedKey),
+      chatFolder.key!,
+    );
+
     const responseUser = await fetch(
-      `/users/${userEmail}/documents/${chatDocumentId}/keys/${userEmail}`,
+      `/users/${userEmail}/documents/${chatDocumentId}/keys/${settings.chatFolderId}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          issuerType: "USER",
-          issuer: userEmail,
+          issuerType: "FOLDER",
+          issuer: settings.chatFolderId,
           kid: "0",
-          sharedKey: myEncryptedSharedKey,
+          sharedKey: myEncryptedSharedKeyString,
         }),
       },
     );
@@ -152,6 +170,7 @@ export const contactService = {
 
   processAcceptedInvitations: async (
     userId: UserId,
+    settings: Settings,
     mainKeyPair: JsonWebKeyPair,
   ): Promise<void> => {
     const exchanges = await contactRepository.getContactRequests(userId);
@@ -166,68 +185,78 @@ export const contactService = {
 
     const contacts = await contactRepository.getContacts(
       userId,
+      settings,
       mainKeyPair.publicKey,
       mainKeyPair.privateKey,
     );
     const existingContactIds = new Set(contacts.map((c) => c.userId));
 
-    for (const exchange of accepted) {
-      const contactId = exchange.invitee;
-      if (!existingContactIds.has(contactId)) {
-        try {
-          const contactPublicKey =
-            await authenticationRepository.loadPublicMainKey(contactId);
+    if (accepted.length > 0) {
+      const chatFolder = await documentService.getFolder(
+        userId,
+        settings.chatFolderId,
+        settings.settingsKey,
+      );
+      const chatFolderKey = chatFolder.key;
 
-          const chatDocumentKey = await cryptoService.decryptKey(
-            exchange.sharedKey!,
-            contactPublicKey,
-            mainKeyPair.privateKey,
-          );
+      for (const exchange of accepted) {
+        const contactId = exchange.invitee;
+        if (!existingContactIds.has(contactId)) {
+          try {
+            const contactPublicKey =
+              await authenticationRepository.loadPublicMainKey(contactId);
 
-          const documentId = exchange.documentId!;
+            const chatDocumentKey = await cryptoService.decryptKey(
+              exchange.sharedKey!,
+              contactPublicKey,
+              mainKeyPair.privateKey,
+            );
 
-          const chatFolderPayload = JSON.stringify({
-            name: contactId,
-            type: "Chat",
-          });
-          const chatFolderPayloadBuffer = new TextEncoder().encode(
-            chatFolderPayload,
-          ).buffer;
-          const encryptedChatFolderPayload =
-            await cryptoService.encryptDocument(chatDocumentKey, [
-              chatFolderPayloadBuffer,
-            ]);
+            const documentId = exchange.documentId!;
 
-          const myEncryptedSharedKey = await cryptoService.encryptKey(
-            chatDocumentKey,
-            mainKeyPair.publicKey,
-            mainKeyPair.privateKey,
-          );
+            const chatFolderPayload = JSON.stringify({
+              name: contactId,
+              type: "Chat",
+            });
+            const chatFolderPayloadBuffer = new TextEncoder().encode(
+              chatFolderPayload,
+            ).buffer;
+            const encryptedChatFolderPayload =
+              await cryptoService.encryptDocument(chatDocumentKey, [
+                chatFolderPayloadBuffer,
+              ]);
 
-          await fetch(`/users/${userId}/documents/${documentId}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/octet-stream",
-            },
-            body: encryptedChatFolderPayload[0],
-          });
+            const myEncryptedSharedKeyString =
+              await cryptoService.encryptMessage(
+                JSON.stringify(chatDocumentKey),
+                chatFolderKey!,
+              );
 
-          await fetch(
-            `/users/${userId}/documents/${documentId}/keys/${userId}`,
-            {
+            await fetch(`/users/${userId}/documents/${documentId}`, {
               method: "PUT",
               headers: {
-                "Content-Type": "application/json",
+                "Content-Type": "application/octet-stream",
               },
-              body: JSON.stringify({ sharedKey: myEncryptedSharedKey }),
-            },
-          );
-        } catch (e) {
-          console.error(
-            "Failed to process accepted invitation for",
-            contactId,
-            e,
-          );
+              body: encryptedChatFolderPayload[0],
+            });
+
+            await fetch(
+              `/users/${userId}/documents/${documentId}/keys/${settings.chatFolderId}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ sharedKey: myEncryptedSharedKeyString }),
+              },
+            );
+          } catch (e) {
+            console.error(
+              "Failed to process accepted invitation for",
+              contactId,
+              e,
+            );
+          }
         }
       }
     }

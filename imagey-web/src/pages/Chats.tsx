@@ -52,10 +52,11 @@ export function ChatsList({
 
   useEffect(() => {
     contactService
-      .processAcceptedInvitations(user, keyPair)
+      .processAcceptedInvitations(user, authentication.settings, keyPair)
       .then(() => {
         return contactRepository.getContacts(
           user,
+          authentication.settings,
           keyPair.publicKey,
           keyPair.privateKey,
         );
@@ -73,7 +74,7 @@ export function ChatsList({
         );
       })
       .catch((e) => console.error("Failed to fetch contact requests", e));
-  }, [user, keyPair]);
+  }, [user, keyPair, authentication.settings]);
 
   const handleContactRequest = async (email: string) => {
     if (user) {

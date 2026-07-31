@@ -38,6 +38,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import cloud.imagey.domain.encryption.Base64Content;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
@@ -173,7 +174,7 @@ public class DocumentRepository extends AbstractFileRepository {
         String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
         String issuer = userTheDocumentIsSharedWith.address();
         String issuerType = issuer.contains("@") ? "USER" : "FOLDER";
-        return of(new EncryptedSharedKey(issuerType, issuer, "0", encodedKey));
+        return of(new EncryptedSharedKey(issuerType, issuer, "0", new EncryptedSymmetricKey(encodedKey)));
     }
 
     private Optional<File> findFolderKey(File sharedKeysFolder) {

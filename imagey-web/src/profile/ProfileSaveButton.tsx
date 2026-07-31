@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Profile } from "./Profile";
 import { useContext, useState } from "react";
-import { documentService } from "../document/DocumentService";
 import { AuthenticationContext } from "../contexts/AuthenticationContext";
 import { profileService } from "./ProfileService";
 
@@ -24,22 +23,11 @@ export default function ProfileSaveButton({
     try {
       const profileToSave = { ...profile };
 
-      if (newPicture) {
-        // Upload the new picture document first
-        const docMeta = await documentService.storeDocument(
-          auth.user,
-          newPicture,
-          auth.keyPairs.mainKeyPair.publicKey,
-          auth.keyPairs.mainKeyPair.privateKey,
-        );
-        profileToSave.profilePictureId = docMeta.documentId;
-      }
-
       await profileService.saveProfile(
         auth.user,
         profileToSave,
-        auth.keyPairs.mainKeyPair.publicKey,
-        auth.keyPairs.mainKeyPair.privateKey,
+        newPicture,
+        auth.settings,
       );
       onProfileChange(profileToSave);
       setShowSnackbar(true);

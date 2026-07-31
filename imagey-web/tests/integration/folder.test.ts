@@ -58,7 +58,7 @@ test("create folder", async ({ page }) => {
     .uponReceiving("a request of mary to update parent folder metadata")
     .withRequest(
       "PUT",
-      "/users/mary@imagey.cloud/documents/root-folder-id",
+      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) => {
         r.headers({
           "Content-Type": "application/octet-stream",
@@ -74,7 +74,7 @@ test("create folder", async ({ page }) => {
     .given("mary has no documents")
     .uponReceiving("a request of mary to get empty documents for folder test")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "root-folder-id" }).headers({
+      r.query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" }).headers({
         Accept: "application/json",
       }),
     )
@@ -99,10 +99,10 @@ test("create folder", async ({ page }) => {
         contentType: "application/json",
         body: JSON.stringify({
           issuerType: "FOLDER",
-          issuer: "root-folder-id",
+          issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
           kid: "0",
           sharedKey: fs.readFileSync(
-            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key",
+            "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
             "base64",
           ),
         }),
@@ -152,7 +152,7 @@ test("navigate into folder and upload image", async ({ page }) => {
   const folderId = "folder-uuid-1234";
 
   const validSharedKey = fs.readFileSync(
-    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key`,
     "base64",
   );
 
@@ -164,7 +164,7 @@ test("navigate into folder and upload image", async ({ page }) => {
         "9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX",
       sharedKey: {
         issuerType: "FOLDER",
-        issuer: "root-folder-id",
+        issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         kid: "0",
         sharedKey: validSharedKey,
       },
@@ -178,7 +178,7 @@ test("navigate into folder and upload image", async ({ page }) => {
     .uponReceiving("a request to get documents containing a folder")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r
-        .query({ folderId: "root-folder-id" })
+        .query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" })
         .headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(emptyFolderDocuments));
@@ -334,7 +334,7 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
   const folderId = "folder-uuid-1234";
 
   const validSharedKey = fs.readFileSync(
-    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key`,
     "base64",
   );
 
@@ -346,7 +346,7 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
         "9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX",
       sharedKey: {
         issuerType: "FOLDER",
-        issuer: "root-folder-id",
+        issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         kid: "0",
         sharedKey: validSharedKey,
       },
@@ -362,7 +362,7 @@ test("retry on HTTP 412 Precondition Failed during folder upload", async ({
     )
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
       r
-        .query({ folderId: "root-folder-id" })
+        .query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" })
         .headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(emptyFolderDocuments));
@@ -528,7 +528,7 @@ test.skip("folder items are sorted according to folder metadata documents array"
   const doc2Id = "doc2-uuid";
 
   const validSharedKey = fs.readFileSync(
-    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+    `./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key`,
     "base64",
   );
 

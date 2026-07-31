@@ -18,6 +18,7 @@ import {
   Email,
   JsonWebKeyPairs,
   AuthenticationContext,
+  Settings as SettingsType,
 } from "./contexts/AuthenticationContext";
 import Activities from "./pages/Activities";
 
@@ -63,21 +64,23 @@ function App() {
   */
   const [user, setUser] = useState<Email>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
+  const [settings, setSettings] = useState<SettingsType | undefined>();
   useEffect(() => {
     ui("theme", "#1176f3");
   }, []);
-  if (!user || !keyPairs) {
+  if (!user || !keyPairs || !settings) {
     return (
       <AuthenticationComponent
-        onKeysDecrypted={(user, keyPairs) => {
+        onKeysDecrypted={(user, keyPairs, settings) => {
           setUser(user);
           setKeyPairs(keyPairs);
+          setSettings(settings);
         }}
       />
     );
   }
   return (
-    <AuthenticationContext.Provider value={{ user, keyPairs }}>
+    <AuthenticationContext.Provider value={{ user, keyPairs, settings }}>
       <ActionBarContextProvider>
         <BrowserRouter>
           <AppBar />

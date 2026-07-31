@@ -184,7 +184,7 @@ public class DocumentResource {
         @PathParam("share-email") Email userTheDocumentIsSharedWith,
         EncryptedSharedKey key) throws IOException {
 
-        EncryptedContent keyContent = new EncryptedContent(getDecoder().decode(key.sharedKey()));
+        EncryptedContent keyContent = new EncryptedContent(getDecoder().decode(key.sharedKey().content()));
         documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, keyContent);
 
         User recipient = new User(userTheDocumentIsSharedWith);
@@ -233,5 +233,28 @@ public class DocumentResource {
         }));
         URI location = uriInfo.getAbsolutePathBuilder().path(documentId.id()).build();
         return created(location).build();
+    }
+
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{documentId}")
+    @Consumes(MULTIPART_FORM_DATA)
+    public Response updateDocument(
+        @PathParam("email") User user,
+        @PathParam("documentId") DocumentId documentId,
+        @Multipart(value = "metadata") EncryptedContent metadata,
+        @Multipart(value = "key") byte[] keyBytes,
+        @Multipart(value = "issuer") String issuer,
+        List<Attachment> files) throws IOException {
+
+        documentRepository.persist(user, documentId, metadata);
+        documentRepository.persist(user, documentId, new Email(issuer), new EncryptedContent(keyBytes));
+
+        ofNullable(files).ifPresent(f -> f.stream().filter(a -> a.getContentDisposition().getFilename() != null).forEach(attachment -> {
+            FileName name = new FileName(attachment.getContentDisposition().getFilename());
+            EncryptedContent content = new EncryptedContent(attachment.getObject(byte[].class));
+            documentRepository.persist(user, documentId, name, content);
+        }));
+        return Response.ok().build();
     }
 }

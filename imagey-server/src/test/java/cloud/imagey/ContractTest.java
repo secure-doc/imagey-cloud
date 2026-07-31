@@ -297,7 +297,7 @@ public class ContractTest {
         maryHasNoDocuments();
         File folder = new File(getMarysDocuments(), "folder-uuid-1234");
         folder.mkdirs();
-        File keysDir = new File(folder, "keys/root-folder-id");
+        File keysDir = new File(folder, "keys/68980188-577d-4d2f-9e36-a6b32b25cd3a");
         keysDir.mkdirs();
         File metadataEnc = new File(folder, "metadata.enc");
         java.nio.file.Files.write(metadataEnc.toPath(),

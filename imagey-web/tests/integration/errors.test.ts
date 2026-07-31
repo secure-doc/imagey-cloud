@@ -60,7 +60,7 @@ async function mockMarysBackend(page: Page) {
       await route.fulfill({
         status: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
-        json: [{ documentId: "root-folder-id" }],
+        json: [{ documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" }],
       });
     },
   );
@@ -107,17 +107,17 @@ async function mockMarysBackend(page: Page) {
   );
   // Root Folder
   await page.route(
-    "**/users/mary*imagey.cloud/documents/root-folder-id",
+    "**/users/mary*imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
     async (route: Route) => {
       await route.fulfill({
         status: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
         json: {
-          documentId: "root-folder-id",
+          documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
           metadata: fs.readFileSync(
             path.resolve(
               process.cwd(),
-              "tests/images/encrypted/root-folder-id/metadata",
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
             ),
             "base64",
           ),
@@ -127,7 +127,7 @@ async function mockMarysBackend(page: Page) {
             sharedKey: fs.readFileSync(
               path.resolve(
                 process.cwd(),
-                "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
+                "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
               ),
               "base64",
             ),
@@ -150,12 +150,12 @@ async function mockMarysBackend(page: Page) {
               "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
             sharedKey: {
               issuerType: "FOLDER",
-              issuer: "root-folder-id",
+              issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
               kid: "0",
               sharedKey: fs.readFileSync(
                 path.resolve(
                   process.cwd(),
-                  "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key",
+                  "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
                 ),
                 "base64",
               ),

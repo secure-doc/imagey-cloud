@@ -38,10 +38,10 @@ export default function UploadButton({
       let actualFolderId = parentFolderId;
       let actualFolderKey = parentFolderKey;
       if (!actualFolderId || !actualFolderKey) {
-        const rootFolder = await documentService.getRootFolder(
+        const rootFolder = await documentService.getFolder(
           user,
-          publicMainKey,
-          privateMainKey,
+          authentication.settings!.rootFolderId,
+          authentication.settings!.settingsKey,
         );
         actualFolderId = rootFolder.documentId;
         actualFolderKey = rootFolder.key;

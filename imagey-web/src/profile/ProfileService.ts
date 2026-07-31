@@ -1,37 +1,38 @@
 import { cryptoService } from "../authentication/CryptoService";
 import { Profile } from "./Profile";
 import { documentService } from "../document/DocumentService";
-import EncryptedDocumentMetadata from "../document/EncryptedDocumentMetadata";
+import { documentRepository } from "../document/DocumentRepository";
+import { Settings } from "../contexts/AuthenticationContext";
 
 export const profileService = {
   saveProfile: async (
     email: string,
     profile: Profile,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
+    picture: File | Blob | undefined,
+    settings: Settings,
   ): Promise<void> => {
-    // 1. Create a JSON blob for the profile
     const profileJson = JSON.stringify(profile);
-    const profileBlob = new Blob([profileJson], { type: "application/json" });
 
-    // 2. Encrypt the profile data
     const documentKey = await cryptoService.generateSymmetricKey();
-    const encryptedDocumentKey = await cryptoService.encryptKey(
-      documentKey,
-      publicKey,
-      privateKey,
-    );
 
     const payloadBuffer = new TextEncoder().encode(profileJson).buffer;
     const encryptedPayload = await cryptoService.encryptDocument(documentKey, [
       payloadBuffer,
     ]);
 
-    // Encrypt the content
-    const buffers: ArrayBuffer[] = [await profileBlob.arrayBuffer()];
-    const encryptedDocuments = await cryptoService.encryptDocument(
-      documentKey,
-      buffers,
+    const buffers: ArrayBuffer[] = [];
+    if (picture) {
+      buffers.push(await picture.arrayBuffer());
+    }
+
+    const encryptedDocuments =
+      buffers.length > 0
+        ? await cryptoService.encryptDocument(documentKey, buffers)
+        : [];
+
+    const encryptedDocumentKeyString = await cryptoService.encryptMessage(
+      JSON.stringify(documentKey),
+      settings.settingsKey,
     );
 
     const formData = new FormData();
@@ -41,22 +42,31 @@ export const profileService = {
     );
     formData.append(
       "key",
-      new Blob([cryptoService.base64ToArrayBuffer(encryptedDocumentKey)], {
-        type: "application/octet-stream",
-      }),
+      new Blob(
+        [cryptoService.base64ToArrayBuffer(encryptedDocumentKeyString)],
+        {
+          type: "application/octet-stream",
+        },
+      ),
       "key",
     );
     formData.append("issuer", email);
-    formData.append(
-      "content",
-      new Blob([encryptedDocuments[0]], { type: "application/octet-stream" }),
-    );
 
-    const response = await fetch(`/users/${email}/profile`, {
-      method: "PUT",
-      credentials: "same-origin",
-      body: formData,
-    });
+    if (encryptedDocuments.length > 0) {
+      formData.append(
+        "content",
+        new Blob([encryptedDocuments[0]], { type: "application/octet-stream" }),
+      );
+    }
+
+    const response = await fetch(
+      `/users/${email}/documents/${settings.profileDocumentId}`,
+      {
+        method: "PUT",
+        credentials: "same-origin",
+        body: formData,
+      },
+    );
 
     if (response.status >= 400) {
       throw new Error("Http Error " + response.status);
@@ -65,44 +75,55 @@ export const profileService = {
 
   loadProfile: async (
     user: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-  ): Promise<Profile | null> => {
+    settings: Settings,
+  ): Promise<{ profile: Profile; picture?: Blob } | null> => {
     try {
-      const response = await fetch(`/users/${user}/profile`, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        credentials: "same-origin",
-      });
+      const folderMetadata = (
+        await documentRepository.loadDocumentMetadata(
+          user,
+          settings.profileDocumentId,
+        )
+      ).metadata;
 
-      if (response.status === 404) {
-        return null;
-      }
-      if (response.status >= 400) {
-        throw new Error("Http Error " + response.status);
-      }
+      const encryptedFolderKey =
+        folderMetadata.sharedKey ??
+        (await documentRepository.loadKey(user, settings.profileDocumentId));
 
-      const metadata: EncryptedDocumentMetadata = await response.json();
-      const docMetadata = await documentService.loadDocument(
-        user,
-        metadata,
-        publicKey,
-        privateKey,
+      const folderKeyJson = await cryptoService.decryptMessage(
+        encryptedFolderKey.sharedKey,
+        settings.settingsKey,
       );
+      const folderKey = JSON.parse(folderKeyJson) as JsonWebKey;
+
+      const payloadBuffer = cryptoService.base64ToArrayBuffer(
+        folderMetadata.metadata,
+      );
+      const decryptedPayloadBuffer = await cryptoService.decryptDocument(
+        folderKey,
+        payloadBuffer,
+      );
+      const payloadText = new TextDecoder().decode(decryptedPayloadBuffer);
+      const profile: Profile = JSON.parse(payloadText);
 
       const doc = await documentService.loadDocumentContent(
         user,
-        docMetadata,
-        publicKey,
-        privateKey,
-        metadata.sharedKey,
+        {
+          documentId: settings.profileDocumentId,
+          name: "Profile",
+          type: "Profile",
+          size: 0,
+          key: folderKey,
+        },
+        settings.settingsKey,
+        settings.settingsKey,
+        encryptedFolderKey,
       );
 
-      const contentText = new TextDecoder().decode(doc.content);
-      const profile: Profile = JSON.parse(contentText);
-      return profile;
+      let picture: Blob | undefined = undefined;
+      if (doc.content) {
+        picture = new Blob([doc.content]);
+      }
+      return { profile, picture };
     } catch (e) {
       console.error("Failed to load profile", e);
       return null;

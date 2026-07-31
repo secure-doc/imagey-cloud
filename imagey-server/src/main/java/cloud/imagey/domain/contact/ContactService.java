@@ -34,6 +34,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
@@ -101,7 +102,7 @@ public class ContactService {
         }
     }
 
-    public void acceptInvitation(User user, User inviter, String documentId, String key) throws IOException {
+    public void acceptInvitation(User user, User inviter, DocumentId documentId, EncryptedSymmetricKey key) throws IOException {
         ContactExchange exchange = contactRepository.getContactExchange(user, inviter)
             .filter(e -> e.status() == INVITED)
             .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
@@ -109,7 +110,7 @@ public class ContactService {
         EncryptedSharedKey encryptedSharedKey = new EncryptedSharedKey("USER", inviter.email().address(), "0", key);
         ContactExchange accepted = new ContactExchange(
             exchange.inviter(), exchange.invitee(), exchange.status(), exchange.publicKey(),
-            new DocumentId(documentId), encryptedSharedKey);
+            documentId, encryptedSharedKey);
         contactRepository.persist(accepted);
     }
 

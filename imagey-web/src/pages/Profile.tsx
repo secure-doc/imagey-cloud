@@ -2,8 +2,6 @@ import { useState, useEffect, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { AuthenticationContext } from "../contexts/AuthenticationContext";
 import { profileService } from "../profile/ProfileService";
-import { documentService } from "../document/DocumentService";
-import { documentRepository } from "../document/DocumentRepository";
 import { Profile as ProfileType } from "../profile/Profile";
 import ProfilePicturePanel from "../profile/ProfilePicturePanel";
 import ProfileEmailList from "../profile/ProfileEmailList";
@@ -25,51 +23,18 @@ export default function Profile() {
   useEffect(() => {
     const loadProfile = async () => {
       setLoading(true);
-      const p = await profileService.loadProfile(
-        auth.user,
-        auth.keyPairs.mainKeyPair.publicKey,
-        auth.keyPairs.mainKeyPair.privateKey,
-      );
-      if (p) {
-        setProfile(p);
-        if (p.profilePictureId) {
-          try {
-            const { metadata: encryptedPicMetadata } =
-              await documentRepository.loadDocumentMetadata(
-                auth.user,
-                p.profilePictureId,
-              );
-            const picMetadata = await documentService.loadDocument(
-              auth.user,
-              encryptedPicMetadata,
-              auth.keyPairs.mainKeyPair.publicKey,
-              auth.keyPairs.mainKeyPair.privateKey,
-            );
-            const doc = await documentService.loadDocumentContent(
-              auth.user,
-              picMetadata,
-              auth.keyPairs.mainKeyPair.publicKey,
-              auth.keyPairs.mainKeyPair.privateKey,
-              encryptedPicMetadata.sharedKey,
-            );
-            if (doc.content) {
-              const blob = new Blob([doc.content]);
-              setPicture(blob);
-            }
-          } catch (e) {
-            console.error("Failed to load profile picture", e);
-          }
+      const res = await profileService.loadProfile(auth.user, auth.settings);
+      if (res) {
+        setProfile(res.profile);
+        if (res.picture) {
+          setPicture(res.picture);
         }
       }
       setLoading(false);
     };
 
     loadProfile();
-  }, [
-    auth.user,
-    auth.keyPairs.mainKeyPair.publicKey,
-    auth.keyPairs.mainKeyPair.privateKey,
-  ]);
+  }, [auth.user, auth.keyPairs, auth.settings]);
 
   if (loading) {
     return (

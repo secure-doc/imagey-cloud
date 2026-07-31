@@ -46,7 +46,7 @@ test("view chat and send message", async ({ page }) => {
     .uponReceiving("a request to receive messages")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/chat-laura/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
@@ -66,7 +66,7 @@ test("view chat and send message", async ({ page }) => {
     .uponReceiving("a request to receive more messages")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/chat-laura/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
       (r) => {
         r.query({ sinceId: "msg-123" });
         r.headers({ Prefer: "wait=30" });
@@ -79,7 +79,7 @@ test("view chat and send message", async ({ page }) => {
     .uponReceiving("a request to send a message")
     .withRequest(
       "POST",
-      "/users/mary@imagey.cloud/documents/chat-laura/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
       (r) => {
         r.headers({
           "Content-Type": "text/plain",
@@ -89,7 +89,7 @@ test("view chat and send message", async ({ page }) => {
     .willRespondWith(201, (r) => {
       r.headers({
         Location: MatchersV3.string(
-          "/users/mary@imagey.cloud/documents/chat-laura/messages/msg-1234",
+          "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages/msg-1234",
         ),
       });
     });
@@ -122,8 +122,9 @@ test("view chat and send message", async ({ page }) => {
       (response) =>
         response
           .url()
-          .includes("/users/mary@imagey.cloud/documents/chat-laura/messages") &&
-        response.request().method() === "POST",
+          .includes(
+            "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
+          ) && response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "send" }).click();
     await postResponse;
@@ -135,16 +136,16 @@ test("view chat and send message", async ({ page }) => {
 
 test("send empty message does not submit", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments(["alice@imagey.cloud"]);
+  await prepareMarysDocuments(["laura@imagey.cloud"]);
 
-  await prepareMarysChat("alice@imagey.cloud", " for empty chat");
+  await prepareMarysChat("laura@imagey.cloud", " for empty chat");
 
   const builder = provider
     .addInteraction()
     .uponReceiving("a request to receive messages for empty chat")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/chat-alice/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -153,12 +154,12 @@ test("send empty message does not submit", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page.getByText("alice@imagey.cloud").first();
-    await expect(aliceContact).toBeVisible();
-    await aliceContact.click();
+    const lauraContact = page.getByText("laura@imagey.cloud").first();
+    await expect(lauraContact).toBeVisible();
+    await lauraContact.click();
 
     await expect(
-      page.getByRole("heading", { name: "alice@imagey.cloud" }),
+      page.getByRole("heading", { name: "laura@imagey.cloud" }),
     ).toBeVisible();
 
     const input = page.getByLabel("Type a message");
@@ -178,15 +179,15 @@ test("send empty message does not submit", async ({ page }) => {
 
 test("send message fails and restores input", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments(["alice@imagey.cloud"]);
-  await prepareMarysChat("alice@imagey.cloud", " for failing chat");
+  await prepareMarysDocuments(["laura@imagey.cloud"]);
+  await prepareMarysChat("laura@imagey.cloud", " for failing chat");
 
   const builder = provider
     .addInteraction()
     .uponReceiving("a request to receive messages for failing chat")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/chat-alice/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -194,7 +195,7 @@ test("send message fails and restores input", async ({ page }) => {
     await setupMockServer(page, mockServer);
 
     await page.route(
-      "**/users/mary@imagey.cloud/documents/chat-alice/messages*",
+      "**/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages*",
       async (route, request) => {
         if (request.method() === "POST") {
           await route.fulfill({ status: 500 });
@@ -207,12 +208,12 @@ test("send message fails and restores input", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page.getByText("alice@imagey.cloud").first();
-    await expect(aliceContact).toBeVisible();
-    await aliceContact.click();
+    const lauraContact = page.getByText("laura@imagey.cloud").first();
+    await expect(lauraContact).toBeVisible();
+    await lauraContact.click();
 
     await expect(
-      page.getByRole("heading", { name: "alice@imagey.cloud" }),
+      page.getByRole("heading", { name: "laura@imagey.cloud" }),
     ).toBeVisible();
 
     const input = page.getByLabel("Type a message");
@@ -230,10 +231,10 @@ test("send message fails and restores input", async ({ page }) => {
 
 test("polling fails gracefully", async ({ page }) => {
   await prepareMarysLogin(page);
-  await prepareMarysDocuments(["alice@imagey.cloud"]);
+  await prepareMarysDocuments(["laura@imagey.cloud"]);
 
   const builder = await prepareMarysChat(
-    "alice@imagey.cloud",
+    "laura@imagey.cloud",
     " for polling fail",
   );
 
@@ -241,7 +242,7 @@ test("polling fails gracefully", async ({ page }) => {
     await setupMockServer(page, mockServer);
 
     await page.route(
-      "**/users/mary@imagey.cloud/documents/chat-alice/messages*",
+      "**/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages*",
       async (route, request) => {
         if (request.method() === "GET") {
           await route.fulfill({ status: 500 });
@@ -254,14 +255,14 @@ test("polling fails gracefully", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page.getByText("alice@imagey.cloud").first();
-    await expect(aliceContact).toBeVisible();
-    await aliceContact.click();
+    const lauraContact = page.getByText("laura@imagey.cloud").first();
+    await expect(lauraContact).toBeVisible();
+    await lauraContact.click();
 
     // Verify chat UI loaded, which means sharedKey was fetched
     // and polling attempted (which hits 500 error)
     await expect(
-      page.getByRole("heading", { name: "alice@imagey.cloud" }),
+      page.getByRole("heading", { name: "laura@imagey.cloud" }),
     ).toBeVisible();
 
     // Give it a tiny bit of time to ensure catch block is executed
@@ -288,7 +289,7 @@ test("share a document in chat", async ({ page }) => {
     .uponReceiving("a request to receive messages before sharing")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/chat-laura/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
@@ -306,7 +307,7 @@ test("share a document in chat", async ({ page }) => {
     .uponReceiving("a request to receive more messages before sharing")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/chat-laura/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
       (r) => r.query({ sinceId: "msg-123" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
@@ -343,12 +344,12 @@ test("share a document in chat", async ({ page }) => {
           "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
         sharedKey: {
           issuerType: "FOLDER",
-          issuer: "root-folder-id",
+          issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
           kid: "0",
           sharedKey: fs.readFileSync(
             path.resolve(
               process.cwd(),
-              `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
+              `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key`,
             ),
             "base64",
           ),
@@ -362,7 +363,7 @@ test("share a document in chat", async ({ page }) => {
     .uponReceiving("a request to send a shared document message")
     .withRequest(
       "POST",
-      "/users/mary@imagey.cloud/documents/chat-laura/messages",
+      "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
       (r) => {
         r.headers({ "Content-Type": "text/plain" });
       },
@@ -370,7 +371,7 @@ test("share a document in chat", async ({ page }) => {
     .willRespondWith(201, (r) => {
       r.headers({
         Location: MatchersV3.string(
-          "/users/mary@imagey.cloud/documents/chat-laura/messages/msg-1234",
+          "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages/msg-1234",
         ),
       });
     });
@@ -394,8 +395,9 @@ test("share a document in chat", async ({ page }) => {
       (response) =>
         response
           .url()
-          .includes("/users/mary@imagey.cloud/documents/chat-laura/messages") &&
-        response.request().method() === "POST",
+          .includes(
+            "/users/mary@imagey.cloud/documents/9c09fbb6-aee3-4e8e-9779-2bcb69554a02/messages",
+          ) && response.request().method() === "POST",
     );
 
     // Click on the first image to share it
@@ -429,7 +431,7 @@ test("view shared document from another user", async ({ page }) => {
     .uponReceiving("a request to receive messages with shared doc")
     .withRequest(
       "GET",
-      "/users/alice@imagey.cloud/documents/chat-mary/messages",
+      "/users/alice@imagey.cloud/documents/edc59f23-cbaa-4288-a3ad-a1008c654c88/messages",
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
@@ -447,7 +449,7 @@ test("view shared document from another user", async ({ page }) => {
     .uponReceiving("a request to receive more messages after shared doc")
     .withRequest(
       "GET",
-      "/users/alice@imagey.cloud/documents/chat-mary/messages",
+      "/users/alice@imagey.cloud/documents/edc59f23-cbaa-4288-a3ad-a1008c654c88/messages",
       (r) => r.query({ sinceId: "msg-999" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));

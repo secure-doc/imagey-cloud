@@ -241,26 +241,6 @@ test("new user clicks registration link", async ({ page }) => {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of joe to get documents with folderId")
-    .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
-      r.query({ folderId: Matchers.string("some-uuid") }).headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to get root documents")
-    .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  provider
-    .addInteraction()
     .uponReceiving("a request of joe to get settings document")
     .withRequest(
       "GET",
@@ -296,6 +276,89 @@ test("new user clicks registration link", async ({ page }) => {
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
+
+      await page.addInitScript(() => {
+        const folders = {};
+        const originalFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          const url =
+            typeof input === "string"
+              ? input
+              : input && input.url
+                ? input.url
+                : "";
+          const method = init && init.method ? init.method : "GET";
+
+          if (
+            url.includes("/users/joe@imagey.cloud/documents") &&
+            method === "PUT"
+          ) {
+            if (init && init.body instanceof FormData) {
+              const formData = init.body;
+              const metadataBlob = formData.get("metadata");
+              const keyBlob = formData.get("key");
+
+              if (metadataBlob && keyBlob) {
+                const arrayBufferToBase64 = async (blob) => {
+                  const buffer = await blob.arrayBuffer();
+                  const bytes = new Uint8Array(buffer);
+                  let binary = "";
+                  for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                  }
+                  return window.btoa(binary);
+                };
+
+                const folderId = url.substring(url.lastIndexOf("/") + 1);
+                if (folderId !== "joe@imagey.cloud") {
+                  folders[folderId] = {
+                    documentId: folderId,
+                    metadata: await arrayBufferToBase64(metadataBlob),
+                    sharedKey: {
+                      issuer: "joe@imagey.cloud",
+                      kid: "0",
+                      sharedKey: await arrayBufferToBase64(keyBlob),
+                    },
+                  };
+                }
+              }
+            }
+            return originalFetch(input, init);
+          }
+
+          if (
+            url.includes("/users/joe@imagey.cloud/documents") &&
+            method === "GET"
+          ) {
+            if (url.includes("?folderId=") || url.endsWith("/documents")) {
+              return new Response("[]", {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              });
+            }
+
+            let urlObj;
+            try {
+              urlObj = new URL(url, window.location.origin);
+            } catch (e) {
+              console.error(e);
+              urlObj = new URL(url);
+            }
+            const folderId = urlObj.pathname.substring(
+              urlObj.pathname.lastIndexOf("/") + 1,
+            );
+            if (folders[folderId]) {
+              return new Response(JSON.stringify(folders[folderId]), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              });
+            }
+          }
+
+          return originalFetch(input, init);
+        };
+      });
+
       await page.goto("/?email=joe@imagey.cloud");
 
       const passwordInput = page.getByLabel("Password", { exact: true });

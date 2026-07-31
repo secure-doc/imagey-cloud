@@ -12,13 +12,19 @@ export default function AcceptInvitationButton({
   contact: string;
   onAccepted: (documentId: string, key: JsonWebKey) => void;
 }) {
-  const mainKeyPair = useAuthentication().keyPairs.mainKeyPair;
+  const authentication = useAuthentication();
+  const mainKeyPair = authentication.keyPairs.mainKeyPair;
   return (
     <button
       className={`${className} circle transparent`}
       onClick={() => {
         contactService
-          .acceptContactRequest(user, contact, mainKeyPair)
+          .acceptContactRequest(
+            user,
+            contact,
+            authentication.settings,
+            mainKeyPair,
+          )
           .then(({ documentId, key }) => onAccepted(documentId, key));
       }}
     >

@@ -27,16 +27,37 @@ export function SharedDocumentMessage({
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (user && chatKey && publicKey && privateKey) {
+    if (
+      user &&
+      chatKey &&
+      publicKey &&
+      privateKey &&
+      authentication.settings?.settingsKey
+    ) {
       documentRepository
         .loadDocumentMetadata(owner, documentId)
-        .then(({ metadata }) => {
+        .then(async ({ metadata }) => {
           if (user === owner) {
+            let folderKey: JsonWebKey | undefined;
+            const encryptedDocumentKey =
+              metadata.sharedKey ??
+              (await documentRepository.loadKey(user, documentId));
+            if (encryptedDocumentKey?.issuerType === "FOLDER") {
+              const folderId = encryptedDocumentKey.issuer;
+              const folder = await documentService.getFolder(
+                user,
+                folderId,
+                authentication.settings.settingsKey,
+              );
+              folderKey = folder.key;
+            }
+
             return documentService.loadDocument(
               owner,
               metadata,
               publicKey,
               privateKey,
+              folderKey,
             );
           } else {
             return documentService.loadSharedDocument(
@@ -48,9 +69,20 @@ export function SharedDocumentMessage({
           }
         })
         .then(setDocument)
-        .catch(() => setError(true));
+        .catch((e) => {
+          console.error("Failed to load shared document", e);
+          setError(true);
+        });
     }
-  }, [user, owner, documentId, chatKey, publicKey, privateKey]);
+  }, [
+    user,
+    owner,
+    documentId,
+    chatKey,
+    publicKey,
+    privateKey,
+    authentication.settings?.settingsKey,
+  ]);
 
   if (error) {
     return <div className="error">{t("Error loading shared document")}</div>;

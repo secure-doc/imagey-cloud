@@ -1,6 +1,6 @@
 import { EncryptedKey } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
-import { Email } from "../contexts/AuthenticationContext";
+import { Email, Settings } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
 import { Contact } from "./Contact";
 import { ContactExchange } from "./ContactExchange";
@@ -77,13 +77,21 @@ export const contactRepository = {
   },
   getContacts: async (
     userId: UserId,
+    settings: Settings,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<Contact[]> => {
+    const chatFolder = await documentService.getFolder(
+      userId,
+      settings.chatFolderId,
+      settings.settingsKey,
+    );
     const documents = await documentService.loadDocuments(
       userId,
       publicKey,
       privateKey,
+      settings.chatFolderId,
+      chatFolder.key,
     );
     const chatDocuments = documents.filter((d) => d.type === "Chat");
     return chatDocuments.map((d) => ({

@@ -21,14 +21,19 @@ export default function Activities() {
 
   useEffect(() => {
     activityService
-      .getActivities(user, keyPair)
+      .getActivities(user, keyPair, authentication.settings)
       .then((activities) => setActivities(activities))
       .catch((e) => console.error("Failed to fetch activities", e));
     contactRepository
-      .getContacts(user, keyPair.publicKey, keyPair.privateKey)
+      .getContacts(
+        user,
+        authentication.settings,
+        keyPair.publicKey,
+        keyPair.privateKey,
+      )
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));
-  }, [user, keyPair]);
+  }, [user, keyPair, authentication.settings]);
 
   return (
     <main

@@ -10,12 +10,21 @@ import DeviceSetupDialog from "./DeviceSetupDialog";
 import DeviceRegistrationDialog from "./DeviceRegistrationDialog";
 import ChallengeAuthenticationDialog from "./ChallengeAuthenticationDialog";
 import { useTranslation } from "react-i18next";
-import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
+import {
+  Email,
+  JsonWebKeyPairs,
+  Settings,
+} from "../contexts/AuthenticationContext";
+import { documentService } from "../document/DocumentService";
 
 import { authenticationService } from "./AuthenticationService";
 
 interface AuthenticationComponentProperties {
-  onKeysDecrypted: (user: Email, keyPairs: JsonWebKeyPairs) => void;
+  onKeysDecrypted: (
+    user: Email,
+    keyPairs: JsonWebKeyPairs,
+    settings: Settings,
+  ) => void;
 }
 
 export default function AuthenticationComponent({
@@ -31,6 +40,24 @@ export default function AuthenticationComponent({
   );
   const [deviceId, setDeviceId] = useState<string>();
   const [publicMainKey, setPublicMainKey] = useState<JsonWebKey>();
+
+  const completeAuthentication = async (
+    email: string,
+    keyPairs: JsonWebKeyPairs,
+  ) => {
+    try {
+      const settings = await documentService.getSettings(
+        email,
+        keyPairs.mainKeyPair.publicKey,
+        keyPairs.mainKeyPair.privateKey,
+      );
+      onKeysDecrypted(email, keyPairs, settings);
+    } catch (e) {
+      console.error("Failed to load settings", e);
+      setAuthenticationStatus(AuthenticationStatus.UNKNOWN_ERROR);
+    }
+  };
+
   useEffect(() => {
     if (email) {
       authenticationRepository
@@ -52,7 +79,7 @@ export default function AuthenticationComponent({
                   encryptedRecoveryDeviceKey,
                 );
 
-                onKeysDecrypted(email, {
+                completeAuthentication(email, {
                   mainKeyPair: {
                     publicKey: publicMainKey,
                     privateKey: keys.privateMainKey,
@@ -107,7 +134,7 @@ export default function AuthenticationComponent({
       );
       const publicDeviceKey =
         await authenticationRepository.loadPublicDeviceKey(email!, deviceId!);
-      onKeysDecrypted(email!, {
+      completeAuthentication(email!, {
         mainKeyPair: {
           publicKey: publicMainKey,
           privateKey: privateMainKey,
@@ -141,7 +168,9 @@ export default function AuthenticationComponent({
       return (
         <RegistrationDialog
           email={email}
-          onKeysDecrypted={(keyPairs) => onKeysDecrypted(email, keyPairs)}
+          onKeysDecrypted={(keyPairs) =>
+            completeAuthentication(email, keyPairs)
+          }
         />
       );
     case AuthenticationStatus.AUTHENTICATED:
@@ -155,7 +184,7 @@ export default function AuthenticationComponent({
               authenticationRepository
                 .loadPublicDeviceKey(email, deviceId)
                 .then((publicDeviceKey) =>
-                  onKeysDecrypted(email, {
+                  completeAuthentication(email, {
                     mainKeyPair: {
                       publicKey: publicMainKey,
                       privateKey: privateMainKey,
@@ -175,7 +204,7 @@ export default function AuthenticationComponent({
             email={email}
             onWrongUser={handleWrongUser}
             onKeysDecrypted={(privateMainKey, deviceKeyPair) =>
-              onKeysDecrypted(email, {
+              completeAuthentication(email, {
                 mainKeyPair: {
                   publicKey: publicMainKey,
                   privateKey: privateMainKey,

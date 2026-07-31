@@ -26,6 +26,7 @@ import java.util.List;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -45,6 +46,8 @@ import org.apache.logging.log4j.Logger;
 import cloud.imagey.domain.contact.ContactExchange;
 import cloud.imagey.domain.contact.ContactRepository;
 import cloud.imagey.domain.contact.ContactService;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
@@ -65,10 +68,10 @@ public class ContactResource {
     @Path("{email}/contact-requests")
     @Consumes(APPLICATION_JSON)
     public Response requestContact(@PathParam("email") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
-        boolean created = contactService.invite(inviter, new Email(request.recipient()), request.key());
+        boolean created = contactService.invite(inviter, request.recipient(), request.key());
         if (created) {
             UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
-            contactRequest.path(request.recipient());
+            contactRequest.path(request.recipient().address());
             return created(contactRequest.build()).build();
         } else {
             return noContent().build();
@@ -94,14 +97,14 @@ public class ContactResource {
     @RolesAllowed("owner")
     @Path("{email}/contacts/{contact}")
     @Consumes(APPLICATION_JSON)
-    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contactUser, Contact contactObj)
+    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contactUser, Contact contact)
             throws IOException {
-        contactService.acceptInvitation(user, contactUser, contactObj.documentId(), contactObj.key());
+        contactService.acceptInvitation(user, contactUser, contact.documentId(), new EncryptedSymmetricKey(contact.key()));
     }
 
-    public record ContactRequest(String recipient, PublicKey key) {
+    public record ContactRequest(@JsonbTypeAdapter(Email.Adapter.class) Email recipient, PublicKey key) {
     }
 
-    public record Contact(String documentId, String key) {
+    public record Contact(DocumentId documentId, String key) {
     }
 }

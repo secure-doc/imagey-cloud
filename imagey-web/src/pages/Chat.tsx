@@ -31,7 +31,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   useEffect(() => {
     if (contactEmail && publicKey && privateKey) {
       contactRepository
-        .getContacts(user, publicKey, privateKey)
+        .getContacts(user, authentication.settings!, publicKey, privateKey)
         .then((contacts) => {
           const contact = contacts.find((c) => c.userId === contactEmail);
           if (contact) {
@@ -51,7 +51,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
           setKeyError(true);
         });
     }
-  }, [user, contactEmail, publicKey, privateKey]);
+  }, [user, contactEmail, publicKey, privateKey, authentication.settings]);
 
   const handleReissue = async () => {
     if (contactEmail && chatDocumentId && publicKey && privateKey) {
@@ -60,7 +60,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
           user,
           contactEmail,
           chatDocumentId,
-          publicKey,
+          authentication.settings!,
           privateKey,
         );
         setSharedKey(newKey);

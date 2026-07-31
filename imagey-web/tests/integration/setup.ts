@@ -7,6 +7,8 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import { TestData, TestDataStructure, TestUser } from "./testdata";
+import { mockDocuments } from "./mockDocuments";
+import { mockSettings } from "./mockSettings";
 
 type ConfiguredInteraction = ReturnType<
   ReturnType<
@@ -381,7 +383,7 @@ export async function prepareMarysDocuments(chats: string[] = []) {
     .addInteraction()
     .uponReceiving("a request of mary to get documents")
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "root-folder-id" }).headers({
+      r.query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" }).headers({
         Accept: "application/json",
       }),
     )
@@ -390,37 +392,50 @@ export async function prepareMarysDocuments(chats: string[] = []) {
         {
           documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
           metadata:
-            "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
+            "fMQ2kdjsS4jasN2_YaYEbSw7Kp5qC0Iz89LIv9s27FhUnMPnTJu2fWHCOsROc-t1J9Q4osXs4pfqm3xIEu0qrC15DLDPCzPB_gsyF7O3yx2wGkbZJxXn10DVd4m19KJAYpL0vyUxFaPK4NnC5En9NTujAuVONSYwF3txvXymyAEhles9c_NZ7k1v7NJk9PikSIcD-P1FabGnW7Gh9mmgdBXDRUosBEEu6r1aBPsRsx71uOgnQR165sLICsDcqFYJXduJRj8pabZFJ0-rvv3Y160piEWPmGOGUBKpl46hb9TRyzZW7Wpkmbg3AfuRNJZOEnJOQVveRF3m5qTLKqMCXo2U-_gax86PDQSpVmmrUuDiDefSKWAxarFsjDR9lMFohIkbm0rp9SciRtixpS3GZiZF3AGZTsWaLQ",
           sharedKey: {
             issuerType: "FOLDER",
-            issuer: "root-folder-id",
+            issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
             kid: "0",
             sharedKey: fs.readFileSync(
               path.resolve(
                 process.cwd(),
-                "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key",
+                "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
               ),
-              "base64",
+              "utf-8",
             ),
           },
         },
         {
           documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
           metadata:
-            "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
+            "cbpwIZ-0KKwfFGKgr6yrJ62jBb82GZ0gH9qHlhqYR82umxEAlT2vQfIP2Cv81bQAYkhJbGIsEypkMfsCOkEApjHgI75IpYSuG6qtMmb-btqhgBjwxIqqvQe9nQBg5jCTY5V-Kg9nwiNuSkGub2lnIKboDCyLXqnaKb3uZsmpGmfA0y2gY4XmUXoYEP39xxx2jVnhDTnTnPL0T1HKHDNbHL8lxqHNoCn5EuLTkHAYzSId7_Hfi0X7z1r5ivY2kh8inVSVJjecNgKKFEt8LVcbBVKbJgeCy0phCp2WPveu6zIQOhmLLinwyoVv6Z1IxM3FUFtHae3Ik5mr8viqDNWZWoSkP8vaiyHkEdT-ShUXKP2qhddXONE0FEK-vmxZZbCV2P_F9mfZJ45FzJbYRTVBqbAd_u56y2U8nA",
           sharedKey: {
             issuerType: "FOLDER",
-            issuer: "root-folder-id",
+            issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
             kid: "0",
             sharedKey: fs.readFileSync(
               path.resolve(
                 process.cwd(),
-                "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/root-folder-id/encrypted-shared.key",
+                "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
               ),
-              "base64",
+              "utf-8",
             ),
           },
         },
+      ]),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get chat documents")
+    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
+      r.query({ folderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738" }).headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
         ...chats.map((chatEmail) => {
           const contactName = chatEmail.split(
             "@",
@@ -447,7 +462,7 @@ export async function prepareMarysDocuments(chats: string[] = []) {
     .uponReceiving("a request of mary to get root folder document metadata")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/root-folder-id",
+      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -455,11 +470,11 @@ export async function prepareMarysDocuments(chats: string[] = []) {
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
-        documentId: "root-folder-id",
+        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         metadata: fs.readFileSync(
           path.resolve(
             process.cwd(),
-            "tests/images/encrypted/root-folder-id/metadata",
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
           ),
           "base64",
         ),
@@ -469,7 +484,42 @@ export async function prepareMarysDocuments(chats: string[] = []) {
           sharedKey: fs.readFileSync(
             path.resolve(
               process.cwd(),
-              "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
+            ),
+            "base64",
+          ),
+        },
+      }),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get chat folder document metadata")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        documentId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+        metadata: fs.readFileSync(
+          path.resolve(
+            process.cwd(),
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
+          ),
+          "base64",
+        ),
+        sharedKey: {
+          issuer: "mary@imagey.cloud",
+          kid: "0",
+          sharedKey: fs.readFileSync(
+            path.resolve(
+              process.cwd(),
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
             ),
             "base64",
           ),
@@ -488,29 +538,7 @@ export async function prepareMarysDocuments(chats: string[] = []) {
           Accept: "application/json",
         }),
     )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "mary@imagey.cloud",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/mary@imagey.cloud/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/mary@imagey.cloud/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
+    .willRespondWith(200, (r) => r.jsonBody(mockSettings.mary));
 }
 
 export async function prepareMarysProfileContents() {
@@ -537,7 +565,7 @@ export async function prepareMarysProfileContents() {
     .uponReceiving("a request of mary to get profile picture content")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
+      "/users/mary@imagey.cloud/documents/3ae437c9-c71e-4cf0-b066-de34d75e1af3/files/3ae437c9-c71e-4cf0-b066-de34d75e1af3",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -546,7 +574,7 @@ export async function prepareMarysProfileContents() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "../imagey-server/src/test/resources/data/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
+        "../imagey-server/src/test/resources/data/mary@imagey.cloud/documents/3ae437c9-c71e-4cf0-b066-de34d75e1af3/files/3ae437c9-c71e-4cf0-b066-de34d75e1af3",
       ),
     );
 }
@@ -559,41 +587,41 @@ export async function prepareMarysRootFolder(
     {
       documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
       metadata:
-        "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
+        "fMQ2kdjsS4jasN2_YaYEbSw7Kp5qC0Iz89LIv9s27FhUnMPnTJu2fWHCOsROc-t1J9Q4osXs4pfqm3xIEu0qrC15DLDPCzPB_gsyF7O3yx2wGkbZJxXn10DVd4m19KJAYpL0vyUxFaPK4NnC5En9NTujAuVONSYwF3txvXymyAEhles9c_NZ7k1v7NJk9PikSIcD-P1FabGnW7Gh9mmgdBXDRUosBEEu6r1aBPsRsx71uOgnQR165sLICsDcqFYJXduJRj8pabZFJ0-rvv3Y160piEWPmGOGUBKpl46hb9TRyzZW7Wpkmbg3AfuRNJZOEnJOQVveRF3m5qTLKqMCXo2U-_gax86PDQSpVmmrUuDiDefSKWAxarFsjDR9lMFohIkbm0rp9SciRtixpS3GZiZF3AGZTsWaLQ",
       sharedKey: {
         issuerType: "FOLDER",
-        issuer: "root-folder-id",
+        issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         kid: "0",
         sharedKey: fs.readFileSync(
           path.resolve(
             process.cwd(),
-            "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key",
+            "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
           ),
-          "base64",
+          "utf-8",
         ),
       },
     },
     {
       documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
       metadata:
-        "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
+        "cbpwIZ-0KKwfFGKgr6yrJ62jBb82GZ0gH9qHlhqYR82umxEAlT2vQfIP2Cv81bQAYkhJbGIsEypkMfsCOkEApjHgI75IpYSuG6qtMmb-btqhgBjwxIqqvQe9nQBg5jCTY5V-Kg9nwiNuSkGub2lnIKboDCyLXqnaKb3uZsmpGmfA0y2gY4XmUXoYEP39xxx2jVnhDTnTnPL0T1HKHDNbHL8lxqHNoCn5EuLTkHAYzSId7_Hfi0X7z1r5ivY2kh8inVSVJjecNgKKFEt8LVcbBVKbJgeCy0phCp2WPveu6zIQOhmLLinwyoVv6Z1IxM3FUFtHae3Ik5mr8viqDNWZWoSkP8vaiyHkEdT-ShUXKP2qhddXONE0FEK-vmxZZbCV2P_F9mfZJ45FzJbYRTVBqbAd_u56y2U8nA",
       sharedKey: {
         issuerType: "FOLDER",
-        issuer: "root-folder-id",
+        issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         kid: "0",
         sharedKey: fs.readFileSync(
           path.resolve(
             process.cwd(),
-            "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/root-folder-id/encrypted-shared.key",
+            "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
           ),
-          "base64",
+          "utf-8",
         ),
       },
     },
     {
       documentId: "mary@imagey.cloud",
       metadata:
-        "ha98ll38YW1LOvkWzjoBhu23W2LGxFWY27WtOBlkN1XYG0Wppxv9dlgSLV+EmvK7rPJM/nMRkRvdIw==",
+        "J6xHSoNOVLA+YEIPlbtbpj3HIzUE9Sqq0y6K87d0kKzCrOJM0IcmyHLIw93fbeV2PYHYEtsUUzb7B+xrYVhbkkigcJ7ePXCeZXq7u0NPZcNFG6/ZN83dWNb4u6SEcRjo607gMiSMCwKWdJcNgwwHgUgRme6p8kiz8yg279TNMknMTN9dYGYH2WdrzR0nIbr535KJiKn77U8=",
       sharedKey: {
         issuer: "mary@imagey.cloud",
         kid: "0",
@@ -602,44 +630,35 @@ export async function prepareMarysRootFolder(
       },
     },
     {
-      documentId: "profile",
-      metadata:
-        "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
+      documentId: "9b71fa98-8616-4222-b03e-d189289ccbd0",
+      metadata: mockDocuments.mary.profile.metadata,
       sharedKey: {
         issuer: "mary@imagey.cloud",
         kid: "0",
-        sharedKey:
-          "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+        sharedKey: mockDocuments.mary.profile.sharedKey,
       },
     },
     {
-      documentId: "profile-pic-doc-id",
-      metadata:
-        "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
+      documentId: "3ae437c9-c71e-4cf0-b066-de34d75e1af3",
+      metadata: mockDocuments.mary.profilePic.metadata,
       sharedKey: {
         issuer: "mary@imagey.cloud",
         kid: "0",
-        sharedKey:
-          "uOJsNDuAO1n3sqc6x6Dri2YTNRkBdaPXJTRcptoSQ4RM0jQZYyDMA7CG0e/NOf4d4HaDXYSZGWdPGcZFqVewsN0BmwDB4ntSEkNxu8+eqFE2z+a+pVu6ncxc6fLHIFLeGZIJOe1vPJyywCt5rtE0QBi6fRfsFHi6VlQ839wLYy1pHaqnvLlW8e5H+xYf1gRmODvrAA2w",
+        sharedKey: mockDocuments.mary.profilePic.sharedKey,
       },
     },
     {
-      documentId: "root-folder-id",
+      documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
+      metadata: mockDocuments.mary.rootFolder.metadata,
       sharedKey: {
         issuer: "mary@imagey.cloud",
         kid: "0",
-        sharedKey: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
-          ),
-          "base64",
-        ),
+        sharedKey: mockDocuments.mary.rootFolder.sharedKey,
       },
     },
   ];
 
-  chats.forEach((chat) => {
+  const chatDocuments = chats.map((chat) => {
     const contactName = chat.split("@")[0] as keyof TestDataStructure;
     const chatData = TestData.mary.chats?.find((c) => c.contactEmail === chat);
     let metadata: string | undefined;
@@ -651,8 +670,16 @@ export async function prepareMarysRootFolder(
         "SvwyuvGK490PcZkvPvA3AiKeIehXCWjrEDomT57qgNdEVzRexUtOi7EpvekQPmQJSVIjBp/3A6fUXLYIvlOElC326VhFbiA=";
     }
 
-    documents.push({
-      documentId: `chat-${contactName}`,
+    let documentId = `chat-${contactName}`;
+    if (contactName === "laura")
+      documentId = "9c09fbb6-aee3-4e8e-9779-2bcb69554a02";
+    else if (contactName === "alice")
+      documentId = "edc59f23-cbaa-4288-a3ad-a1008c654c88";
+
+    return {
+      documentId,
+      name: chat,
+      type: "Chat",
       ...(metadata ? { metadata } : {}),
       sharedKey: {
         issuer: "mary@imagey.cloud",
@@ -662,7 +689,7 @@ export async function prepareMarysRootFolder(
             ? chatData.encryptedSharedKey
             : "invalid-dummy-key",
       },
-    });
+    };
   });
 
   documents.sort((a, b) =>
@@ -683,22 +710,22 @@ export async function prepareMarysRootFolder(
 
   getState()
     .uponReceiving(
-      "a request of mary to get root documents" +
+      "a request of mary to get chat documents" +
         (chats.length ? " with chats " + chats.join("-") : ""),
     )
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({
+      r.query({ folderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738" }).headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(documents));
+    .willRespondWith(200, (r) => r.jsonBody(chatDocuments));
   getState()
     .uponReceiving(
       "a request of mary to get root folder document metadata for empty folder",
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/root-folder-id",
+      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -706,11 +733,11 @@ export async function prepareMarysRootFolder(
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
-        documentId: "root-folder-id",
+        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         metadata: fs.readFileSync(
           path.resolve(
             process.cwd(),
-            "tests/images/encrypted/root-folder-id/metadata",
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
           ),
           "base64",
         ),
@@ -720,7 +747,42 @@ export async function prepareMarysRootFolder(
           sharedKey: fs.readFileSync(
             path.resolve(
               process.cwd(),
-              "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
+            ),
+            "base64",
+          ),
+        },
+      }),
+    );
+  getState()
+    .uponReceiving(
+      "a request of mary to get chat folder document metadata for empty folder",
+    )
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        documentId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+        metadata: fs.readFileSync(
+          path.resolve(
+            process.cwd(),
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
+          ),
+          "base64",
+        ),
+        sharedKey: {
+          issuer: "mary@imagey.cloud",
+          kid: "0",
+          sharedKey: fs.readFileSync(
+            path.resolve(
+              process.cwd(),
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
             ),
             "base64",
           ),
@@ -741,29 +803,7 @@ export async function prepareMarysRootFolder(
           Accept: "application/json",
         }),
     )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "mary@imagey.cloud",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/mary@imagey.cloud/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/mary@imagey.cloud/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
+    .willRespondWith(200, (r) => r.jsonBody(mockSettings.mary));
 }
 
 export async function prepareEmptyMarysDocuments(
@@ -793,15 +833,29 @@ export async function prepareEmptyMarysDocuments(
     });
   });
 
+  provider
+    .addInteraction()
+    .given("mary has no documents")
+    .uponReceiving(
+      "a request of mary to get empty root documents" +
+        (chats.length ? " with chats " + chats.join("-") : ""),
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
+      r.query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" }).headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
   return provider
     .addInteraction()
     .given("mary has no documents")
     .uponReceiving(
-      "a request of mary to get empty documents" +
+      "a request of mary to get empty chat documents" +
         (chats.length ? " with chats " + chats.join("-") : ""),
     )
     .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "root-folder-id" }).headers({
+      r.query({ folderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738" }).headers({
         Accept: "application/json",
       }),
     )
@@ -862,7 +916,7 @@ export async function prepareDocumentUpload(
     .uponReceiving("a request to get root folder metadata to update")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/root-folder-id`,
+      `/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a`,
       (r) => {
         r.headers({
           Accept: "application/json",
@@ -872,11 +926,11 @@ export async function prepareDocumentUpload(
     .willRespondWith(200, (r) => {
       r.headers({ ETag: MatchersV3.string("123456789") });
       r.jsonBody({
-        documentId: "root-folder-id",
+        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
         metadata: fs.readFileSync(
           path.resolve(
             process.cwd(),
-            "tests/images/encrypted/root-folder-id/metadata",
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
           ),
           "base64",
         ),
@@ -886,7 +940,7 @@ export async function prepareDocumentUpload(
           sharedKey: fs.readFileSync(
             path.resolve(
               process.cwd(),
-              "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
             ),
             "base64",
           ),
@@ -900,7 +954,7 @@ export async function prepareDocumentUpload(
     .uponReceiving("a request to update root folder metadata with new document")
     .withRequest(
       "PUT",
-      `/users/mary@imagey.cloud/documents/root-folder-id`,
+      `/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a`,
       (r) => {
         r.headers({
           "Content-Type": "application/octet-stream",
@@ -1244,30 +1298,93 @@ export async function prepareAlicesLogin(chats: string[] = []) {
       "GET",
       "/users/alice@imagey.cloud/documents/alice@imagey.cloud",
     )
-    .willRespondWith(404);
+    .willRespondWith(200, (builder) => builder.jsonBody(mockSettings.alice));
 
   getState()
-    .uponReceiving("a request to create Alices documents")
+    .uponReceiving("a request of alice to get chat folder document metadata")
     .withRequest(
-      "PUT",
-      Matchers.regex({
-        matcher: "/users/alice@imagey\\.cloud/documents/.*",
-        generate: "/users/alice@imagey.cloud/documents/some-uuid",
+      "GET",
+      "/users/alice@imagey.cloud/documents/09128665-7ebf-426f-95fe-84f31ac53167",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (builder) =>
+      builder.jsonBody({
+        documentId: "09128665-7ebf-426f-95fe-84f31ac53167",
+        metadata: fs.readFileSync(
+          path.resolve(
+            process.cwd(),
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
+          ),
+          "base64",
+        ),
+        sharedKey: {
+          issuer: "alice@imagey.cloud",
+          kid: "0",
+          sharedKey: fs.readFileSync(
+            path.resolve(
+              process.cwd(),
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
+            ),
+            "base64",
+          ),
+        },
+      }),
+    );
+
+  getState()
+    .uponReceiving("a request of alice to get root folder document metadata")
+    .withRequest(
+      "GET",
+      "/users/alice@imagey.cloud/documents/7ca8742e-821f-4276-862d-d5d2dbd42038",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (builder) =>
+      builder.jsonBody({
+        documentId: "7ca8742e-821f-4276-862d-d5d2dbd42038",
+        metadata: fs.readFileSync(
+          path.resolve(
+            process.cwd(),
+            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
+          ),
+          "base64",
+        ),
+        sharedKey: {
+          issuer: "alice@imagey.cloud",
+          kid: "0",
+          sharedKey: fs.readFileSync(
+            path.resolve(
+              process.cwd(),
+              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
+            ),
+            "base64",
+          ),
+        },
+      }),
+    );
+
+  getState()
+    .uponReceiving("a request to get Alices documents in root folder")
+    .withRequest("GET", "/users/alice@imagey.cloud/documents", (r) =>
+      r.query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" }).headers({
+        Accept: "application/json",
       }),
     )
-    .willRespondWith(200);
-
-  getState()
-    .uponReceiving("a request to get Alices root documents")
-    .withRequest("GET", "/users/alice@imagey.cloud/documents")
-    .willRespondWith(200, (builder) => builder.jsonBody(documents));
+    .willRespondWith(200, (builder) => builder.jsonBody([]));
 
   getState()
     .uponReceiving("a request to get Alices documents")
     .withRequest("GET", "/users/alice@imagey.cloud/documents", (r) =>
-      r.query({ folderId: Matchers.string("some-uuid") }),
+      r.query({ folderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738" }).headers({
+        Accept: "application/json",
+      }),
     )
-    .willRespondWith(200, (builder) => builder.jsonBody([]));
+    .willRespondWith(200, (builder) => builder.jsonBody(documents));
 }
 
 export async function prepareAlicesChat(

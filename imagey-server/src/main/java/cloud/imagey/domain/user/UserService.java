@@ -121,7 +121,7 @@ public class UserService {
         DocumentId settingsId = new DocumentId(user.email().address());
         EncryptedContent settings = new EncryptedContent(getDecoder().decode(registration.settings().content()));
         documentRepository.persist(user, settingsId, settings);
-        EncryptedContent settingsKey = new EncryptedContent(getDecoder().decode(registration.settingsSharedKey().sharedKey()));
+        EncryptedContent settingsKey = new EncryptedContent(getDecoder().decode(registration.settingsSharedKey().sharedKey().content()));
         documentRepository.persist(user, settingsId, user.email(), settingsKey);
     }
 

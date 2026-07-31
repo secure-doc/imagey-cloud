@@ -1,0 +1,80 @@
+{
+  "mary": {
+    "rootFolder": {
+      "metadata": "cQJogxiMPwN7QkAFOMzCUTs2WQKc5jFw2II4IX8BPBL8VVrVTLkpwS7lksNqCYt7pzOZoAoRLqjpmUH7s9zhjCxXA3Xzj2wmoyC3L9xzj9jrh0qX4dHgiQR4keSWVVFUgf2kuUQjtU996nK4ADJdPHYIt8DPI76U",
+      "sharedKey": "5fb50NNA2dnmz3PWub0WLBmG4OnmEP504Iu3OqCtt47UujlNTE5UWLLEmgVHP7dlhiK8KrDTdTPdHi1DDTOJvTzDAOGEGEex9wwujEB5GJAnuT2slgaoq69Q57wf-SSbyymWVpeJ_cI6ioP74WJIH0yVjq5o-fdo8eJZ6L4A9r9OlbHh2tmaSYgWq5fBGekRcQF1TSpX"
+    },
+    "profile": {
+      "metadata": "MaRXxli--JEo7m0coQJAd0h6wF3Y-dDy66dFcIHBSD1kbpNf6wZyuxAsZg",
+      "sharedKey": "q1mmpLkBIzqppFaMIg81SaH9YJ37r1WOfERJpVRMxsJOVeQw0kS6ZmBM1jwEhQg0zsoRnM7UXZJxjD9popS7h49dgk-OSUEvY5uYkXzAHgmZzr7LsfVvJ44yLMvikhKDCvmjUQgwCPdtzENfLiYm4ky75oAslUHH9ImRvdiiSavBMX_vxPCh7xaM4bmJdezPILuEkJIf"
+    },
+    "profilePic": {
+      "metadata": "g3AsQMEl0jMPlmh6EWg--W3QMBoL3WDSVE9hOf3ESm9Li9RDdeOEk9zkOB9U4-q5SA",
+      "sharedKey": "jtA3QsL3C9lms_dOKsfWhyeB7dj39HJYXZbLH6q65GXkTUfsySQLwE1NAuJ5woz7oj6DzsRy6ZwasJB4d1d066DCdAQqI4XvRdSfYQWdJmLu9lKkNMS9iV7Rl5eYrEtwitGXXX9k9pqiLW4mrXoqOvhjdGFzH-Tq_6GbV6OklUrUs9C-7Ycj9geQWRxOLMdEPSMWLRWV"
+    },
+    "chats": {
+      "laura@imagey.cloud": {
+        "metadata": "71dzQQE57u7SWNnhSRPAOAodG9EA4AjGXfMxMPS-TuG7icRKZrk3zayO1DdKEHFsiA4r3WHS64L2KwrB6SZ5aUg",
+        "sharedKey": "8MOa7e-U9hIBprs6ps249clfjvwno_sOjUbKxVeeYelDRnlMMHNkq09mqAREK9U2YR4uTnm0MWyPUHnV1J4rDN3McI894zRTwxVWIQ7hETw3AgHB65iJGlsm74onVP_ooGYjQOmWm-jd2fPHfJr_U5Zh_E4Ylumf5WkEW0A3uOJetLgOKuaXJ4eZDfH1sgKrlRJcyIRX"
+      },
+      "alice@imagey.cloud": {
+        "metadata": "wX0_yiPU956gAF_XMkCYw1i55--ZvRfYYEhlQRaiT8dKW9D0NEioBOWFECrIl-8cmuKXh9E2Sv3CI8Y1pE5O7TA",
+        "sharedKey": "4v5Wv_BbjlaJ35kPF98e3XJL22J_bAlwYB2NHAC5g3Vf6I7jbkOvXIiSVZvI7aa1DKcFsW6HU_JBnjPF2uAbd2SUeojxVrRfX0PN6cgx8OxfwSaM7eM1f5PfjNH4RkfttBu62YfptD4H0pVqCn77A3cD2dV-7uIEDlF7uSyhjKJkcTjooGCQGW5bp2S9RTuax5TMr8KV"
+      }
+    }
+  },
+  "alice": {
+    "rootFolder": {
+      "metadata": "JszkTkNJflsEhW5MC45qKqj63YExZ-e_LX-3xK4H",
+      "sharedKey": "QcwetkQzGR9IAWi05kZZ0L0-06z6t0sfJ-nquSXK3YSCuaTNV12BauCOrLvvyFZ0wv-MLrhoaQt8dfZje3llKsY_ajfTPDKZOo3s8dKoKC5HdhyPdppBch-3Ah37tVhu-tkEhKKUASRfcJWd4ORdBTBz_tNme1zbX2CY8kt4phYcBirH6vZ9D5TMNnjWmWPnbkjzBYYO"
+    },
+    "profile": {
+      "metadata": "ByKSN4I9VNLeVg5ZsC9COpE9ly-BnP9WXinNM4zLPatoTI4jyED8154gX6o",
+      "sharedKey": "hbgiVOhbGxOFIhPauLQxw8gYlaR_UbYTsJIB3XK15vBfDO7p52CfUfhH6thHgBNdFt3P2aW7HujGmSj_4JqHectgmHN5uJRLkuzEypM24Ad9XFp9jdexKIdRlpqiqQJwakNoJgzSr4XZzQWSTppR8_G1Ke0MyZSWRBAN5MsMDpxpXixhzWLfPkAhCFY5axoO3o_wCxI8"
+    },
+    "profilePic": {
+      "metadata": "_5EFyWaDh9mpIOi383_J_7NBmu7s6XI8wYDghNC2Iun1Udwj9geKV-uAsAJSAZxs1A",
+      "sharedKey": "nqAOR0mAY5uwECT11DR9EBhNHI2F-l0TNwmgu1LGrNAR1L29kad3CuLVLgdcVT4zQ7RfUmWK0haikFZJGoHnHwv6m5vzm84keCGTXFdMXTx7Aw8h7ely3AAlbzwJvPfsC7sPor9tOGb8WI5YQcgbzRw_pyJfb4Ish8UEgJaI61Hy8Om2bZTaqdOl6Ywn1Ie0cr9zIB4F"
+    },
+    "chats": {
+      "laura@imagey.cloud": {
+        "metadata": "bcybxO3gwpS05sSp9OvdHlSgImYXicUUJs55mGNIwDtPUZJNYA0MTsehREUJ5-nRdpC9vrMzRQvodndSfrMfMKw",
+        "sharedKey": "b1CLM4rVpDUfFGnR58m19y1dKpE2U18RdzNnHdCngX7Ye-ds1xqxIAzwNBqY9KC74SBeZccUkSedeRpZaPmy8pXUMbYmT8SqHZ4cmI1u1A-ou_4vemLld-H4BzyAaQoQNI8N2MVo6roa4E1s0d8vVy2U2KkngXJjrGVzv2Nyf-j_6TSOa05solSn-1IhbiyEWVz4C9lm"
+      },
+      "alice@imagey.cloud": {
+        "metadata": "0GwaNsdOm6MjUm5Q1iPU7bYN-6iondINPxiDTIZo-H8UDkSGAJRUBJLbYLztFO4V9ufke1v_gTqhDjtWADmz5RE",
+        "sharedKey": "41Oag3sjKGSuCNs_rep0C_kj7MzNwhNmyZFek90zKRc61p3Fbg_fWr9yAe3ZA6HmwE2jIdJpyl0g8681dTt6BYyQ6lo2OHuAQclhlDFG66455n4xRMXauOr7NEAGefebOhYVqYhb2MKEIz9sia77z5UPC16DtkAc9L9WYuvjji3HJrfIMwxZEKN9cugB119HOyDoROL5"
+      }
+    }
+  },
+  "laura": {
+    "rootFolder": {
+      "metadata": "Hwj_Lsj2wqVdxInxueYDmbWMpo2drpiL91ZxB8rv",
+      "sharedKey": "35kt1kb4Qzmo_tbW3C_v2Rchieyy5wA_J_EGlt-LIGIGaaBJW3dBO2exmM28DOqPeIS2HIqk3QoYhdkYfcV5saSdmNCigS94xx0mJk54kg93qTSNITmK8OHiiB-NSBo_MY9u1PvWiWn-j4wkFWYGgFR1HrIsGp3ymeJYa4aiGv_Bm7graPb6LcBZE1ssJIUc-9eJ2KpN"
+    },
+    "profile": {
+      "metadata": "r57gEGMCJcuUnJwRNY-eb655Z_1bECd3WWN2ZB55AuDGMGtfHd3fC8HM48E",
+      "sharedKey": "RAuOTMe_FMfblW2izU7h6YXEFumQP-k_kvYhzP_Y3sM5-z79FjKh4LcACQ0aaaOKT95UKU-3XTheHCyS7DbT-ynCjqG1ry8Sy4NFmFncqr3MslbCtPHgMJfWE1Z4YoYa6Ym2TRAcadT8-S0D683ugPl7Uz2rVWGeZfXzHaMIADSCoCsoPp0NLZ3bv2YgRYhVLua-58XA"
+    },
+    "profilePic": {
+      "metadata": "rE6ytNxCEsswBuKPnkXvcXvkFIsPyCHIpNY82sOWsNUvS-ht0Gc8rQDUVRqKkmg5wg",
+      "sharedKey": "Q2TuJdADsYmgARDdB5PtABODp2E6ZNW7hD9s35TdP_tjkGuAQFShwMX2Gfn5VLSN6xs1LNvosPMo-Uycq-nYtrq6zviDXZDH8aUH8T24BZFE7aQVwD3qkalRvV4VfMlN0krUxgJf0sCpfJ_QIU7oE9tMFbWleXSqIRHKA1y-So_rwmmH6Fb4OwjVWV4Jzap4xiMrK3fC"
+    },
+    "chats": {}
+  },
+  "bill": {
+    "rootFolder": {
+      "metadata": "Ka6Tu2a3ir7vrmYkS5dTQRAt6hFRQT_KhAcP8sPo",
+      "sharedKey": "BSaqmP18gWYhsvsIdue8iWAx_o4vfgvdZs4pWiR-9jbEl1LOmtuFAzfPKqeHgNZlOgDNnCc6FS1w6aZvSntKI1WMUm-yvvsCBzZCFybLtHp-F3xS9DY1JHMfug9kBfHIUhWgo_Czr9IAodwzqUeQmRdtCTdJD1qrjlhbLsEgPl8JCPOzsJ1Q3NBot48UacKQCyARV1QR"
+    },
+    "profile": {
+      "metadata": "v-HQabyWTE9HMjwvShqJQhzkA2-hcy6tR_4JmFjk3dvo3oYkHi1pwJbg5g",
+      "sharedKey": "4YYZJdv1X44MSkrpmIUdvKfaDRdcciaKFiKxs-3EKV8OvXUdiBCZzZjhR4VRG5T5d5rVvzNW4Cb5hDdVAGZJpyJyE91k96_qRVhPlnHjY7rMsPIysPv2HunrKz4zq0LgBnHkPoyWeQKBhqMQ79xdmDkp6Qo7XaSm2o_Dhl_5CVsPBvOMY8qkG7bNmHJg1viJZMGYyhR6"
+    },
+    "profilePic": {
+      "metadata": "lDwhrRoCQm7dpdRlvJrsna7XK9AjkRDJ2VwdYJ4hMNaNfYZ_QG0aYei6dAC_48MgeA",
+      "sharedKey": "M_VXckIcRhn9UUyEEjH11Uix5ZNC8_6FUQn1yj2gvX51bpCvBX5ZIqv67Ebl63j1xl0fx_CHQu-MwyiS6tTAra8BggHxHXtdu6PkD6YNe9i87IM9mjq3pBN8v-1c3I8eRgGbz8gy8wmcIT2cewl7n6TrGvNgviTM-3oWdraogUGnKRk9-VNLPiZh5OkmGpXCfVMoCO7S"
+    },
+    "chats": {}
+  }
+}

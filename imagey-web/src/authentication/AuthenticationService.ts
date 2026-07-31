@@ -18,6 +18,8 @@ export enum RegistrationResult {
   Error,
 }
 
+import { documentService } from "../document/DocumentService";
+
 export const authenticationService = {
   register: async (
     email: Email,
@@ -57,7 +59,17 @@ export const authenticationService = {
       { issuer: email, kid: "0", sharedKey: encryptedSettingsSharedKey },
     );
     if (inviter) {
-      await contactService.acceptContactRequest(email, inviter, mainKeyPair);
+      const settings = await documentService.getSettings(
+        email,
+        mainKeyPair.publicKey,
+        mainKeyPair.privateKey,
+      );
+      await contactService.acceptContactRequest(
+        email,
+        inviter,
+        settings,
+        mainKeyPair,
+      );
     }
     return {
       mainKeyPair,

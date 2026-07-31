@@ -1,6 +1,6 @@
 import { UserId } from "../authentication/UserId";
 import { contactRepository } from "../contact/ContactRepository";
-import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
+import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
 import {
   Activity,
@@ -13,12 +13,13 @@ export const activityService = {
   getActivities: async (
     user: UserId,
     keyPair: JsonWebKeyPair,
+    settings: Settings,
   ): Promise<Activity[]> => {
     const contactRequests = await contactRepository.getContactRequests(user);
-    const rootFolder = await documentService.getRootFolder(
+    const rootFolder = await documentService.getFolder(
       user,
-      keyPair.publicKey,
-      keyPair.privateKey,
+      settings.rootFolderId,
+      settings.settingsKey,
     );
     const images = await documentService.loadDocuments(
       user,

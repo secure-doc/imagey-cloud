@@ -16,12 +16,15 @@
  */
 package cloud.imagey.domain.contact;
 
-import java.util.Map;
-
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
+import jakarta.json.bind.annotation.JsonbTypeDeserializer;
+import jakarta.json.bind.annotation.JsonbTypeSerializer;
 
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.encryption.PublicKey.Deserializer;
+import cloud.imagey.domain.encryption.PublicKey.Serializer;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
@@ -29,7 +32,9 @@ public record ContactExchange(
     @JsonbTypeAdapter(User.Adapter.class) User inviter,
     @JsonbTypeAdapter(Email.Adapter.class) Email invitee,
     ContactStatus status,
-    Map<String, Object> publicKey,
+    @JsonbTypeSerializer(Serializer.class)
+    @JsonbTypeDeserializer(Deserializer.class)
+    PublicKey publicKey,
     DocumentId documentId,
     EncryptedSharedKey sharedKey) {
 }

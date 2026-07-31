@@ -91,7 +91,11 @@ export default function Images() {
     if (user && publicMainKey && privateMainKey) {
       if (!folderPath) {
         documentService
-          .getRootFolder(user, publicMainKey, privateMainKey)
+          .getFolder(
+            user,
+            authentication.settings.rootFolderId,
+            authentication.settings.settingsKey,
+          )
           .then((rootFolder) => setFolderPath([rootFolder]))
           .catch(console.error);
       } else {
@@ -107,7 +111,15 @@ export default function Images() {
           .then((documents) => setDocuments(documents));
       }
     }
-  }, [publicMainKey, privateMainKey, user, currentFolder, folderPath]);
+  }, [
+    publicMainKey,
+    privateMainKey,
+    user,
+    currentFolder,
+    folderPath,
+    authentication.settings.rootFolderId,
+    authentication.settings.settingsKey,
+  ]);
 
   const folderDocIds = useMemo(() => {
     if (!currentFolder || !currentFolder.documents) return null;

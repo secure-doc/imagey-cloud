@@ -1,3 +1,5 @@
+import { mockDocuments } from "./mockDocuments.ts";
+
 export interface TestDevice {
   deviceId: string;
   publicDeviceKey?: JsonWebKey;
@@ -22,6 +24,7 @@ export interface TestUser<
   TDocs extends TestDocument[] = TestDocument[],
 > {
   password: string;
+  settings?: Record<string, string>;
   publicMainKey: JsonWebKey;
   privateMainKey?: JsonWebKey;
   devices: TDevices;
@@ -36,16 +39,24 @@ export interface TestDataStructure {
   >;
   alice: TestUser<
     [TestDevice, TestDevice],
-    [TestDocument, TestDocument, TestDocument, TestDocument]
+    [TestDocument, TestDocument, TestDocument]
   >;
-  laura: TestUser<[TestDevice], []>;
-  bill: TestUser<[TestDevice], []>;
+  laura: TestUser<[TestDevice], [TestDocument, TestDocument, TestDocument]>;
+  bill: TestUser<[TestDevice], [TestDocument, TestDocument, TestDocument]>;
   joe: TestUser<[TestDevice, TestDevice], []>;
 }
 
 export const TestData: TestDataStructure = {
   mary: {
     password: "MarysPassword123",
+    settings: {
+      documents: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
+      rootFolderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
+      chatFolderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+      chatFolder: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+      profileDocumentId: "9b71fa98-8616-4222-b03e-d189289ccbd0",
+      profilePicDocumentId: "3ae437c9-c71e-4cf0-b066-de34d75e1af3",
+    },
     publicMainKey: {
       crv: "P-256",
       ext: true,
@@ -143,23 +154,31 @@ export const TestData: TestDataStructure = {
     ],
   },
   alice: {
-    password: "MarysPassword123",
+    password: "AlicesPassword",
+    settings: {
+      documents: "7ca8742e-821f-4276-862d-d5d2dbd42038",
+      rootFolderId: "7ca8742e-821f-4276-862d-d5d2dbd42038",
+      chatFolderId: "09128665-7ebf-426f-95fe-84f31ac53167",
+      chatFolder: "09128665-7ebf-426f-95fe-84f31ac53167",
+      profileDocumentId: "15917f2b-220c-4ecb-a08b-fb3a695b4424",
+      profilePicDocumentId: "8e1ff0be-5c0e-40af-9f39-35ed57c8f1fb",
+    },
     publicMainKey: {
-      crv: "P-256",
-      ext: true,
       key_ops: [],
+      ext: true,
       kty: "EC",
-      x: "OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY",
-      y: "D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM",
+      x: "WlNo3xHpsegk3jRU8hZAX1lLtpreYYr56KKo7oAk1W8",
+      y: "jXAPNGWZAQzHggF9gg15pov1GjPh_lPw-8VIeLIGQaM",
+      crv: "P-256",
     },
     privateMainKey: {
-      crv: "P-256",
-      d: "9of9zCwj6wFarMtSDdsp_4K_q2g2g_nv2jQgrTBQ4fw",
-      ext: true,
       key_ops: ["deriveKey"],
+      ext: true,
       kty: "EC",
-      x: "OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY",
-      y: "D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM",
+      x: "WlNo3xHpsegk3jRU8hZAX1lLtpreYYr56KKo7oAk1W8",
+      y: "jXAPNGWZAQzHggF9gg15pov1GjPh_lPw-8VIeLIGQaM",
+      crv: "P-256",
+      d: "fSA4NOX9E_nZksg8nxTKZ1_Gga2sF5d77ycfifX3xKE",
     },
     devices: [
       {
@@ -195,28 +214,19 @@ export const TestData: TestDataStructure = {
     ],
     documents: [
       {
-        documentId: "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb",
-        name: "child-355176_1920.jpg",
-        metadata:
-          "WK8Fu/50nR9I/whZjbqsEcQkgP2h6/TAzvbxkaOcVfp8ElHQLoKXgdV0STrYeui9EEjH2AbMq4T6De6xTGVyqpvFjWRjOAvgWmxKv2tFUiI9b3RNsJoUBlbZutw5RRSY+JzERZ6VNpLhSJNn568YT+di3o8ca7w39bx8xIoNimYvb/rTB8nLoM1LY6cjf99dOP1In+GYjBRkDeqouKOqpH1jvx4V5fOxSrNQCOF3u5zmsnupYVeatjPrq9k/6xytM+XQClVfOBK4Xa1ZpGkD5hpqNlC8JNJwjqyynRUw0bGrMJcg+cb1GnKrGsM9j0N3jnseQGNLNgssmObkUL3umrU=",
+        documentId: "7ca8742e-821f-4276-862d-d5d2dbd42038",
+        name: "root",
+        metadata: mockDocuments.alice.rootFolder.metadata,
       },
       {
-        documentId: "78d1b093-45ec-4a25-9594-615ca2d70ba2",
-        name: "beach-4524911_480.jpg",
-        metadata:
-          "qvLFOjMio9UXlH15L4G//nDgtZiCRmOirewJIKlLvCfvwKSRJUOOsU1aU/PjuQ2LfN2qkUVerEthue3531l2oiB2U08PfHTp6INL8SiAbCcuYVxajjuXWL+BhQX24LYK8EVpLSW/jQRneclFmDEoUETJ8kLllnyISL/FADoZbd46SfIVrf/U9ijxemJZQrQ6y6D3/wAoNyn2lOC93bO7m8ZyIWYQ4z264o98ykNsD5n+Kpq4IoOuw0YZHIBfYRp/dlm1Xo9TedKs14F1h02DgN0QKeA7Fdl2P8nPshB2R61lHUQpNYV12DV27KBvefdPtRXAS73ACmhxbtgg+PVZkQ==",
-      },
-      {
-        documentId: "profile",
+        documentId: "15917f2b-220c-4ecb-a08b-fb3a695b4424",
         name: "profile.json",
-        metadata:
-          "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
+        metadata: mockDocuments.alice.profile.metadata,
       },
       {
-        documentId: "profile-pic-doc-id",
+        documentId: "8e1ff0be-5c0e-40af-9f39-35ed57c8f1fb",
         name: "profile.jpg",
-        metadata:
-          "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
+        metadata: mockDocuments.alice.profilePic.metadata,
       },
     ],
     chats: [
@@ -242,13 +252,30 @@ export const TestData: TestDataStructure = {
   },
   laura: {
     password: "LaurasPassword123",
+    settings: {
+      documents: "fa2f1875-d2d1-4706-94f7-ba69880578e7",
+      rootFolderId: "fa2f1875-d2d1-4706-94f7-ba69880578e7",
+      chatFolderId: "8d54110e-5ff5-4f78-a9d3-73e08393339a",
+      chatFolder: "8d54110e-5ff5-4f78-a9d3-73e08393339a",
+      profileDocumentId: "f3ed850d-4813-439b-a1c8-5a1d9a06fe24",
+      profilePicDocumentId: "59197529-6431-478e-a166-adcef68c1f27",
+    },
     publicMainKey: {
-      crv: "P-256",
-      ext: true,
       key_ops: [],
+      ext: true,
       kty: "EC",
-      x: "RpnasTbuiPTVHSCw-79Z7jppIH_B1FfDOaqvdZxuV3c",
-      y: "oVAa5j5PW79dq_yKsgKfzU480CANZUDbWRqwwovXo3o",
+      x: "dPd7doWoBiUEsALGowG_YbdvFvoPTgZcu-yo3xMhvko",
+      y: "Ao1YeaTCJxqT0tEdp06Qk_rDLc6DvFkesV_49HQgCAY",
+      crv: "P-256",
+    },
+    privateMainKey: {
+      key_ops: ["deriveKey"],
+      ext: true,
+      kty: "EC",
+      x: "dPd7doWoBiUEsALGowG_YbdvFvoPTgZcu-yo3xMhvko",
+      y: "Ao1YeaTCJxqT0tEdp06Qk_rDLc6DvFkesV_49HQgCAY",
+      crv: "P-256",
+      d: "MQ7zU77IfPN55gt8MZ-1tjADmeVkvsxrKzs5amcJx2U",
     },
     devices: [
       {
@@ -267,17 +294,50 @@ export const TestData: TestDataStructure = {
         },
       },
     ],
-    documents: [],
+    documents: [
+      {
+        documentId: "fa2f1875-d2d1-4706-94f7-ba69880578e7",
+        name: "root",
+        metadata: mockDocuments.laura.rootFolder.metadata,
+      },
+      {
+        documentId: "f3ed850d-4813-439b-a1c8-5a1d9a06fe24",
+        name: "profile.json",
+        metadata: mockDocuments.laura.profile.metadata,
+      },
+      {
+        documentId: "59197529-6431-478e-a166-adcef68c1f27",
+        name: "profile.jpg",
+        metadata: mockDocuments.laura.profilePic.metadata,
+      },
+    ],
   },
   bill: {
-    password: "BillsPassword",
+    password: "BillsPassword123",
+    settings: {
+      documents: "a2fdae4a-fac3-4d20-bfca-7c34146f8587",
+      rootFolderId: "a2fdae4a-fac3-4d20-bfca-7c34146f8587",
+      chatFolderId: "28f136c4-394a-416a-8f47-10f844b47ac5",
+      chatFolder: "28f136c4-394a-416a-8f47-10f844b47ac5",
+      profileDocumentId: "d841a46e-1522-4af8-8063-e1bb1e9585ed",
+      profilePicDocumentId: "3122289e-dd5d-4017-b3d0-cc1e96b5f470",
+    },
     publicMainKey: {
-      crv: "P-256",
-      ext: true,
       key_ops: [],
+      ext: true,
       kty: "EC",
-      x: "nwGwyL6D7-mpGv3ahjdgFz7-FxEFSZZqWio5TvGEHWc",
-      y: "ubcX2RHk7odTGx6g7dgJpkhEBjzJ8YQ5q0wqtQc9Umc",
+      x: "47SNY_Yfv3G16-udPCN0S6x_wi2YyQ3CKuoaGujUa9k",
+      y: "lWPtfRADuCiZ0YiAfteHLtsP5zqbtvwnoeOmavdXE58",
+      crv: "P-256",
+    },
+    privateMainKey: {
+      key_ops: ["deriveKey"],
+      ext: true,
+      kty: "EC",
+      x: "47SNY_Yfv3G16-udPCN0S6x_wi2YyQ3CKuoaGujUa9k",
+      y: "lWPtfRADuCiZ0YiAfteHLtsP5zqbtvwnoeOmavdXE58",
+      crv: "P-256",
+      d: "Bl5oD5DrxFqJEk6euTTkoUu1f_vkwb5G_GS4Uo3_ZB4",
     },
     devices: [
       {
@@ -296,7 +356,23 @@ export const TestData: TestDataStructure = {
         },
       },
     ],
-    documents: [],
+    documents: [
+      {
+        documentId: "a2fdae4a-fac3-4d20-bfca-7c34146f8587",
+        name: "root",
+        metadata: mockDocuments.bill.rootFolder.metadata,
+      },
+      {
+        documentId: "d841a46e-1522-4af8-8063-e1bb1e9585ed",
+        name: "profile.json",
+        metadata: mockDocuments.bill.profile.metadata,
+      },
+      {
+        documentId: "3122289e-dd5d-4017-b3d0-cc1e96b5f470",
+        name: "profile.jpg",
+        metadata: mockDocuments.bill.profilePic.metadata,
+      },
+    ],
   },
   joe: {
     password: "MarysPassword123",

@@ -34,9 +34,19 @@ export function SendMessageForm({
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    if (showDialog && !documents && publicKey && privateKey) {
+    if (
+      showDialog &&
+      !documents &&
+      publicKey &&
+      privateKey &&
+      authentication.settings
+    ) {
       documentService
-        .getRootFolder(userEmail, publicKey, privateKey)
+        .getFolder(
+          userEmail,
+          authentication.settings.rootFolderId,
+          authentication.settings.settingsKey,
+        )
         .then((rootFolder) => {
           return documentService.loadDocuments(
             userEmail,
@@ -49,7 +59,14 @@ export function SendMessageForm({
         .then((docs) => setDocuments(docs))
         .catch(console.error);
     }
-  }, [showDialog, documents, userEmail, publicKey, privateKey]);
+  }, [
+    showDialog,
+    documents,
+    userEmail,
+    publicKey,
+    privateKey,
+    authentication.settings,
+  ]);
 
   useEffect(() => {
     if (showDialog) {
