@@ -1,12 +1,12 @@
 import { readFileSync, writeFileSync } from "fs";
-import { encryptAESGCM, deriveKey } from "./cryptoHelper";
+import { encryptAESGCM, deriveKey, arrayBufferToBase64 } from "./cryptoHelper.ts";
 
 async function main() {
   const [, , inputFile, privateKeyFile, publicKeyFile, outputFile] =
     process.argv;
   if (!inputFile || !privateKeyFile || !publicKeyFile || !outputFile) {
     console.error(
-      "Usage: ts-node encryptAsymmetric.ts <inputFile> <privateKeyFile> <publicKeyFile> <outputFile>",
+      "Usage: node --experimental-strip-types encryptAsymmetric.ts <inputFile> <privateKeyFile> <publicKeyFile> <outputFile>",
     );
     process.exit(1);
   }
@@ -19,6 +19,7 @@ async function main() {
     new Uint8Array(inputData).buffer,
     derivedKey,
   );
+  console.log("encrypted: " + arrayBufferToBase64(encrypted))
   writeFileSync(outputFile, new Uint8Array(encrypted));
 }
 

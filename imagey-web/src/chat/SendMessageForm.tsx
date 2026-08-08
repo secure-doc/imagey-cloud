@@ -44,16 +44,15 @@ export function SendMessageForm({
       documentService
         .getFolder(
           userEmail,
-          authentication.settings.rootFolderId,
+          authentication.settings.documents,
           authentication.settings.settingsKey,
         )
         .then((rootFolder) => {
           return documentService.loadDocuments(
             userEmail,
-            publicKey,
-            privateKey,
+            rootFolder.documents || [],
             rootFolder.documentId,
-            rootFolder.key,
+            rootFolder.key!,
           );
         })
         .then((docs) => setDocuments(docs))

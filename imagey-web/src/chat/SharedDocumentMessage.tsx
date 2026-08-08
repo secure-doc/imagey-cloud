@@ -34,40 +34,37 @@ export function SharedDocumentMessage({
       privateKey &&
       authentication.settings?.settingsKey
     ) {
-      documentRepository
-        .loadDocumentMetadata(owner, documentId)
-        .then(async ({ metadata }) => {
-          if (user === owner) {
-            let folderKey: JsonWebKey | undefined;
-            const encryptedDocumentKey =
-              metadata.sharedKey ??
-              (await documentRepository.loadKey(user, documentId));
-            if (encryptedDocumentKey?.issuerType === "FOLDER") {
-              const folderId = encryptedDocumentKey.issuer;
-              const folder = await documentService.getFolder(
-                user,
-                folderId,
-                authentication.settings.settingsKey,
-              );
-              folderKey = folder.key;
-            }
+      const loadSharedDoc = async () => {
+        if (user === owner) {
+          const encryptedDocumentKey = await documentRepository.loadKey(
+            user,
+            documentId,
+          );
+          const folderId = encryptedDocumentKey.issuer;
+          const folder = await documentService.getFolder(
+            user,
+            folderId,
+            authentication.settings.settingsKey,
+          );
+          const folderKey = folder.key;
 
-            return documentService.loadDocument(
-              owner,
-              metadata,
-              publicKey,
-              privateKey,
-              folderKey,
-            );
-          } else {
-            return documentService.loadSharedDocument(
-              owner,
-              metadata,
-              chatKey,
-              user,
-            );
-          }
-        })
+          return documentService.loadDocument(
+            owner,
+            documentId,
+            folderId!,
+            folderKey!,
+          );
+        } else {
+          return documentService.loadSharedDocument(
+            owner,
+            documentId,
+            chatKey,
+            user,
+          );
+        }
+      };
+
+      loadSharedDoc()
         .then(setDocument)
         .catch((e) => {
           console.error("Failed to load shared document", e);

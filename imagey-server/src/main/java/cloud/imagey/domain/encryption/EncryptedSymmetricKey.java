@@ -16,6 +16,13 @@
  */
 package cloud.imagey.domain.encryption;
 
-public record EncryptedSymmetricKey(String content) {
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+@JsonbTypeAdapter(Adapter.class)
+public record EncryptedSymmetricKey(String content) {
+    public static class Adapter extends AbstractSimpleRecordAdapter<EncryptedSymmetricKey, String> {
+    }
 }

@@ -28,15 +28,11 @@ export default function CreateFolderDialog({
     if (!folderName.trim() || !user || !mainKeyPair) return;
     setIsCreating(true);
     try {
-      const publicMainKey = mainKeyPair.publicKey;
-      const privateMainKey = mainKeyPair.privateKey;
       const metadata = await documentService.storeFolder(
         user,
         folderName.trim(),
-        publicMainKey,
-        privateMainKey,
-        parentFolderId,
-        parentFolderKey,
+        parentFolderId!,
+        parentFolderKey!,
       );
       onCreated(metadata);
     } catch (e) {

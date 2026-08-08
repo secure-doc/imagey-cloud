@@ -45,7 +45,7 @@ export const contactService = {
 
       const chatFolder = await documentService.getFolder(
         userId,
-        settings.chatFolderId,
+        settings.chats,
         settings.settingsKey,
       );
       const chatFolderKey = chatFolder.key;
@@ -65,7 +65,7 @@ export const contactService = {
 
       // Upload my key (under chat folder)
       await fetch(
-        `/users/${userId}/documents/${documentId}/keys/${settings.chatFolderId}`,
+        `/users/${userId}/documents/${documentId}/keys/${settings.chats}`,
         {
           method: "PUT",
           headers: {
@@ -124,7 +124,7 @@ export const contactService = {
 
     const chatFolder = await documentService.getFolder(
       userEmail,
-      settings.chatFolderId,
+      settings.chats,
       settings.settingsKey,
     );
     const myEncryptedSharedKeyString = await cryptoService.encryptMessage(
@@ -133,13 +133,13 @@ export const contactService = {
     );
 
     const responseUser = await fetch(
-      `/users/${userEmail}/documents/${chatDocumentId}/keys/${settings.chatFolderId}`,
+      `/users/${userEmail}/documents/${chatDocumentId}/keys/${settings.chats}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           issuerType: "FOLDER",
-          issuer: settings.chatFolderId,
+          issuer: settings.chats,
           kid: "0",
           sharedKey: myEncryptedSharedKeyString,
         }),
@@ -183,18 +183,13 @@ export const contactService = {
       return;
     }
 
-    const contacts = await contactRepository.getContacts(
-      userId,
-      settings,
-      mainKeyPair.publicKey,
-      mainKeyPair.privateKey,
-    );
+    const contacts = await contactRepository.getContacts(userId, settings);
     const existingContactIds = new Set(contacts.map((c) => c.userId));
 
     if (accepted.length > 0) {
       const chatFolder = await documentService.getFolder(
         userId,
-        settings.chatFolderId,
+        settings.chats,
         settings.settingsKey,
       );
       const chatFolderKey = chatFolder.key;
@@ -241,7 +236,7 @@ export const contactService = {
             });
 
             await fetch(
-              `/users/${userId}/documents/${documentId}/keys/${settings.chatFolderId}`,
+              `/users/${userId}/documents/${documentId}/keys/${settings.chats}`,
               {
                 method: "PUT",
                 headers: {

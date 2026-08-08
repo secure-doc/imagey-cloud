@@ -16,6 +16,13 @@
  */
 package cloud.imagey.domain.user;
 
-public record DeviceId(String id) {
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
+import cloud.imagey.domain.user.DeviceId.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+@JsonbTypeAdapter(Adapter.class)
+public record DeviceId(String id) {
+    public static class Adapter extends AbstractSimpleRecordAdapter<DeviceId, String> {
+    }
 }

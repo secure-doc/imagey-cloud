@@ -21,6 +21,7 @@ export interface ImageActivity {
   id: ActivityId;
   type: ActivityType.IMAGE;
   image: Document;
+  folderId?: string;
 }
 
 export interface UploadActivity {

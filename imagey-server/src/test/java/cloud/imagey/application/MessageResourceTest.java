@@ -51,9 +51,9 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.infrastructure.jaxrs.RecordListMessageBodyWriter;
-import cloud.imagey.infrastructure.jaxrs.RecordMessageBodyReader;
-import cloud.imagey.infrastructure.jaxrs.RecordMessageBodyWriter;
+import cloud.imagey.infrastructure.jakartars.RecordListMessageBodyWriter;
+import cloud.imagey.infrastructure.jakartars.RecordMessageBodyReader;
+import cloud.imagey.infrastructure.jakartars.RecordMessageBodyWriter;
 import cloud.imagey.junit.GreenMail;
 
 @GreenMail

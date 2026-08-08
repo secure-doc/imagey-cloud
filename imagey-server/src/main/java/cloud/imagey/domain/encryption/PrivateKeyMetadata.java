@@ -16,15 +16,13 @@
  */
 package cloud.imagey.domain.encryption;
 
-import jakarta.json.bind.annotation.JsonbCreator;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;
 
-public record PrivateKeyMetadata(Kid kid, DeviceId encryptingDeviceId, EncryptedPrivateKey key) {
-
-    @JsonbCreator
-    public PrivateKeyMetadata(String kid, String encryptingDeviceId, String key) {
-        this(new Kid(kid), new DeviceId(encryptingDeviceId), new EncryptedPrivateKey(key));
-    }
+public record PrivateKeyMetadata(
+    @JsonbTypeAdapter(Kid.Adapter.class) Kid kid,
+    @JsonbTypeAdapter(DeviceId.Adapter.class) DeviceId encryptingDeviceId,
+    @JsonbTypeAdapter(EncryptedPrivateKey.Base64Adapter.class) EncryptedPrivateKey key) {
 }

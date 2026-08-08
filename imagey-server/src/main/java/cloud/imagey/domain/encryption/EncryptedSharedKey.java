@@ -16,5 +16,13 @@
  */
 package cloud.imagey.domain.encryption;
 
-public record EncryptedSharedKey(String issuerType, String issuer, String kid, EncryptedSymmetricKey sharedKey) {
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
+
+import cloud.imagey.domain.token.Kid;
+import cloud.imagey.domain.user.User;
+
+public record EncryptedSharedKey(
+    @JsonbTypeAdapter(User.Adapter.class) User issuer,
+    @JsonbTypeAdapter(Kid.Adapter.class) Kid kid,
+    @JsonbTypeAdapter(EncryptedSymmetricKey.Adapter.class) EncryptedSymmetricKey sharedKey) {
 }

@@ -2,7 +2,11 @@ import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { deviceService } from "../device/DeviceService";
 import { deviceRepository } from "../device/DeviceRepository";
 import { authenticationRepository } from "./AuthenticationRepository";
-import { cryptoService } from "./CryptoService";
+import {
+  arrayBufferToBase64,
+  base64ToArrayBuffer,
+  cryptoService,
+} from "./CryptoService";
 
 import { ResponseError } from "./ResponseError";
 import { contactService } from "../contact/ContactService";
@@ -35,19 +39,60 @@ export const authenticationService = {
       device.deviceKeyPair.privateKey,
     );
 
+    const documentListId = cryptoService.generateUuid();
+    const chatListId = cryptoService.generateUuid();
+    const profileId = cryptoService.generateUuid();
     const settingsKey = await cryptoService.generateSymmetricKey();
-    const encryptedSettings = await cryptoService.encryptDocument(settingsKey, [
-      new TextEncoder().encode("{}").buffer,
-    ]);
-    const settingsContent = cryptoService.arrayBufferToBase64(
-      encryptedSettings[0],
-    );
-
-    const encryptedSettingsSharedKey = await cryptoService.encryptKey(
+    const encryptedSettingsKey = await cryptoService.encryptKey(
       settingsKey,
       mainKeyPair.publicKey,
       mainKeyPair.privateKey,
     );
+    const encryptedSettings = (
+      await cryptoService.encryptDocument(settingsKey, [
+        new TextEncoder().encode(`
+		{
+			"documents": "${documentListId}",
+			"chats": "${chatListId}",
+			"profile": "${profileId}"
+		}
+	  `).buffer,
+      ])
+    )[0];
+    const documentListKey = await cryptoService.generateSymmetricKey();
+    const encryptedSymmetricDocumentListKey = await cryptoService.encryptKey(
+      documentListKey,
+      settingsKey,
+    );
+    const encryptedDocumentList = (
+      await cryptoService.encryptDocument(documentListKey, [
+        new TextEncoder().encode(
+          `{"documents": [], "type": "folder", "name": "Documents"}`,
+        ).buffer,
+      ])
+    )[0];
+    const chatListKey = await cryptoService.generateSymmetricKey();
+    const encryptedSymmetricChatListKey = await cryptoService.encryptKey(
+      chatListKey,
+      settingsKey,
+    );
+    const encryptedChatList = (
+      await cryptoService.encryptDocument(chatListKey, [
+        new TextEncoder().encode(
+          `{"documents": [], "type": "folder", "name": "Chats"}`,
+        ).buffer,
+      ])
+    )[0];
+    const profileKey = await cryptoService.generateSymmetricKey();
+    const encryptedSymmetricProfileKey = await cryptoService.encryptKey(
+      profileKey,
+      settingsKey,
+    );
+    const encryptedProfile = (
+      await cryptoService.encryptDocument(profileKey, [
+        new TextEncoder().encode(`{"emails": ["${email}"]}`).buffer,
+      ])
+    )[0];
 
     await authenticationRepository.register(
       email,
@@ -55,8 +100,33 @@ export const authenticationService = {
       mainKeyPair.publicKey,
       encryptedPrivateMainKey,
       device.deviceKeyPair.publicKey,
-      settingsContent,
-      { issuer: email, kid: "0", sharedKey: encryptedSettingsSharedKey },
+      {
+        issuer: email,
+        kid: "0",
+        sharedKey: arrayBufferToBase64(encryptedSettingsKey),
+      },
+      encryptedSettings,
+      documentListId,
+      {
+        issuer: email,
+        kid: email,
+        sharedKey: arrayBufferToBase64(encryptedSymmetricDocumentListKey),
+      },
+      encryptedDocumentList,
+      chatListId,
+      {
+        issuer: email,
+        kid: email,
+        sharedKey: arrayBufferToBase64(encryptedSymmetricChatListKey),
+      },
+      encryptedChatList,
+      profileId,
+      {
+        issuer: email,
+        kid: email,
+        sharedKey: arrayBufferToBase64(encryptedSymmetricProfileKey),
+      },
+      encryptedProfile,
     );
     if (inviter) {
       const settings = await documentService.getSettings(
@@ -181,7 +251,7 @@ export const authenticationService = {
       encryptedPrivateMainKey.encryptingDeviceId,
     );
     const decryptedPrivateMainKey = await cryptoService.decryptKey(
-      encryptedPrivateMainKey.key,
+      base64ToArrayBuffer(encryptedPrivateMainKey.key),
       publicDeviceKey,
       privateDeviceKey,
     );

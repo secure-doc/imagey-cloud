@@ -18,8 +18,16 @@ package cloud.imagey.domain.token;
 
 import static java.util.Objects.requireNonNull;
 
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
+
+import cloud.imagey.domain.token.Kid.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+@JsonbTypeAdapter(Adapter.class)
 public record Kid(String id) {
     public Kid {
         requireNonNull(id);
+    }
+    public static class Adapter extends AbstractSimpleRecordAdapter<Kid, String> {
     }
 }

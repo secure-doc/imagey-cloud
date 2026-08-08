@@ -1,11 +1,11 @@
 import { readFileSync, writeFileSync } from "fs";
-import { decryptAESGCM, importSymmetricKey } from "./cryptoHelper";
+import { decryptAESGCM, importSymmetricKey } from "./cryptoHelper.ts";
 
 async function main() {
   const [, , inputFile, keyFile, outputFile] = process.argv;
   if (!inputFile || !keyFile || !outputFile) {
     console.error(
-      "Usage: ts-node decryptSymmetric.ts <inputFile> <keyFile> <outputFile>",
+      "Usage: node --experimental-strip-types decryptSymmetric.ts <inputFile> <keyFile> <outputFile>",
     );
     process.exit(1);
   }

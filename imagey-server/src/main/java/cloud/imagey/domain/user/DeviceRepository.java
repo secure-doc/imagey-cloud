@@ -22,9 +22,7 @@ import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 import java.io.File;
-import java.nio.charset.Charset;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -43,7 +41,6 @@ import cloud.imagey.infrastructure.common.AbstractFileRepository;
 public class DeviceRepository extends AbstractFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DeviceRepository.class);
-    private static final Charset UTF_8 = Charset.forName("UTF-8");
 
     @Inject
     @ConfigProperty(name = "root.path")
@@ -55,11 +52,14 @@ public class DeviceRepository extends AbstractFileRepository {
     }
 
     public Optional<PrivateKeyMetadata> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
+        return loadPrivateKeyJson(user, deviceId, kid).map(this::parse);
+    }
+
+    public Optional<String> loadPrivateKeyJson(User user, DeviceId deviceId, Kid kid) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
         return of(new File(keyDirectory, kid.id() + ".json"))
             .filter(File::exists)
-            .map(keyFile -> readFileToString(keyFile))
-            .map(this::parse);
+            .map(this::readFileToString);
     }
 
     public void storeDevicePublicKey(User user, DeviceId deviceId, PublicKey key) {
@@ -81,11 +81,14 @@ public class DeviceRepository extends AbstractFileRepository {
     }
 
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, PrivateKeyMetadata metadata) {
-        storeEncryptedPrivateKey(user, deviceId, convert(metadata));
+        storeEncryptedPrivateKey(user, deviceId, create().toJson(metadata));
     }
 
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) {
         File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
+        if (!keyDirectory.exists()) {
+            keyDirectory.mkdirs();
+        }
         createNewFileWithContent(keyDirectory, "0.json", metadata);
     }
 
@@ -111,19 +114,6 @@ public class DeviceRepository extends AbstractFileRepository {
     }
 
     private PrivateKeyMetadata parse(String json) {
-        Map<String, String> map = create().fromJson(json, Map.class);
-        return new PrivateKeyMetadata(map.get("kid"), map.get("encryptingDeviceId"), map.get("key"));
-    }
-
-    private String convert(PrivateKeyMetadata key) {
-        return """
-            {
-                "kid": "0",
-                "encryptingDeviceId": "${deviceId}",
-                "key": "${key}"
-            }
-        """
-        .replace("${deviceId}", key.encryptingDeviceId().id())
-        .replace("${key}", key.key().key());
+        return create().fromJson(json, PrivateKeyMetadata.class);
     }
 }

@@ -17,5 +17,5 @@
 package cloud.imagey.domain.contact;
 
 public enum ContactStatus {
-    INVITED, DENIED;
+    INVITED, INVITATION_ACCEPTED, DENIED;
 }

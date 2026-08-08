@@ -54,7 +54,7 @@ public class MessageRepository extends AbstractFileRepository {
             mkdir(messagesFolder);
         }
         File messageFile = new File(messagesFolder, id.value() + ".json");
-        writeStringToFile(messageFile, jsonContent, UTF_8, false);
+        writeStringToFile(messageFile, jsonContent);
 
         return new Message(sender, encryptedContent)
             .withId(id)

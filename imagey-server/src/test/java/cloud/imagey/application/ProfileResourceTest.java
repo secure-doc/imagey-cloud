@@ -21,7 +21,6 @@ import static jakarta.ws.rs.client.Entity.entity;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,7 +47,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
@@ -90,44 +88,6 @@ public class ProfileResourceTest {
                 .path("users").path(user.email().address()).path("profile")
                 .request()
                 .cookie(userCookie);
-    }
-
-    @Test
-    @DisplayName("Upload profile document without small image")
-    void uploadProfileWithoutSmallImage() {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-        attachments.add(createContentAttachment());
-        attachments.add(createPreviewImageAttachment());
-        // omit small image
-
-        Response response = client().put(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("Upload profile document without preview image")
-    void uploadProfileWithoutPreviewImage() {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-        attachments.add(createContentAttachment());
-        attachments.add(createSmallImageAttachment());
-        // omit preview image
-
-        Response response = client().put(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
     }
 
     @Test

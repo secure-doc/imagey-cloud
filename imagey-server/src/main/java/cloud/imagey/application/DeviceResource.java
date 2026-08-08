@@ -36,7 +36,6 @@ import jakarta.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.DeviceId;
@@ -105,12 +104,13 @@ public class DeviceResource {
     @RolesAllowed("owner")
     @Path("{deviceId}/private-keys/{kid}")
     @Produces(APPLICATION_JSON)
-    public PrivateKeyMetadata getEncryptedPrivateKey(
+    public Response getEncryptedPrivateKey(
         @PathParam("email") User user,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {
 
-        return deviceRepository.loadPrivateKey(user, deviceId, kid).orElseThrow(() -> new NotFoundException());
+        String json = deviceRepository.loadPrivateKeyJson(user, deviceId, kid).orElseThrow(() -> new NotFoundException());
+        return Response.ok(json).build();
     }
 
     @POST

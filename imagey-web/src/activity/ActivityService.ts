@@ -1,6 +1,6 @@
 import { UserId } from "../authentication/UserId";
 import { contactRepository } from "../contact/ContactRepository";
-import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
+import { Settings } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
 import {
   Activity,
@@ -12,21 +12,20 @@ import {
 export const activityService = {
   getActivities: async (
     user: UserId,
-    keyPair: JsonWebKeyPair,
     settings: Settings,
   ): Promise<Activity[]> => {
     const contactRequests = await contactRepository.getContactRequests(user);
-    const rootFolder = await documentService.getFolder(
+    const rootFolder = await documentService.loadDocument(
       user,
-      settings.rootFolderId,
+      settings.documents,
+	  user,
       settings.settingsKey,
     );
     const images = await documentService.loadDocuments(
       user,
-      keyPair.publicKey,
-      keyPair.privateKey,
+      rootFolder.documents || [],
       rootFolder.documentId,
-      rootFolder.key,
+      rootFolder.key!,
     );
 
     const activities: Activity[] = [
@@ -44,6 +43,7 @@ export const activityService = {
           id: `image-${image.documentId}`,
           type: ActivityType.IMAGE,
           image: image,
+          folderId: rootFolder.documentId,
         }),
       ),
     ];

@@ -23,7 +23,9 @@ import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
 @JsonbTypeAdapter(User.Adapter.class)
 public record User(Email email) {
-
+    public User(String email) {
+        this(new Email(email));
+    }
     public static class Adapter extends AbstractSimpleRecordAdapter<User, String> {
     }
 }

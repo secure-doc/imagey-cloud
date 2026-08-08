@@ -54,12 +54,7 @@ export function ChatsList({
     contactService
       .processAcceptedInvitations(user, authentication.settings, keyPair)
       .then(() => {
-        return contactRepository.getContacts(
-          user,
-          authentication.settings,
-          keyPair.publicKey,
-          keyPair.privateKey,
-        );
+        return contactRepository.getContacts(user, authentication.settings);
       })
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));

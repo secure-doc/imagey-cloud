@@ -9,6 +9,13 @@ import * as path from "path";
 import { TestData, TestDataStructure, TestUser } from "./testdata";
 import { mockDocuments } from "./mockDocuments";
 import { mockSettings } from "./mockSettings";
+import { extractMultipartPart } from "./multipartHelper";
+
+let interceptedSettingsDocument: Buffer | null = null;
+let interceptedSettingsKey: Buffer | null = null;
+let interceptedSettingsDocumentId: string | null = null;
+const interceptedDocuments = new Map<string, Buffer>();
+const interceptedKeys = new Map<string, Buffer>();
 
 type ConfiguredInteraction = ReturnType<
   ReturnType<
@@ -145,7 +152,7 @@ export async function setupMockServer(
 ) {
   const mockServerUrl = new URL(mockServer.url);
 
-  await page.route("/users/**", async (route, request) => {
+  await page.route((url) => url.pathname.startsWith("/users"), async (route, request) => {
     runningPactRequests++;
 
     try {
@@ -155,11 +162,13 @@ export async function setupMockServer(
 
       let postData: Buffer | null = request.postDataBuffer();
       const headers = request.headers();
+      console.log("INTERCEPTED", request.method(), requestUrl.pathname, "postData length:", postData?.length);
 
       if (
-        interceptDummyImages &&
+        //interceptDummyImages &&
         request.method() === "GET" &&
-        requestUrl.pathname.includes("/files/") &&
+        /*
+		requestUrl.pathname.includes("/files/") &&
         (requestUrl.pathname.includes("bb66aba3") ||
           requestUrl.pathname.includes("f9910aa7"))
       ) {
@@ -180,7 +189,7 @@ export async function setupMockServer(
       }
 
       if (
-        request.method() === "GET" &&
+        request.method() === "GET" &&*/
         requestUrl.pathname === "/users/mary@imagey.cloud/profile"
       ) {
         await route.fulfill({ status: 404 });
@@ -189,11 +198,14 @@ export async function setupMockServer(
 
       if (
         (request.method() === "POST" || request.method() === "PUT") &&
-        headers["content-type"]?.includes("multipart/form-data")
+        headers["content-type"]?.includes("multipart/form-data") /*&&
+        requestUrl.pathname !== "/users" &&
+        requestUrl.pathname !== "/users/"*/
       ) {
         // To bypass strict body matching of dynamically encrypted files, we send the mock payload expected by pact instead.
         const boundary = "----WebKitFormBoundary";
         headers["content-type"] = `multipart/form-data; boundary=${boundary}`;
+        //delete headers["content-length"];
 
         if (request.method() === "POST") {
           const documentId = expectedUploadDocumentId;
@@ -206,6 +218,56 @@ export async function setupMockServer(
         }
       }
 
+      /*delete headers["content-length"];
+
+      if (
+        request.method() === "POST" &&
+        (requestUrl.pathname === "/users" || requestUrl.pathname === "/users/") &&
+        headers["content-type"]?.includes("multipart/form-data") &&
+        postData
+      ) {
+        const boundaryMatch = headers["content-type"].match(/boundary=(.*)/);
+        if (boundaryMatch) {
+          const boundary = boundaryMatch[1];
+          const settingsBuffer = extractMultipartPart(postData, boundary, "settings");
+          if (settingsBuffer) {
+            interceptedSettingsDocument = settingsBuffer;
+            // Hack to get the email since it's the settings document ID for new users
+            interceptedSettingsDocumentId = requestUrl.pathname === "/users" ? "joe@imagey.cloud" : null; 
+            interceptedDocuments.set("joe@imagey.cloud", settingsBuffer);
+          }
+          const settingsKeyBuffer = extractMultipartPart(postData, boundary, "settingsKey");
+          if (settingsKeyBuffer) interceptedKeys.set("joe@imagey.cloud", settingsKeyBuffer);
+
+          const docListIdBuf = extractMultipartPart(postData, boundary, "documentListId");
+          const docListBuf = extractMultipartPart(postData, boundary, "documentList");
+          const docListKeyBuf = extractMultipartPart(postData, boundary, "documentListKey");
+          if (docListIdBuf && docListBuf && docListKeyBuf) {
+            const id = docListIdBuf.toString();
+            interceptedDocuments.set(id, docListBuf);
+            interceptedKeys.set(id, docListKeyBuf);
+          }
+
+          const chatListIdBuf = extractMultipartPart(postData, boundary, "chatListId");
+          const chatListBuf = extractMultipartPart(postData, boundary, "chatList");
+          const chatListKeyBuf = extractMultipartPart(postData, boundary, "chatListKey");
+          if (chatListIdBuf && chatListBuf && chatListKeyBuf) {
+            const id = chatListIdBuf.toString();
+            interceptedDocuments.set(id, chatListBuf);
+            interceptedKeys.set(id, chatListKeyBuf);
+          }
+
+          const profileIdBuf = extractMultipartPart(postData, boundary, "profileId");
+          const profileBuf = extractMultipartPart(postData, boundary, "profile");
+          const profileKeyBuf = extractMultipartPart(postData, boundary, "profileKey");
+          if (profileIdBuf && profileBuf && profileKeyBuf) {
+            const id = profileIdBuf.toString();
+            interceptedDocuments.set(id, profileBuf);
+            interceptedKeys.set(id, profileKeyBuf);
+          }
+        }
+      }
+*/
       const response = await route.fetch({
         url: requestUrl.href,
         method: request.method(),
@@ -213,7 +275,32 @@ export async function setupMockServer(
         postData: postData,
       });
 
-      await route.fulfill({ response });
+      /*let body = await response.body();
+
+      if (
+        request.method() === "GET" &&
+        requestUrl.pathname.match(/^\/users\/[^\/]+\/documents\/([^\/]+)$/)
+      ) {
+        const id = requestUrl.pathname.match(/^\/users\/[^\/]+\/documents\/([^\/]+)$/)![1];
+        if (interceptedDocuments.has(id)) {
+          console.log("REPLACING RESPONSE BODY WITH INTERCEPTED DOCUMENT", id);
+          body = interceptedDocuments.get(id)!;
+        }
+      }
+
+      if (
+        request.method() === "GET" &&
+        requestUrl.pathname.match(/^\/users\/[^\/]+\/documents\/([^\/]+)\/keys\/[^\/]+$/)
+      ) {
+        const id = requestUrl.pathname.match(/^\/users\/[^\/]+\/documents\/([^\/]+)\/keys\/[^\/]+$/)![1];
+        if (interceptedKeys.has(id)) {
+          console.log("REPLACING RESPONSE BODY WITH INTERCEPTED KEY", id);
+          body = interceptedKeys.get(id)!;
+        }
+      }
+
+      await route.fulfill({ response, body, headers: response.headers() });*/
+	  await route.fulfill({ response });
     } finally {
       runningPactRequests--;
     }
@@ -265,6 +352,44 @@ export async function prepareMarysLogin(page: Page) {
         key: TestData.mary.devices[0].encryptedPrivateMainKey,
       }),
     );
+	provider
+	  .addInteraction()
+	  .uponReceiving(
+	    "a request of mary to get her settings",
+	  )
+	  .withRequest(
+	    "GET",
+	    `/users/mary@imagey.cloud/documents/mary@imagey.cloud`,
+	    (r) =>
+	      r.headers({
+	        Accept: "application/octet-stream",
+	      }),
+	  )
+		.willRespondWith(200, (r) =>
+		  r.binaryFile(
+		    "application/octet-stream",
+		    "tests/images/encrypted/mary@imagey.cloud/document.enc",
+		  ),
+	  );
+	  provider
+	    .addInteraction()
+	    .uponReceiving(
+	      "a request of mary to get her settings key",
+	    )
+	    .withRequest(
+	      "GET",
+	      `/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0`,
+	      (r) =>
+	        r.headers({
+	          Accept: "application/json",
+	        }),
+	    )
+	  	.willRespondWith(200, (r) =>
+	  	  r.binaryFile(
+	  	    "application/json",
+	  	    "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+	  	  ),
+	    );
   await setupMarysDevice(page);
 }
 
@@ -377,168 +502,59 @@ export async function prepareJoesLogin(page: Page) {
   );
 }
 
-export async function prepareMarysDocuments(chats: string[] = []) {
-  await prepareMarysRootFolder(chats);
+export async function prepareMarysDocuments() {
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a" }).headers({
-        Accept: "application/json",
+    .uponReceiving("a request of mary to get document f9910aa7-4db6-4b02-b596-c3ccf872ae98")
+    .withRequest("GET", "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98", (r) =>
+      r.headers({
+        Accept: "application/octet-stream",
       }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody([
-        {
-          documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-          metadata:
-            "fMQ2kdjsS4jasN2_YaYEbSw7Kp5qC0Iz89LIv9s27FhUnMPnTJu2fWHCOsROc-t1J9Q4osXs4pfqm3xIEu0qrC15DLDPCzPB_gsyF7O3yx2wGkbZJxXn10DVd4m19KJAYpL0vyUxFaPK4NnC5En9NTujAuVONSYwF3txvXymyAEhles9c_NZ7k1v7NJk9PikSIcD-P1FabGnW7Gh9mmgdBXDRUosBEEu6r1aBPsRsx71uOgnQR165sLICsDcqFYJXduJRj8pabZFJ0-rvv3Y160piEWPmGOGUBKpl46hb9TRyzZW7Wpkmbg3AfuRNJZOEnJOQVveRF3m5qTLKqMCXo2U-_gax86PDQSpVmmrUuDiDefSKWAxarFsjDR9lMFohIkbm0rp9SciRtixpS3GZiZF3AGZTsWaLQ",
-          sharedKey: {
-            issuerType: "FOLDER",
-            issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-            kid: "0",
-            sharedKey: fs.readFileSync(
-              path.resolve(
-                process.cwd(),
-                "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
-              ),
-              "utf-8",
-            ),
-          },
-        },
-        {
-          documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-          metadata:
-            "cbpwIZ-0KKwfFGKgr6yrJ62jBb82GZ0gH9qHlhqYR82umxEAlT2vQfIP2Cv81bQAYkhJbGIsEypkMfsCOkEApjHgI75IpYSuG6qtMmb-btqhgBjwxIqqvQe9nQBg5jCTY5V-Kg9nwiNuSkGub2lnIKboDCyLXqnaKb3uZsmpGmfA0y2gY4XmUXoYEP39xxx2jVnhDTnTnPL0T1HKHDNbHL8lxqHNoCn5EuLTkHAYzSId7_Hfi0X7z1r5ivY2kh8inVSVJjecNgKKFEt8LVcbBVKbJgeCy0phCp2WPveu6zIQOhmLLinwyoVv6Z1IxM3FUFtHae3Ik5mr8viqDNWZWoSkP8vaiyHkEdT-ShUXKP2qhddXONE0FEK-vmxZZbCV2P_F9mfZJ45FzJbYRTVBqbAd_u56y2U8nA",
-          sharedKey: {
-            issuerType: "FOLDER",
-            issuer: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-            kid: "0",
-            sharedKey: fs.readFileSync(
-              path.resolve(
-                process.cwd(),
-                "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a/encrypted-shared.key",
-              ),
-              "utf-8",
-            ),
-          },
-        },
-      ]),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get chat documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738" }).headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody([
-        ...chats.map((chatEmail) => {
-          const contactName = chatEmail.split(
-            "@",
-          )[0] as keyof TestDataStructure;
-          const chatData = TestData.mary.chats?.find(
-            (c) => c.contactEmail === chatEmail,
-          );
-          return {
-            documentId: `chat-${contactName}`,
-            name: chatEmail,
-            type: "Chat",
-            sharedKey: {
-              issuer: "mary@imagey.cloud",
-              kid: "0",
-              sharedKey: chatData ? chatData.encryptedSharedKey : "AAAA",
-            },
-          };
-        }),
-      ]),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get root folder document metadata")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get chat folder document metadata")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
-
-  return provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get settings document metadata")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(mockSettings.mary));
+		r.binaryFile(
+		  "application/octet-stream",
+		  "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/document.enc",
+		));
+	provider
+	  .addInteraction()
+	  .uponReceiving("a request of mary to get document key for f9910aa7-4db6-4b02-b596-c3ccf872ae98")
+	  .withRequest("GET", "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a", (r) =>
+	    r.headers({
+	      Accept: "application/json",
+	    }),
+	  )
+	  .willRespondWith(200, (r) =>
+		r.binaryFile(
+		  "application/json",
+		  "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a.json",
+		));
+	provider
+	  .addInteraction()
+	  .uponReceiving("a request of mary to get document bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3")
+	  .withRequest("GET", "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3", (r) =>
+	    r.headers({
+	      Accept: "application/octet-stream",
+	    }),
+	  )
+	  .willRespondWith(200, (r) =>
+		r.binaryFile(
+		  "application/octet-stream",
+		  "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/document.enc",
+		));
+	return	provider
+	  .addInteraction()
+	  .uponReceiving("a request of mary to get document key for bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3")
+	  .withRequest("GET", "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a", (r) =>
+	    r.headers({
+	      Accept: "application/json",
+	    }),
+	  )
+	  .willRespondWith(200, (r) =>
+		r.binaryFile(
+		  "application/json",
+		  "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a.json",
+		));
 }
 
 export async function prepareMarysProfileContents() {
@@ -719,76 +735,6 @@ export async function prepareMarysRootFolder(
       }),
     )
     .willRespondWith(200, (r) => r.jsonBody(chatDocuments));
-  getState()
-    .uponReceiving(
-      "a request of mary to get root folder document metadata for empty folder",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
-  getState()
-    .uponReceiving(
-      "a request of mary to get chat folder document metadata for empty folder",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
 
   provider
     .addInteraction()
@@ -909,44 +855,6 @@ export async function prepareDocumentUpload(
         "Access-Control-Expose-Headers": "Location",
       }),
     );
-
-  provider
-    .addInteraction()
-    .given("Mary has uploaded document")
-    .uponReceiving("a request to get root folder metadata to update")
-    .withRequest(
-      "GET",
-      `/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a`,
-      (r) => {
-        r.headers({
-          Accept: "application/json",
-        });
-      },
-    )
-    .willRespondWith(200, (r) => {
-      r.headers({ ETag: MatchersV3.string("123456789") });
-      r.jsonBody({
-        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      });
-    });
 
   provider
     .addInteraction()
@@ -1081,51 +989,81 @@ export async function inputMarysPassword(page: Page) {
 }
 
 export async function prepareMarysContactRequests() {
-  return provider
+  provider
     .addInteraction()
-    .given("mary has no contacts and a contact request from bill")
-    .uponReceiving("a request of mary to get contact requests")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
+    .uponReceiving("a request of mary to get her chats")
+    .withRequest("GET", "/users/mary@imagey.cloud/documents/9c59a4f3-ae55-4c4b-9e4a-2079a2446738", (r) =>
       r.headers({
-        Accept: "application/json",
+        Accept: "application/octet-stream",
       }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody([
-        {
-          inviter: "bill@imagey.cloud",
-          invitee: "mary@imagey.cloud",
-          status: "INVITED",
-          publicKey: TestData.bill.publicMainKey,
-        },
-      ]),
+		r.binaryFile(
+		  "application/octet-stream",
+		  "tests/images/encrypted/9c59a4f3-ae55-4c4b-9e4a-2079a2446738/document.enc",
+		),
     );
-}
-
-export async function prepareMarysEmptyContactRequests() {
-  return provider
+	provider
+	  .addInteraction()
+	  .uponReceiving("a request of mary to get her chats key")
+	  .withRequest("GET", "/users/mary@imagey.cloud/documents/9c59a4f3-ae55-4c4b-9e4a-2079a2446738/keys/mary@imagey.cloud", (r) =>
+	    r.headers({
+	      Accept: "application/json",
+	    }),
+	  )
+	  .willRespondWith(200, (r) =>
+		r.binaryFile(
+		  "application/json",
+		  "tests/images/encrypted/9c59a4f3-ae55-4c4b-9e4a-2079a2446738/keys/mary@imagey.cloud.json",
+		),
+	  );
+  provider
     .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get empty contact requests")
+    .uponReceiving("a request of mary to get her contact requests")
     .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-}
+    .willRespondWith(200, (r) => r.jsonBody([
+		{
+			"inviter": "alice@imagey.cloud",
+			"invitee": "mary@imagey.cloud",
+			"status": "INVITED",
+			"publicKey": TestData.alice.publicMainKey,
+			"documentId": "",
+			"sharedKey": ""
+		}
+	]));
+	provider
+	  .addInteraction()
+	  .uponReceiving("a request of mary to get her documents")
+	  .withRequest("GET", "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a", (r) =>
+	    r.headers({
+	      Accept: "application/octet-stream",
+	    }),
+	  )
+	  .willRespondWith(200, (r) =>
+		r.binaryFile(
+		  "application/octet-stream",
+		  "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/document.enc",
+		),
+	  );
+	return 	provider
+	  .addInteraction()
+	  .uponReceiving("a request of mary to get her documents key")
+	  .withRequest("GET", "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud", (r) =>
+	    r.headers({
+	      Accept: "application/json",
+	    }),
+	  )
+	  .willRespondWith(200, (r) =>
+		r.binaryFile(
+		  "application/json",
+		  "tests/images/encrypted/9c59a4f3-ae55-4c4b-9e4a-2079a2446738/keys/mary@imagey.cloud.json",
+		),
+	  );
 
-export async function prepareMarysEmptyDocuments() {
-  return provider
-    .addInteraction()
-    .given("mary has no documents")
-    .uponReceiving("a request of mary to get empty documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
 }
 
 export async function prepareMarysChat(
@@ -1299,74 +1237,6 @@ export async function prepareAlicesLogin(chats: string[] = []) {
       "/users/alice@imagey.cloud/documents/alice@imagey.cloud",
     )
     .willRespondWith(200, (builder) => builder.jsonBody(mockSettings.alice));
-
-  getState()
-    .uponReceiving("a request of alice to get chat folder document metadata")
-    .withRequest(
-      "GET",
-      "/users/alice@imagey.cloud/documents/09128665-7ebf-426f-95fe-84f31ac53167",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (builder) =>
-      builder.jsonBody({
-        documentId: "09128665-7ebf-426f-95fe-84f31ac53167",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "alice@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
-
-  getState()
-    .uponReceiving("a request of alice to get root folder document metadata")
-    .withRequest(
-      "GET",
-      "/users/alice@imagey.cloud/documents/7ca8742e-821f-4276-862d-d5d2dbd42038",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (builder) =>
-      builder.jsonBody({
-        documentId: "7ca8742e-821f-4276-862d-d5d2dbd42038",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "alice@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
 
   getState()
     .uponReceiving("a request to get Alices documents in root folder")

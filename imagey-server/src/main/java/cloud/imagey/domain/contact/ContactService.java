@@ -41,6 +41,7 @@ import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
 import cloud.imagey.domain.mail.EmailTemplate;
 import cloud.imagey.domain.mail.MailService;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DomainName;
@@ -107,7 +108,7 @@ public class ContactService {
             .filter(e -> e.status() == INVITED)
             .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
 
-        EncryptedSharedKey encryptedSharedKey = new EncryptedSharedKey("USER", inviter.email().address(), "0", key);
+        EncryptedSharedKey encryptedSharedKey = new EncryptedSharedKey(inviter, new Kid("0"), key);
         ContactExchange accepted = new ContactExchange(
             exchange.inviter(), exchange.invitee(), exchange.status(), exchange.publicKey(),
             documentId, encryptedSharedKey);

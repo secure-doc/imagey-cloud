@@ -1,8 +1,6 @@
 import { createContext, useContext } from "react";
 
 export type Email = string;
-export type EncryptedSharedKey = string;
-export type Kid = "0";
 export interface JsonWebKeyPair {
   publicKey: JsonWebKey;
   privateKey: JsonWebKey;
@@ -12,9 +10,9 @@ export interface JsonWebKeyPairs {
   deviceKeyPair: JsonWebKeyPair;
 }
 export interface Settings {
-  rootFolderId: string;
-  chatFolderId: string;
-  profileDocumentId: string;
+  documents: string;
+  chats: string;
+  profile: string;
   settingsKey: JsonWebKey;
 }
 export const AuthenticationContext = createContext<{
@@ -29,4 +27,8 @@ export function useAuthentication(): {
   settings: Settings;
 } {
   return useContext(AuthenticationContext);
+}
+
+export function useUser() {
+  return useContext(AuthenticationContext).user;
 }

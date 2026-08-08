@@ -70,10 +70,10 @@ async function main() {
 
   const metadataJson = JSON.parse(decryptedMetadataString);
   metadataJson.documents = "68980188-577d-4d2f-9e36-a6b32b25cd3a";
-  metadataJson.rootFolderId = "68980188-577d-4d2f-9e36-a6b32b25cd3a";
-  metadataJson.chatFolderId = "9c59a4f3-ae55-4c4b-9e4a-2079a2446738";
+  metadataJson.documentListId = "68980188-577d-4d2f-9e36-a6b32b25cd3a";
+  metadataJson.chatListId = "9c59a4f3-ae55-4c4b-9e4a-2079a2446738";
   metadataJson.chatFolder = "9c59a4f3-ae55-4c4b-9e4a-2079a2446738";
-  metadataJson.profileDocumentId = "9b71fa98-8616-4222-b03e-d189289ccbd0";
+  metadataJson.profileId = "9b71fa98-8616-4222-b03e-d189289ccbd0";
   metadataJson.profilePicDocumentId = "3ae437c9-c71e-4cf0-b066-de34d75e1af3";
 
   console.log("Updated metadata:", metadataJson);

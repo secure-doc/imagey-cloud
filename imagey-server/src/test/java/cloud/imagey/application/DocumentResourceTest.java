@@ -20,9 +20,7 @@ import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.entity;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
 import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
-import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,8 +47,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import cloud.imagey.domain.document.DocumentId;
-import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
@@ -119,39 +115,6 @@ public class DocumentResourceTest {
     }
 
     @Test
-    @DisplayName("Metadata can be updated")
-    void updateMetadata() throws IOException {
-        metadataWithoutFiles();
-
-        DocumentId documentId = documentRepository.findMetadata(user, empty()).iterator().next().documentId();
-
-        Response response = newClient().target("http://localhost:" + config.getHttpPort())
-            .path("users").path(user.email().address()).path("documents").path(documentId.id())
-            .request()
-            .cookie(userCookie)
-            .put(entity(new byte[]{1, 2, 3}, jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM));
-
-        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.OK);
-    }
-
-    @Test
-    @DisplayName("Metadata update fails with wrong ETag")
-    void updateMetadataWrongEtag() throws IOException {
-        metadataWithoutFiles();
-
-        DocumentId documentId = documentRepository.findMetadata(user, empty()).iterator().next().documentId();
-
-        Response response = newClient().target("http://localhost:" + config.getHttpPort())
-            .path("users").path(user.email().address()).path("documents").path(documentId.id())
-            .request()
-            .cookie(userCookie)
-            .header("If-Match", "\"wrong\"")
-            .put(entity(new byte[]{1, 2, 3}, jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM));
-
-        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.PRECONDITION_FAILED);
-    }
-
-    @Test
     @DisplayName("Missing key leads to 400")
     void missingKey() {
         List<Attachment> attachments = new ArrayList<>();
@@ -161,68 +124,6 @@ public class DocumentResourceTest {
         Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
 
         assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
-    }
-
-    @Test
-    @DisplayName("Metadata without files is stored correctly")
-    void metadataWithoutFiles() throws IOException {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("Metadata with one file is stored correctly")
-    void metadataWithOneFile() throws IOException {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-        attachments.add(createFileAttachment("file1.txt", "content1"));
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-        DocumentId docId = metadataList.get(0).documentId();
-
-        File filesDir = new File(new File(new File(rootPath, user.email().address()), "documents/" + docId.id()), "files");
-        assertThat(filesDir).exists();
-        assertThat(filesDir.listFiles()).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("Metadata with three files is stored correctly")
-    void metadataWithThreeFiles() throws IOException {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-        attachments.add(createFileAttachment("file1.txt", "content1"));
-        attachments.add(createFileAttachment("file2.txt", "content2"));
-        attachments.add(createFileAttachment("file3.txt", "content3"));
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-        DocumentId docId = metadataList.get(0).documentId();
-
-        File filesDir = new File(new File(new File(rootPath, user.email().address()), "documents/" + docId.id()), "files");
-        assertThat(filesDir).exists();
-        assertThat(filesDir.listFiles()).hasSize(3);
     }
 
     private Attachment createMetadataAttachment() {
@@ -238,10 +139,5 @@ public class DocumentResourceTest {
     private Attachment createIssuerAttachment() {
         return new Attachment("issuer", new ByteArrayInputStream("owner@example.com".getBytes(UTF_8)),
             new ContentDisposition("form-data; name=\"issuer\""));
-    }
-
-    private Attachment createFileAttachment(String filename, String content) {
-        return new Attachment("files", new ByteArrayInputStream(content.getBytes(UTF_8)),
-            new ContentDisposition("form-data; name=\"files\"; filename=\"" + filename + "\""));
     }
 }

@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application;
 
+import static cloud.imagey.domain.token.TokenService.ONE_WEEK;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
@@ -23,7 +24,6 @@ import static jakarta.ws.rs.core.Response.created;
 import static jakarta.ws.rs.core.Response.ok;
 import static java.util.Base64.getDecoder;
 import static java.util.Optional.ofNullable;
-import static cloud.imagey.domain.token.TokenService.ONE_WEEK;
 
 import java.io.IOException;
 import java.net.URI;
@@ -42,7 +42,6 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.Request;
@@ -57,17 +56,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import com.nimbusds.jose.util.Base64;
+
+import cloud.imagey.domain.document.Document;
 import cloud.imagey.domain.document.DocumentId;
-import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.document.FileName;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
 import cloud.imagey.domain.mail.EmailTemplate;
 import cloud.imagey.domain.mail.MailService;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DomainName;
@@ -101,29 +104,16 @@ public class DocumentResource {
     private SecurityContext securityContext;
 
     @GET
-    @RolesAllowed("owner")
-    @Produces(APPLICATION_JSON)
-    public List<DocumentMetadata> getDocumentMetadata(
-        @PathParam("email") User user,
-        @QueryParam("folderId") DocumentId folderId) throws IOException {
-
-        return documentRepository.findMetadata(user, ofNullable(folderId));
-    }
-
-    @GET
     @RolesAllowed({"owner", "member"})
     @Path("{documentId}")
-    @Produces(APPLICATION_JSON)
-    public Response getDocumentMetadata(
+    @Produces(APPLICATION_OCTET_STREAM)
+    public Response getDocument(
         @PathParam("email") User user,
-        @PathParam("documentId") DocumentId documentId,
-        @QueryParam("folderId") DocumentId folderId) throws IOException {
-
-        Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
-        DocumentMetadata metadata = documentRepository.findMetadata(user, documentId, callerEmail, ofNullable(folderId))
+        @PathParam("documentId") DocumentId documentId) throws IOException {
+        EncryptedContent document = documentRepository.findDocument(user, documentId)
             .orElseThrow(NotFoundException::new);
         long etag = documentRepository.getTimestamp(user, documentId).orElseThrow(NotFoundException::new);
-        return ok(metadata).header("ETag", Long.valueOf(etag)).build();
+        return ok(document).header("ETag", Long.valueOf(etag)).build();
     }
 
     @PUT
@@ -163,14 +153,14 @@ public class DocumentResource {
 
     @GET
     @RolesAllowed({"owner", "member"})
-    @Path("{documentId}/keys/{share-email}")
+    @Path("{documentId}/keys/{kid}")
     @Produces(APPLICATION_JSON)
     public EncryptedSharedKey getSharedKey(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
-        @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
+        @PathParam("kid") Kid kid) throws IOException {
 
-        return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
+        return documentRepository.findDocumentKey(user, documentId, kid)
                 .orElseThrow(NotFoundException::new);
     }
 
@@ -217,44 +207,27 @@ public class DocumentResource {
     public Response uploadDocument(
         @Context UriInfo uriInfo,
         @PathParam("email") User user,
-        @Multipart(value = "metadata") EncryptedContent metadata,
-        @Multipart(value = "key") byte[] keyBytes,
-        @Multipart(value = "issuer") String issuer,
+        @Multipart("folderId") String folderId,
+        @Multipart("folder") byte[] folder,
+        @Multipart("documentId") String documentId,
+        @Multipart("document") byte[] file,
+        @Multipart("key") byte[] key,
         List<Attachment> files) throws IOException {
 
-        DocumentId documentId = documentRepository.persist(user, metadata);
-
-        documentRepository.persist(user, documentId, new Email(issuer), new EncryptedContent(keyBytes));
+        documentRepository.update(user, new DocumentId(folderId), new EncryptedContent(folder));
+        documentRepository.create(user, new Document(
+            new DocumentId(documentId),
+            new EncryptedSharedKey(user, new Kid(folderId), new EncryptedSymmetricKey(Base64.encode(key).toString())),
+            new EncryptedContent(file)));
 
         ofNullable(files).ifPresent(f -> f.stream().filter(a -> a.getContentDisposition().getFilename() != null).forEach(attachment -> {
-            FileName name = new FileName(attachment.getContentDisposition().getFilename());
+            String originalFilename = attachment.getContentDisposition().getFilename();
+            LOG.info("Processing attachment with filename: {}", originalFilename);
+            FileName name = new FileName(originalFilename);
             EncryptedContent content = new EncryptedContent(attachment.getObject(byte[].class));
-            documentRepository.persist(user, documentId, name, content);
+            documentRepository.addContent(user, new DocumentId(documentId), name, content);
         }));
-        URI location = uriInfo.getAbsolutePathBuilder().path(documentId.id()).build();
+        URI location = uriInfo.getAbsolutePathBuilder().path(documentId).build();
         return created(location).build();
-    }
-
-    @PUT
-    @RolesAllowed("owner")
-    @Path("{documentId}")
-    @Consumes(MULTIPART_FORM_DATA)
-    public Response updateDocument(
-        @PathParam("email") User user,
-        @PathParam("documentId") DocumentId documentId,
-        @Multipart(value = "metadata") EncryptedContent metadata,
-        @Multipart(value = "key") byte[] keyBytes,
-        @Multipart(value = "issuer") String issuer,
-        List<Attachment> files) throws IOException {
-
-        documentRepository.persist(user, documentId, metadata);
-        documentRepository.persist(user, documentId, new Email(issuer), new EncryptedContent(keyBytes));
-
-        ofNullable(files).ifPresent(f -> f.stream().filter(a -> a.getContentDisposition().getFilename() != null).forEach(attachment -> {
-            FileName name = new FileName(attachment.getContentDisposition().getFilename());
-            EncryptedContent content = new EncryptedContent(attachment.getObject(byte[].class));
-            documentRepository.persist(user, documentId, name, content);
-        }));
-        return Response.ok().build();
     }
 }

@@ -14,7 +14,11 @@ export default function ImagePanel({
       className={className}
       title={activity.image.name}
       image={
-        <ImageComponent image={activity.image} className="responsive small" />
+        <ImageComponent
+          image={activity.image}
+          folderId={activity.folderId}
+          className="responsive small"
+        />
       }
     ></Panel>
   );

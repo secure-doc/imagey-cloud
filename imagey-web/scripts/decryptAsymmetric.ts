@@ -1,12 +1,12 @@
 import { readFileSync, writeFileSync } from "fs";
-import { decryptAESGCM, deriveKey } from "./cryptoHelper";
+import { decryptAESGCM, deriveKey } from "./cryptoHelper.ts";
 
 async function main() {
   const [, , inputFile, privateKeyFile, publicKeyFile, outputFile] =
     process.argv;
   if (!inputFile || !privateKeyFile || !publicKeyFile || !outputFile) {
     console.error(
-      "Usage: ts-node decryptAsymmetric.ts <inputFile> <privateKeyFile> <publicKeyFile> <outputFile>",
+      "Usage: node --experimental-strip-types decryptAsymmetric.ts <inputFile> <privateKeyFile> <publicKeyFile> <outputFile>",
     );
     process.exit(1);
   }

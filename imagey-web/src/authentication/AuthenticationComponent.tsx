@@ -10,21 +10,12 @@ import DeviceSetupDialog from "./DeviceSetupDialog";
 import DeviceRegistrationDialog from "./DeviceRegistrationDialog";
 import ChallengeAuthenticationDialog from "./ChallengeAuthenticationDialog";
 import { useTranslation } from "react-i18next";
-import {
-  Email,
-  JsonWebKeyPairs,
-  Settings,
-} from "../contexts/AuthenticationContext";
-import { documentService } from "../document/DocumentService";
+import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 
 import { authenticationService } from "./AuthenticationService";
 
 interface AuthenticationComponentProperties {
-  onKeysDecrypted: (
-    user: Email,
-    keyPairs: JsonWebKeyPairs,
-    settings: Settings,
-  ) => void;
+  onKeysDecrypted: (user: Email, keyPairs: JsonWebKeyPairs) => void;
 }
 
 export default function AuthenticationComponent({
@@ -45,17 +36,7 @@ export default function AuthenticationComponent({
     email: string,
     keyPairs: JsonWebKeyPairs,
   ) => {
-    try {
-      const settings = await documentService.getSettings(
-        email,
-        keyPairs.mainKeyPair.publicKey,
-        keyPairs.mainKeyPair.privateKey,
-      );
-      onKeysDecrypted(email, keyPairs, settings);
-    } catch (e) {
-      console.error("Failed to load settings", e);
-      setAuthenticationStatus(AuthenticationStatus.UNKNOWN_ERROR);
-    }
+    onKeysDecrypted(email, keyPairs);
   };
 
   useEffect(() => {
@@ -99,6 +80,7 @@ export default function AuthenticationComponent({
           setAuthenticationStatus(AuthenticationStatus.AUTHENTICATED);
         })
         .catch((error) => {
+          console.error("Error during authentication effect:", error);
           switch (error) {
             case ResponseError.NOT_FOUND: {
               setAuthenticationStatus(AuthenticationStatus.NOT_REGISTERED);

@@ -16,31 +16,32 @@
  */
 package cloud.imagey.domain.document;
 
-import static java.util.Base64.getEncoder;
-import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 import java.io.File;
-import java.util.List;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.bind.Jsonb;
+import jakarta.json.bind.JsonbException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.encryption.Base64Content;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
-import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.infrastructure.IoProblemException;
+import cloud.imagey.infrastructure.ResourceConflictException;
 import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
@@ -51,10 +52,39 @@ public class DocumentRepository extends AbstractFileRepository {
     @Inject
     @ConfigProperty(name = "root.path")
     private String rootPath;
+    @Inject
+    private Jsonb jsonb;
 
     @PostConstruct
     public void logRootPath() {
         LOG.info("root.path = {}", rootPath);
+    }
+
+    public void create(User user, Document document) {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, document.documentId().id());
+        if (documentFolder.exists()) {
+            throw new ResourceConflictException("Cannot create document, because it already exists");
+        }
+        mkdir(documentFolder);
+        File documentFile = new File(documentFolder, "document.enc");
+        writeByteArrayToFile(documentFile, document.content().content());
+        File keysFolder = new File(documentFolder, "keys");
+        mkdir(keysFolder);
+        File keyFile = new File(keysFolder, document.sharedKey().kid().id() + ".json");
+        writeStringToFile(keyFile, jsonb.toJson(document.sharedKey()));
+    }
+
+    public void update(User user, DocumentId documentId, EncryptedContent content) {
+        File userHome = getUserHome(user);
+        File documentHome = new File(userHome, "documents");
+        File documentFolder = new File(documentHome, documentId.id());
+        if (!documentFolder.exists()) {
+            throw new ResourceConflictException("Cannot update document, because it does not exists");
+        }
+        File documentFile = new File(documentFolder, "document.enc");
+        writeByteArrayToFile(documentFile, content.content());
     }
 
     public DocumentId persist(User user, EncryptedContent metadata) {
@@ -70,11 +100,11 @@ public class DocumentRepository extends AbstractFileRepository {
         if (!documentFolder.exists()) {
             mkdir(documentFolder);
         }
-        File documentMetadataFile = new File(documentFolder, "metadata.enc");
+        File documentMetadataFile = new File(documentFolder, "document.enc");
         writeByteArrayToFile(documentMetadataFile, metadata.content());
     }
 
-    public void persist(User user, DocumentId documentId, FileName fileName, EncryptedContent content) {
+    public void addContent(User user, DocumentId documentId, FileName fileName, EncryptedContent content) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
@@ -103,90 +133,37 @@ public class DocumentRepository extends AbstractFileRepository {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
-        File metadataFile = new File(documentFolder, "metadata.enc");
+        File metadataFile = new File(documentFolder, "document.enc");
         if (!metadataFile.exists()) {
             return empty();
         }
         return of(metadataFile.lastModified());
     }
 
-
-    public List<DocumentMetadata> findMetadata(User user, Optional<DocumentId> folderId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        if (!documentHome.exists()) {
-            return emptyList();
-        }
-        return Stream.of(documentHome.list())
-            .filter(name -> new File(documentHome, name).isDirectory())
-            .filter(name -> folderId.isEmpty() || !name.equals(folderId.get().id()))
-            .sorted()
-            .map(DocumentId::new)
-            .flatMap(id -> findMetadata(user, id, user.email(), folderId).stream())
-            .filter(metadata -> metadata.sharedKey() != null)
-            .toList();
-    }
-
-    public Optional<DocumentMetadata> findMetadata(User user, DocumentId documentId, Email callerEmail, Optional<DocumentId> folderId) {
+    public Optional<EncryptedContent> findDocument(User user, DocumentId documentId) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
-        File metadataFile = new File(documentFolder, "metadata.enc");
-        if (!metadataFile.exists()) {
-            return empty();
-        }
-
-        Email lookupEmail = folderId
-            .filter(f -> !f.equals(documentId))
-            .map(DocumentId::id)
-            .map(Email::new)
-            .orElse(callerEmail);
-        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, lookupEmail).orElse(null);
-        return of(new DocumentMetadata(documentId, loadDocumentMetadata(user, documentId), sharedKey));
+        File documentFile = new File(documentFolder, "document.enc");
+        return of(documentFile).filter(File::exists).map(super::readFileToByteArray).map(EncryptedContent::new);
     }
 
-    private Base64Content loadDocumentMetadata(User user, DocumentId documentId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File metadataFile = new File(documentFolder, "metadata.enc");
-        return new Base64Content(getEncoder().encodeToString(readFileToByteArray(metadataFile)));
-    }
-
-    public Optional<EncryptedSharedKey> findDocumentKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {
+    public Optional<EncryptedSharedKey> findDocumentKey(User user, DocumentId documentId, Kid kid) {
         File userHome = getUserHome(user);
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         File sharedKeysFolder = new File(documentFolder, "keys");
-        File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
-        if (!sharedKey.exists() && userTheDocumentIsSharedWith.address().equals(user.email().address())) {
-            Optional<File> folderKey = findFolderKey(sharedKeysFolder);
-            if (folderKey.isPresent()) {
-                sharedKeyFolder = folderKey.get();
-                sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
-                userTheDocumentIsSharedWith = new Email(sharedKeyFolder.getName());
-            }
-        }
+        File sharedKey = new File(sharedKeysFolder, kid.id() + ".json");
         if (!sharedKey.exists()) {
             return empty();
         }
-        String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
-        String issuer = userTheDocumentIsSharedWith.address();
-        String issuerType = issuer.contains("@") ? "USER" : "FOLDER";
-        return of(new EncryptedSharedKey(issuerType, issuer, "0", new EncryptedSymmetricKey(encodedKey)));
-    }
-
-    private Optional<File> findFolderKey(File sharedKeysFolder) {
-        File[] folders = sharedKeysFolder.listFiles(File::isDirectory);
-        if (folders != null) {
-            for (File folder : folders) {
-                if (!folder.getName().contains("@") && new File(folder, "encrypted-shared.key").exists()) {
-                    return of(folder);
-                }
-            }
+        try {
+            return of(jsonb.fromJson(new FileReader(sharedKey), EncryptedSharedKey.class));
+        } catch (JsonbException e) {
+            throw new IoProblemException(e);
+        } catch (FileNotFoundException e) {
+            throw new IoProblemException(e);
         }
-        return empty();
     }
 
     public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedContent key) {

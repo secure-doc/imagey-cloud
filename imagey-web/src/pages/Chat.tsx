@@ -31,7 +31,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   useEffect(() => {
     if (contactEmail && publicKey && privateKey) {
       contactRepository
-        .getContacts(user, authentication.settings!, publicKey, privateKey)
+        .getContacts(user, authentication.settings!)
         .then((contacts) => {
           const contact = contacts.find((c) => c.userId === contactEmail);
           if (contact) {

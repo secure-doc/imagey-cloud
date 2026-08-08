@@ -18,8 +18,8 @@ export default function UploadButton({
   onUploadComplete?: (document: DocumentMetadata) => void;
   children?: React.ReactNode;
   "aria-label"?: string;
-  parentFolderId?: string;
-  parentFolderKey?: JsonWebKey;
+  parentFolderId: string;
+  parentFolderKey: JsonWebKey;
   asMenuItem?: boolean;
 }) {
   const fileChooser = useRef<HTMLInputElement>(null);
@@ -30,8 +30,6 @@ export default function UploadButton({
 
   const handleUpload = async (files: File[]) => {
     if (!user || !mainKeyPair) return;
-    const publicMainKey = mainKeyPair.publicKey;
-    const privateMainKey = mainKeyPair.privateKey;
 
     setIsUploading(true);
     try {
@@ -40,11 +38,15 @@ export default function UploadButton({
       if (!actualFolderId || !actualFolderKey) {
         const rootFolder = await documentService.getFolder(
           user,
-          authentication.settings!.rootFolderId,
+          authentication.settings!.documents,
           authentication.settings!.settingsKey,
         );
         actualFolderId = rootFolder.documentId;
         actualFolderKey = rootFolder.key;
+      }
+
+      if (!actualFolderId || !actualFolderKey) {
+        throw new Error("Unable to determine actual folder ID or key.");
       }
 
       for (const file of files) {
@@ -52,8 +54,6 @@ export default function UploadButton({
           const metadata = await documentService.storeDocument(
             user,
             file,
-            publicMainKey,
-            privateMainKey,
             actualFolderId,
             actualFolderKey,
           );

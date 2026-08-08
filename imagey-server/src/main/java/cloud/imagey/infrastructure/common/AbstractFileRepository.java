@@ -103,17 +103,9 @@ public class AbstractFileRepository {
         }
     }
 
-    protected void writeStringToFile(File file, String data, Charset charset) {
+    protected void writeStringToFile(File file, String data) {
         try {
-            FileUtils.writeStringToFile(file, data, charset);
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
-    }
-
-    protected void writeStringToFile(File file, String data, Charset charset, boolean append) {
-        try {
-            FileUtils.writeStringToFile(file, data, charset, append);
+            FileUtils.writeStringToFile(file, data, UTF_8);
         } catch (IOException e) {
             throw new IoProblemException(e);
         }

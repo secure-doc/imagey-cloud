@@ -3,7 +3,7 @@ import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   inputMarysPassword,
-  prepareMarysContactRequests,
+  prepareMarysContactRequests as prepareMarysChats,
   prepareMarysDocuments,
   prepareEmptyMarysDocuments,
   prepareMarysLogin,
@@ -202,40 +202,13 @@ test("new user clicks registration link", async ({ page }) => {
   provider
     .addInteraction()
     .uponReceiving("a request to register joe")
-    .withRequest("POST", "/users/", (r) =>
-      r
-        .headers({
-          "Content-Type": "application/json",
-        })
-        .jsonBody({
-          email: "joe@imagey.cloud",
-          deviceId: Matchers.string("ab85c7ca-8288-4a67-9d7a-15b82e22e75b"),
-          devicePublicKey: {
-            crv: "P-256",
-            ext: true,
-            key_ops: [],
-            kty: "EC",
-            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-          },
-          mainPublicKey: {
-            crv: "P-256",
-            ext: true,
-            key_ops: [],
-            kty: "EC",
-            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-          },
-          encryptedPrivateKey: Matchers.string(
-            "ca714722798563b39d9a75bd8d58e79cb81b78b7601d99d1725de64c437a551ffbf3b7dbb03babaeb58bf59305ad6674f91d0eccee6b73210d2d3134165530d0d512c40ae9a2a6c27829b5a5863d10591da8ee7032bbf2490c8f9b194cddc5537f3c2e1c0e0ba6bbce3f692103db085961cfcac38a87ef29b4340c69355f73d7ae527821478eff2e421d8693d50aae5ec253be5675796f9660984945d297500aca8108694b1cf2af4554670f88edb7f8de9c19ce48b254839bc9822456f949ee23718ac369102c70c994826827e36470c237cb",
-          ),
-          settings: Matchers.string("e30="),
-          settingsSharedKey: {
-            issuer: "joe@imagey.cloud",
-            kid: "0",
-            sharedKey: Matchers.string("ZHVtbXlTaGFyZWRLZXk="),
-          },
+    .withRequest("POST", "/users", (r) =>
+      r.headers({
+        "Content-Type": Matchers.regex({
+          generate: "multipart/form-data; boundary=----WebKitFormBoundary",
+          matcher: "multipart/form-data.*",
         }),
+      }),
     )
     .willRespondWith(200);
 
@@ -247,22 +220,63 @@ test("new user clicks registration link", async ({ page }) => {
       "/users/joe@imagey.cloud/documents/joe@imagey.cloud",
       (r) =>
         r.headers({
-          Accept: "application/json",
+          Accept: "application/octet-stream",
         }),
     )
-    .willRespondWith(404);
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", Buffer.from("dummy")),
+    );
 
   provider
     .addInteraction()
-    .uponReceiving("a request of joe to create root folder")
+    .uponReceiving("a request of joe to get settings document key")
     .withRequest(
-      "PUT",
-      Matchers.regex({
-        matcher: "/users/joe@imagey\\.cloud/documents/.*",
-        generate: "/users/joe@imagey.cloud/documents/some-uuid",
-      }),
+      "GET",
+      "/users/joe@imagey.cloud/documents/joe@imagey.cloud/keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
-    .willRespondWith(200);
+    .willRespondWith(200, (r) =>
+      r.body("application/json", Buffer.from("{}")),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of joe to get any document")
+    .withRequest(
+      "GET",
+      Matchers.regex({
+        matcher: "/users/joe@imagey\\.cloud/documents/[a-f0-9-]+",
+        generate: "/users/joe@imagey.cloud/documents/123e4567-e89b-12d3-a456-426614174000",
+      }),
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", Buffer.from("dummy")),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of joe to get any document key")
+    .withRequest(
+      "GET",
+      Matchers.regex({
+        matcher: "/users/joe@imagey\\.cloud/documents/[a-f0-9-]+/keys/.*",
+        generate: "/users/joe@imagey.cloud/documents/123e4567-e89b-12d3-a456-426614174000/keys/joe@imagey.cloud",
+      }),
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/json", Buffer.from("{}")),
+    );
 
   await provider
     .addInteraction()
@@ -276,6 +290,9 @@ test("new user clicks registration link", async ({ page }) => {
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
+
+      page.on('console', msg => console.log(`BROWSER CONSOLE: ${msg.text()}`));
+      page.on('pageerror', err => console.error(`BROWSER ERROR: ${err.message}`));
 
       await page.addInitScript(() => {
         const folders = {};
@@ -476,7 +493,7 @@ test("existing user clicks login link on existing device", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  const given = await prepareMarysContactRequests();
+  const given = await prepareMarysChats();
 
   await given.executeTest(async (mockServer) => {
     // When
@@ -501,7 +518,7 @@ test("visit page on existing device", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  const given = await prepareMarysContactRequests();
+  const given = await prepareMarysChats();
 
   await given.executeTest(async (mockServer) => {
     // When
@@ -553,7 +570,7 @@ test("login with missing email", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
-  const provider = await prepareMarysContactRequests();
+  const provider = await prepareMarysChats();
 
   await provider.executeTest(async (mockServer) => {
     // When
@@ -1118,7 +1135,7 @@ test("existing user auto-logs in with stored recovery key", async ({
   page,
 }) => {
   await prepareMarysDocuments();
-  await prepareMarysContactRequests();
+  await prepareMarysChats();
 
   provider
     .addInteraction()

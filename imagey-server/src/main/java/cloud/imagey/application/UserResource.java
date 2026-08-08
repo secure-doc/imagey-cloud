@@ -18,10 +18,13 @@ package cloud.imagey.application;
 
 import static cloud.imagey.domain.user.UserService.AuthenticationStatus.REGISTRATION_STARTED;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
+import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
+import static jakarta.ws.rs.core.Response.created;
 import static jakarta.ws.rs.core.Response.Status.ACCEPTED;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
 
 import java.io.IOException;
+import java.net.URI;
 import java.security.Principal;
 
 import jakarta.annotation.security.PermitAll;
@@ -37,12 +40,23 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 
+import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.document.Document;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.encryption.EncryptedContent;
+import cloud.imagey.domain.encryption.EncryptedPrivateKey;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Kid;
+import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserRegistration;
 import cloud.imagey.domain.user.UserRepository;
@@ -64,14 +78,43 @@ public class UserResource {
 
     @POST
     @PermitAll
-    @Consumes(APPLICATION_JSON)
-    public Response registerUser(UserRegistration registration) throws IOException {
-        if (!registration.email().address().equals(currentPrincipal.get().getName())) {
-            LOG.warn("Current user is trying to register another user.");
-            throw new ForbiddenException("User is only allowed to register itself.");
+    @Consumes(MULTIPART_FORM_DATA)
+    public Response registerUser(
+        @Context UriInfo uriInfo,
+        @Multipart("email") String email,
+        @Multipart("deviceId") String deviceId,
+        @Multipart("publicDeviceKey") String deviceKey,
+        @Multipart("publicMainKey") String publicMainKey,
+        @Multipart("privateMainKey") EncryptedPrivateKey privateMainKey,
+        @Multipart("settingsKey") EncryptedSharedKey settingsKey,
+        @Multipart("settings") EncryptedContent settings,
+        @Multipart("documentListId") String documentListId,
+        @Multipart("documentListKey") EncryptedSharedKey documentListKey,
+        @Multipart("documentList") EncryptedContent documentList,
+        @Multipart("chatListId") String chatListId,
+        @Multipart("chatListKey") EncryptedSharedKey chatListKey,
+        @Multipart("chatList") EncryptedContent chatList,
+        @Multipart("profileId") String profileId,
+        @Multipart("profileKey") EncryptedSharedKey profileKey,
+        @Multipart("profile") EncryptedContent profile) throws IOException {
+
+        if (!email.equals(currentPrincipal.get().getName())) {
+            throw new ForbiddenException();
         }
-        userService.register(registration);
-        return Response.ok().build();
+        UserRegistration registration = new UserRegistration(
+            new Email(email),
+            new DeviceId(deviceId),
+            new PublicKey(deviceKey),
+            new PublicKey(publicMainKey),
+            privateMainKey);
+        userService.register(
+            registration,
+            new Document(new DocumentId(email), settingsKey, settings),
+            new Document(new DocumentId(documentListId), documentListKey, documentList),
+            new Document(new DocumentId(chatListId), chatListKey, chatList),
+            new Document(new DocumentId(profileId), profileKey, profile));
+        URI location = uriInfo.getAbsolutePathBuilder().path(email).build();
+        return created(location).build();
     }
 
     @GET

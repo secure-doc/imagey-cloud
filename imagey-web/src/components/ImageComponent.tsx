@@ -6,9 +6,11 @@ import { useAuthentication } from "../contexts/AuthenticationContext";
 
 export default function ImageComponent({
   image,
+  folderId,
   className = "small-width small-height",
 }: {
   image: DocumentMetadata;
+  folderId?: string;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -30,13 +32,7 @@ export default function ImageComponent({
 
     if (user && publicMainKey && privateMainKey) {
       documentService
-        .loadDocumentContent(
-          user,
-          image,
-          publicMainKey,
-          privateMainKey,
-          image.sharedKey,
-        )
+        .loadDocumentContent(user, image, image.sharedKey, undefined, folderId)
         .then((doc) => {
           if (doc.content) {
             setContent(doc.content);

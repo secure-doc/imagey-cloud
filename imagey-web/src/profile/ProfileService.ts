@@ -60,7 +60,7 @@ export const profileService = {
     }
 
     const response = await fetch(
-      `/users/${email}/documents/${settings.profileDocumentId}`,
+      `/users/${email}/documents/${settings.profile}`,
       {
         method: "PUT",
         credentials: "same-origin",
@@ -79,15 +79,13 @@ export const profileService = {
   ): Promise<{ profile: Profile; picture?: Blob } | null> => {
     try {
       const folderMetadata = (
-        await documentRepository.loadDocumentMetadata(
-          user,
-          settings.profileDocumentId,
-        )
+        await documentRepository.loadDocument(user, settings.profile)
       ).metadata;
 
-      const encryptedFolderKey =
-        folderMetadata.sharedKey ??
-        (await documentRepository.loadKey(user, settings.profileDocumentId));
+      const encryptedFolderKey = await documentRepository.loadKey(
+        user,
+        settings.profile,
+      );
 
       const folderKeyJson = await cryptoService.decryptMessage(
         encryptedFolderKey.sharedKey,
@@ -95,29 +93,20 @@ export const profileService = {
       );
       const folderKey = JSON.parse(folderKeyJson) as JsonWebKey;
 
-      const payloadBuffer = cryptoService.base64ToArrayBuffer(
-        folderMetadata.metadata,
-      );
       const decryptedPayloadBuffer = await cryptoService.decryptDocument(
         folderKey,
-        payloadBuffer,
+        folderMetadata,
       );
       const payloadText = new TextDecoder().decode(decryptedPayloadBuffer);
       const profile: Profile = JSON.parse(payloadText);
 
-      const doc = await documentService.loadDocumentContent(
-        user,
-        {
-          documentId: settings.profileDocumentId,
-          name: "Profile",
-          type: "Profile",
-          size: 0,
-          key: folderKey,
-        },
-        settings.settingsKey,
-        settings.settingsKey,
-        encryptedFolderKey,
-      );
+      const doc = await documentService.loadDocumentContent(user, {
+        documentId: settings.profile,
+        name: "Profile",
+        type: "Profile",
+        size: 0,
+        key: folderKey,
+      });
 
       let picture: Blob | undefined = undefined;
       if (doc.content) {

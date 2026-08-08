@@ -1,8 +1,9 @@
 import { MessageContent } from "../chat/Message";
 import { Nonce } from "./AuthenticationService";
+import { EncryptedSymmetricKey } from "./types";
 import { DeviceId, Password } from "./UserId";
 
-export type EncryptedKey = string;
+export type EncryptedKey = ArrayBuffer;
 export type EncryptedContent = string;
 
 export const cryptoService = {
@@ -70,54 +71,71 @@ export const cryptoService = {
   },
 
   decryptPrivatePasswordKey: async (
-    encrypted: EncryptedKey,
+    encrypted: EncryptedSymmetricKey,
     password: Password,
   ): Promise<JsonWebKey> => {
-    const decrypted = await decryptWithPassword(encrypted, password);
+    const decrypted = await decryptWithPassword(
+      base64ToArrayBuffer(encrypted),
+      password,
+    );
     return JSON.parse(decrypted);
   },
 
   encryptKey: async (
     keyToEncrypt: JsonWebKey,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
+    publicKeyOrSymmetricKey: JsonWebKey,
+    privateKey?: JsonWebKey,
   ): Promise<EncryptedKey> => {
-    const derivedKey = await deriveKey(privateKey, publicKey);
-    const plaintext = new TextEncoder().encode(JSON.stringify(keyToEncrypt));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      derivedKey,
-      plaintext,
-    );
+    if (privateKey) {
+      const derivedKey = await deriveKey(privateKey, publicKeyOrSymmetricKey);
+      const plaintext = new TextEncoder().encode(JSON.stringify(keyToEncrypt));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encrypted = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        derivedKey,
+        plaintext,
+      );
 
-    const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(encrypted), iv.byteLength);
+      const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
+      combined.set(iv, 0);
+      combined.set(new Uint8Array(encrypted), iv.byteLength);
 
-    const base64 = arrayBufferToBase64(combined.buffer);
-
-    return base64;
+      return combined.buffer;
+    } else {
+      const cryptoKey = await importSymmetricKey(publicKeyOrSymmetricKey);
+      return encryptAESGCM(
+        new TextEncoder().encode(JSON.stringify(keyToEncrypt))
+          .buffer as ArrayBuffer,
+        cryptoKey,
+      );
+    }
   },
 
   decryptKey: async (
-    encryptedBase64: EncryptedKey,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
+    encrypted: EncryptedKey,
+    publicKeyOrSymmetricKey: JsonWebKey,
+    privateKey?: JsonWebKey,
   ): Promise<JsonWebKey> => {
-    const combined = base64ToArrayBuffer(encryptedBase64);
-    const iv = combined.slice(0, 12);
-    const ciphertext = combined.slice(12);
+    if (privateKey) {
+      const combined = encrypted;
+      const iv = combined.slice(0, 12);
+      const ciphertext = combined.slice(12);
 
-    const derivedKey = await deriveKey(privateKey, publicKey);
-    const decryptedBytes = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: new Uint8Array(iv) },
-      derivedKey,
-      ciphertext,
-    );
-    const text = new TextDecoder().decode(decryptedBytes);
-    const keyToDecrypt = JSON.parse(text);
-    return keyToDecrypt;
+      const derivedKey = await deriveKey(privateKey, publicKeyOrSymmetricKey);
+      const decryptedBytes = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: new Uint8Array(iv) },
+        derivedKey,
+        ciphertext,
+      );
+      const text = new TextDecoder().decode(decryptedBytes);
+      const keyToDecrypt = JSON.parse(text);
+      return keyToDecrypt;
+    } else {
+      const cryptoKey = await importSymmetricKey(publicKeyOrSymmetricKey);
+      const decryptedKey = await decryptAESGCM(encrypted, cryptoKey);
+      const text = new TextDecoder().decode(decryptedKey);
+      return JSON.parse(text);
+    }
   },
 
   encryptDocument: async (
@@ -287,10 +305,10 @@ async function encryptWithPassword(
 }
 
 async function decryptWithPassword(
-  encryptedBase64: EncryptedKey,
+  encrypted: EncryptedKey,
   password: Password,
 ): Promise<string> {
-  const combined = base64ToArrayBuffer(encryptedBase64);
+  const combined = encrypted;
   const salt = combined.slice(0, 16);
   const iv = combined.slice(16, 28);
   const ciphertext = combined.slice(28);
@@ -325,6 +343,13 @@ export function arrayBufferToBase64(buffer: ArrayBuffer) {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+export function asciiToArrayBuffer(ascii: string) {
+  const binary = atob(ascii);
+  const buffer = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+  return buffer.buffer;
 }
 
 export function base64ToArrayBuffer(base64: string) {

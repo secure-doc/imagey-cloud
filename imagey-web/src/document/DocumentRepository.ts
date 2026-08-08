@@ -1,24 +1,33 @@
 import { cryptoService } from "../authentication/CryptoService";
-import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
+import { EncryptedDocumentContent } from "./EncryptedDocumentContent";
 
 const cache: Map<string, ArrayBuffer> = new Map();
 
 export const documentRepository = {
   uploadDocument: async (
     email: string,
-    metadata: ArrayBuffer,
+    folderId: string,
+    folderContent: ArrayBuffer,
+    documentId: string,
+    documentContent: ArrayBuffer,
     sharedKey: {
       issuerType?: string;
       issuer: string;
       kid: string;
       sharedKey: string;
     },
-    content: ArrayBuffer[],
+    files: { filename: string; buffer: ArrayBuffer }[],
   ): Promise<string> => {
     const formData = new FormData();
+    formData.append("folderId", folderId);
     formData.append(
-      "metadata",
-      new Blob([metadata], { type: "application/octet-stream" }),
+      "folder",
+      new Blob([folderContent], { type: "application/octet-stream" }),
+    );
+    formData.append("documentId", documentId);
+    formData.append(
+      "document",
+      new Blob([documentContent], { type: "application/octet-stream" }),
     );
     formData.append(
       "key",
@@ -27,26 +36,11 @@ export const documentRepository = {
       }),
       "key",
     );
-    formData.append("issuer", sharedKey.issuer);
-    if (content.length > 0) {
+    for (const file of files) {
       formData.append(
-        "content",
-        new Blob([content[0]], { type: "application/octet-stream" }),
-        "content",
-      );
-    }
-    if (content.length > 1) {
-      formData.append(
-        "smallImage",
-        new Blob([content[1]], { type: "application/octet-stream" }),
-        "smallImage",
-      );
-    }
-    if (content.length > 2) {
-      formData.append(
-        "previewImage",
-        new Blob([content[2]], { type: "application/octet-stream" }),
-        "previewImage",
+        "files",
+        new Blob([file.buffer], { type: "application/octet-stream" }),
+        file.filename,
       );
     }
 
@@ -62,24 +56,20 @@ export const documentRepository = {
     });
   },
 
-  loadDocumentMetadata: async (
+  loadDocument: async (
     email: string,
     documentId: string,
-    folderId?: string,
-  ): Promise<{ metadata: EncryptedDocumentMetadata; etag: string | null }> => {
-    let url = `/users/${email}/documents/${documentId}`;
-    if (folderId) {
-      url += "?folderId=" + encodeURIComponent(folderId);
-    }
+  ): Promise<{ metadata: EncryptedDocumentContent; etag: string | null }> => {
+    const url = `/users/${email}/documents/${documentId}`;
     const response = await fetch(url, {
       method: "GET",
       headers: {
-        Accept: "application/json",
+        Accept: "application/octet-stream",
       },
       credentials: "same-origin",
     });
     return resolve(response, async () => {
-      const metadata = await response.json();
+      const metadata = await response.arrayBuffer();
       const etag = response.headers.get("ETag");
       return { metadata, etag };
     });
@@ -107,45 +97,25 @@ export const documentRepository = {
     return resolve(response, () => Promise.resolve());
   },
 
-  loadDocuments: async (
-    email: string,
-    folderId?: string,
-  ): Promise<EncryptedDocumentMetadata[]> => {
-    let url = "/users/" + email + "/documents";
-    if (folderId) {
-      url += "?folderId=" + encodeURIComponent(folderId);
-    }
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "same-origin",
-      cache: "no-cache",
-    });
-    return resolve(response, () => response.json());
-  },
-
   loadKey: async (
     email: string,
     documentId: string,
-    shareEmail?: string,
+    kid?: string,
   ): Promise<{
-    issuerType?: string;
     issuer: string;
     kid: string;
     sharedKey: string;
   }> => {
-    const targetEmail = shareEmail ?? email;
+    const targetKid = kid ?? email;
     console.error(
       "CALLED LOAD KEY FOR",
       email,
       documentId,
-      targetEmail,
+      targetKid,
       new Error().stack,
     );
     const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/keys/" + targetEmail,
+      "/users/" + email + "/documents/" + documentId + "/keys/" + targetKid,
       {
         method: "GET",
         headers: {

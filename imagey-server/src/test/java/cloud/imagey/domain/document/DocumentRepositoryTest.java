@@ -16,13 +16,11 @@
  */
 package cloud.imagey.domain.document;
 
-import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,7 +33,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import cloud.imagey.domain.encryption.EncryptedContent;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
@@ -80,23 +77,6 @@ public class DocumentRepositoryTest {
     }
 
     @Test
-    @DisplayName("persist content when files folder already exists")
-    void persistContentFilesFolderExists() {
-        File userHome = new File(rootPath, user.email().address());
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File filesFolder = new File(documentFolder, "files");
-        filesFolder.mkdirs();
-
-        EncryptedContent content = new EncryptedContent(new byte[]{4, 5, 6});
-        FileName fileName = new FileName("test.txt");
-        documentRepository.persist(user, documentId, fileName, content);
-
-        File contentFile = new File(filesFolder, "test.txt");
-        assertThat(contentFile).exists();
-    }
-
-    @Test
     @DisplayName("loadContent with non-existent contentId returns empty")
     void loadContentNonExistent() {
         Optional<EncryptedContent> content = documentRepository.loadContent(user, documentId, new DocumentId("missing"));
@@ -108,32 +88,6 @@ public class DocumentRepositoryTest {
     void getTimestampNonExistent() {
         Optional<Long> timestamp = documentRepository.getTimestamp(user, documentId);
         assertThat(timestamp).isEmpty();
-    }
-
-    @Test
-    @DisplayName("findMetadata when documents folder does not exist returns empty list")
-    void findMetadataNoDocumentsFolder() {
-        List<DocumentMetadata> metadata = documentRepository.findMetadata(user, empty());
-        assertThat(metadata).isEmpty();
-    }
-
-    @Test
-    @DisplayName("findMetadata for specific document when metadata is missing returns empty")
-    void findSpecificMetadataMissing() {
-        File userHome = new File(rootPath, user.email().address());
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        documentFolder.mkdirs();
-
-        Optional<DocumentMetadata> metadata = documentRepository.findMetadata(user, documentId, user.email(), empty());
-        assertThat(metadata).isEmpty();
-    }
-
-    @Test
-    @DisplayName("findDocumentKey when key does not exist returns empty")
-    void findDocumentKeyNonExistent() {
-        Optional<EncryptedSharedKey> key = documentRepository.findDocumentKey(user, documentId, new Email("friend@example.com"));
-        assertThat(key).isEmpty();
     }
 
     @Test
@@ -152,26 +106,5 @@ public class DocumentRepositoryTest {
 
         File keyFile = new File(sharedKeyFolder, "encrypted-shared.key");
         assertThat(keyFile).exists();
-    }
-
-    @Test
-    @DisplayName("findDocumentKey falls back to FOLDER when user is self and key missing")
-    void findDocumentKeyFallbackToFolder() throws IOException {
-        Email me = user.email();
-        File userHome = new File(rootPath, me.address());
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File sharedKeysFolder = new File(documentFolder, "keys");
-        File folderKeyFolder = new File(sharedKeysFolder, "folder-owner-id");
-        folderKeyFolder.mkdirs();
-        File folderKeyFile = new File(folderKeyFolder, "encrypted-shared.key");
-
-        EncryptedContent key = new EncryptedContent(new byte[]{1, 2, 3});
-        org.apache.commons.io.FileUtils.writeByteArrayToFile(folderKeyFile, key.content());
-
-        Optional<EncryptedSharedKey> sharedKey = documentRepository.findDocumentKey(user, documentId, me);
-        assertThat(sharedKey).isPresent();
-        assertThat(sharedKey.get().issuerType()).isEqualTo("FOLDER");
-        assertThat(sharedKey.get().issuer()).isEqualTo("folder-owner-id");
     }
 }

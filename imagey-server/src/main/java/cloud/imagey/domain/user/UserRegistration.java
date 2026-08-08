@@ -16,18 +16,14 @@
  */
 package cloud.imagey.domain.user;
 
-import cloud.imagey.domain.encryption.Base64Content;
 import cloud.imagey.domain.encryption.EncryptedPrivateKey;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.mail.Email;
 
 public record UserRegistration(
-    DeviceId deviceId,
     Email email,
-    EncryptedPrivateKey encryptedPrivateKey,
-    PublicKey mainPublicKey,
+    DeviceId deviceId,
     PublicKey devicePublicKey,
-    Base64Content settings,
-    EncryptedSharedKey settingsSharedKey) {
+    PublicKey mainPublicKey,
+    EncryptedPrivateKey encryptedPrivateKey) {
 }

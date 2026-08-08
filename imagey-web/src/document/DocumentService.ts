@@ -1,48 +1,38 @@
-import { cryptoService } from "../authentication/CryptoService";
+import {
+  base64ToArrayBuffer,
+  cryptoService,
+} from "../authentication/CryptoService";
 import { imageService } from "../image/ImageService";
 import Document from "./Document";
 import DocumentMetadata from "./DocumentMetadata";
 import { documentRepository } from "./DocumentRepository";
-import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
+import { EncryptedDocumentContent } from "./EncryptedDocumentContent";
 import { Settings } from "../contexts/AuthenticationContext";
+import { UserId } from "../authentication/UserId";
 
 export const documentService = {
   loadKey: async (
-    user: string,
+    email: string,
     documentId: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-  ): Promise<JsonWebKey | undefined> => {
-    try {
-      const encryptedKey = await documentRepository.loadKey(user, documentId);
-      if (!encryptedKey) return undefined;
-      return await cryptoService.decryptKey(
-        encryptedKey.sharedKey,
-        publicKey,
-        privateKey,
-      );
-    } catch (e) {
-      if ((e as Error).message.includes("404")) {
-        return undefined;
-      }
-      throw e;
-    }
+    kid: string,
+    parentKey: JsonWebKey,
+  ): Promise<JsonWebKey> => {
+    const key = await documentRepository.loadKey(email, documentId, kid);
+    return cryptoService.decryptKey(
+      base64ToArrayBuffer(key.sharedKey),
+      parentKey,
+    );
   },
-
   storeFolder: async (
     email: string,
     name: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-    parentFolderId?: string,
-    parentFolderKey?: JsonWebKey,
+    parentFolderId: string,
+    parentFolderKey: JsonWebKey,
   ): Promise<DocumentMetadata> => {
     const file = new File([], name, { type: "Folder" });
     return documentService.storeDocument(
       email,
       file,
-      publicKey,
-      privateKey,
       parentFolderId,
       parentFolderKey,
     );
@@ -51,49 +41,32 @@ export const documentService = {
   storeDocument: async (
     email: string,
     file: File,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-    parentFolderId?: string,
-    parentFolderKey?: JsonWebKey,
+    parentFolderId: string,
+    parentFolderKey: JsonWebKey,
   ): Promise<DocumentMetadata> => {
-    const buffers: ArrayBuffer[] =
-      file.size > 0 ? [await file.arrayBuffer()] : [];
+    if (!parentFolderId || !parentFolderKey) {
+      throw new Error(
+        "parentFolderId and parentFolderKey are required to upload a document.",
+      );
+    }
+
+    const documentId = cryptoService.generateUuid();
     const documentKey = await cryptoService.generateSymmetricKey();
+
     const documentMetadata: DocumentMetadata = {
-      documentId: "",
+      documentId,
       name: file.name,
       type: file.type,
       size: file.size,
       key: documentKey,
     };
 
-    let encryptedDocumentKeyString: string;
-    let issuer: string;
-    let issuerType: string;
+    const buffers: ArrayBuffer[] =
+      file.size > 0 ? [await file.arrayBuffer()] : [];
 
-    if (parentFolderId && parentFolderKey) {
-      encryptedDocumentKeyString = await cryptoService.encryptMessage(
-        JSON.stringify(documentKey),
-        parentFolderKey,
-      );
-      issuer = parentFolderId;
-      issuerType = parentFolderId === email ? "USER" : "FOLDER";
-    } else {
-      encryptedDocumentKeyString = await cryptoService.encryptKey(
-        documentKey,
-        publicKey,
-        privateKey,
-      );
-      issuer = email;
-      issuerType = "USER";
+    if (file.size > 0) {
+      documentMetadata.contentId = cryptoService.generateUuid();
     }
-
-    const encryptedDocumentKey = {
-      issuerType,
-      issuer,
-      kid: "0",
-      sharedKey: encryptedDocumentKeyString,
-    };
 
     if (imageService.isImage(file.type)) {
       const scaledImages = await imageService.scale(file);
@@ -103,14 +76,26 @@ export const documentService = {
       documentMetadata.previewImageId = cryptoService.generateUuid();
     }
 
+    const encryptedDocumentKeyString = await cryptoService.encryptMessage(
+      JSON.stringify(documentKey),
+      parentFolderKey,
+    );
+    const encryptedDocumentKey = {
+      issuer: parentFolderId,
+      kid: "0",
+      sharedKey: encryptedDocumentKeyString,
+    };
+
     const payload = JSON.stringify({
       name: documentMetadata.name,
       type: documentMetadata.type,
       size: documentMetadata.size,
+      contentId: documentMetadata.contentId,
       smallImageId: documentMetadata.smallImageId,
       previewImageId: documentMetadata.previewImageId,
       documents: file.type === "Folder" ? [] : undefined,
     });
+
     const payloadBuffer = new TextEncoder().encode(payload).buffer;
     const encryptedPayload = await cryptoService.encryptDocument(documentKey, [
       payloadBuffer,
@@ -121,195 +106,116 @@ export const documentService = {
       buffers,
     );
 
-    const documentId = await documentRepository.uploadDocument(
-      email,
-      encryptedPayload[0],
-      encryptedDocumentKey,
-      encryptedDocuments,
+    const filesToUpload: { filename: string; buffer: ArrayBuffer }[] = [];
+    if (encryptedDocuments.length > 0 && documentMetadata.contentId) {
+      filesToUpload.push({
+        filename: documentMetadata.contentId,
+        buffer: encryptedDocuments[0],
+      });
+    }
+    if (encryptedDocuments.length > 1) {
+      filesToUpload.push({
+        filename: documentMetadata.smallImageId!,
+        buffer: encryptedDocuments[1],
+      });
+      filesToUpload.push({
+        filename: documentMetadata.previewImageId!,
+        buffer: encryptedDocuments[2],
+      });
+    }
+
+    // Load parent folder to append document
+    const { metadata: parentFolderMetadata } =
+      await documentRepository.loadDocument(email, parentFolderId);
+
+    let parentDocuments: string[] = [];
+    let parentPayload: { documents?: string[]; [key: string]: unknown } = {};
+    if (parentFolderMetadata && parentFolderMetadata.byteLength > 0) {
+      const decryptedMetadataBuffer = await cryptoService.decryptDocument(
+        parentFolderKey,
+        parentFolderMetadata,
+      );
+      const jsonText = new TextDecoder().decode(decryptedMetadataBuffer);
+      try {
+        parentPayload = JSON.parse(jsonText);
+        if (Array.isArray(parentPayload.documents))
+          parentDocuments = parentPayload.documents;
+      } catch {
+        // Ignore parse error
+      }
+    }
+    parentDocuments.push(documentId);
+    parentPayload.documents = parentDocuments;
+
+    const newParentFolderPayload = JSON.stringify(parentPayload);
+    const newParentFolderBuffer = new TextEncoder().encode(
+      newParentFolderPayload,
+    ).buffer;
+    const encryptedParentFolder = await cryptoService.encryptDocument(
+      parentFolderKey,
+      [newParentFolderBuffer],
     );
 
-    documentMetadata.documentId = documentId;
+    await documentRepository.uploadDocument(
+      email,
+      parentFolderId,
+      encryptedParentFolder[0],
+      documentId,
+      encryptedPayload[0],
+      encryptedDocumentKey,
+      filesToUpload,
+    );
 
-    if (parentFolderId && parentFolderKey) {
-      await documentService.addDocumentToFolder(
-        email,
-        parentFolderId,
-        parentFolderKey,
-        documentId,
-      );
-    }
     return documentMetadata;
   },
 
   getSettings: async (
-    user: string,
+    user: UserId,
     publicKey: JsonWebKey,
     privateKey: JsonWebKey,
   ): Promise<Settings> => {
-    let settingsDocMetadata;
-    try {
-      settingsDocMetadata = (
-        await documentRepository.loadDocumentMetadata(user, user)
-      ).metadata;
-    } catch {
-      // Doesn't exist yet
+    const settingsDocResponse = await documentRepository.loadDocument(
+      user,
+      user,
+    );
+    const settingsDocMetadata = settingsDocResponse.metadata;
+
+    let documentListId: string | undefined = undefined;
+    let chatListId: string | undefined = undefined;
+    let profileId: string | undefined = undefined;
+
+    const encryptedDocumentKey = await documentRepository.loadKey(
+      user,
+      user,
+      "0",
+    );
+
+    const decryptedSettingsKey = await cryptoService.decryptKey(
+      base64ToArrayBuffer(encryptedDocumentKey.sharedKey),
+      publicKey,
+      privateKey,
+    );
+
+    if (settingsDocMetadata.byteLength > 0) {
+      const decryptedMetadataBuffer = await cryptoService.decryptDocument(
+        decryptedSettingsKey,
+        settingsDocMetadata,
+      );
+      const metadataJson = new TextDecoder().decode(decryptedMetadataBuffer);
+      const payload = JSON.parse(metadataJson);
+      documentListId = payload.documents || payload.documentListId;
+      chatListId = payload.chats || payload.chatListId;
+      profileId = payload.profile || payload.profileId;
     }
 
-    let rootFolderId: string | undefined = undefined;
-    let chatFolderId: string | undefined = undefined;
-    let profileDocumentId: string | undefined = undefined;
-    let decryptedSettingsKey: JsonWebKey | undefined = undefined;
-
-    if (settingsDocMetadata) {
-      const encryptedDocumentKey =
-        settingsDocMetadata.sharedKey ??
-        (await documentRepository.loadKey(user, user));
-
-      decryptedSettingsKey = await cryptoService.decryptKey(
-        encryptedDocumentKey.sharedKey,
-        publicKey,
-        privateKey,
-      );
-
-      if (settingsDocMetadata.metadata) {
-        const decryptedMetadataBuffer = await cryptoService.decryptDocument(
-          decryptedSettingsKey,
-          cryptoService.base64ToArrayBuffer(settingsDocMetadata.metadata),
-        );
-        const metadataJson = new TextDecoder().decode(decryptedMetadataBuffer);
-        const payload = JSON.parse(metadataJson);
-        rootFolderId = payload.documents || payload.rootFolderId;
-        chatFolderId = payload.chats || payload.chatFolderId;
-        profileDocumentId = payload.profile || payload.profileDocumentId;
-      }
-    }
-
-    if (
-      !rootFolderId ||
-      !chatFolderId ||
-      !profileDocumentId ||
-      !decryptedSettingsKey
-    ) {
-      decryptedSettingsKey =
-        decryptedSettingsKey ?? (await cryptoService.generateSymmetricKey());
-
-      const rootFolderKey = await cryptoService.generateSymmetricKey();
-      rootFolderId = rootFolderId ?? cryptoService.generateUuid();
-
-      const chatFolderKey = await cryptoService.generateSymmetricKey();
-      chatFolderId = chatFolderId ?? cryptoService.generateUuid();
-
-      const profileDocumentKey = await cryptoService.generateSymmetricKey();
-      profileDocumentId = profileDocumentId ?? cryptoService.generateUuid();
-
-      const createFolderFormData = async (
-        name: string,
-        type: string,
-        key: JsonWebKey,
-      ) => {
-        const payload = JSON.stringify({
-          name,
-          type,
-          documents: type === "Folder" ? [] : undefined,
-        });
-        const payloadBuffer = new TextEncoder().encode(payload).buffer;
-        const encryptedPayload = await cryptoService.encryptDocument(key, [
-          payloadBuffer,
-        ]);
-        const encryptedKey = await cryptoService.encryptMessage(
-          JSON.stringify(key),
-          decryptedSettingsKey!,
-        );
-        const formData = new FormData();
-        formData.append(
-          "metadata",
-          new Blob([encryptedPayload[0]], { type: "application/octet-stream" }),
-        );
-        formData.append(
-          "key",
-          new Blob([cryptoService.base64ToArrayBuffer(encryptedKey)], {
-            type: "application/octet-stream",
-          }),
-          "key",
-        );
-        formData.append("issuer", user);
-        return formData;
-      };
-
-      const rootFolderFormData = await createFolderFormData(
-        "Images",
-        "Folder",
-        rootFolderKey,
-      );
-      await fetch(`/users/${user}/documents/${rootFolderId}`, {
-        method: "PUT",
-        body: rootFolderFormData,
-      });
-
-      const chatFolderFormData = await createFolderFormData(
-        "Chats",
-        "Folder",
-        chatFolderKey,
-      );
-      await fetch(`/users/${user}/documents/${chatFolderId}`, {
-        method: "PUT",
-        body: chatFolderFormData,
-      });
-
-      const profileFormData = await createFolderFormData(
-        "Profile",
-        "Profile",
-        profileDocumentKey,
-      );
-      await fetch(`/users/${user}/documents/${profileDocumentId}`, {
-        method: "PUT",
-        body: profileFormData,
-      });
-
-      const settingsPayload = JSON.stringify({
-        documents: rootFolderId,
-        chats: chatFolderId,
-        profile: profileDocumentId,
-      });
-      const settingsPayloadBuffer = new TextEncoder().encode(
-        settingsPayload,
-      ).buffer;
-      const encryptedSettingsPayload = await cryptoService.encryptDocument(
-        decryptedSettingsKey,
-        [settingsPayloadBuffer],
-      );
-      const encryptedSettingsKeyStr = await cryptoService.encryptKey(
-        decryptedSettingsKey,
-        publicKey,
-        privateKey,
-      );
-
-      const settingsFormData = new FormData();
-      settingsFormData.append(
-        "metadata",
-        new Blob([encryptedSettingsPayload[0]], {
-          type: "application/octet-stream",
-        }),
-      );
-      settingsFormData.append(
-        "key",
-        new Blob([cryptoService.base64ToArrayBuffer(encryptedSettingsKeyStr)], {
-          type: "application/octet-stream",
-        }),
-        "key",
-      );
-      settingsFormData.append("issuer", user);
-
-      await fetch(`/users/${user}/documents/${user}`, {
-        method: "PUT",
-        body: settingsFormData,
-      });
+    if (!documentListId || !chatListId || !profileId) {
+      throw new Error("Settings document is missing required IDs");
     }
 
     return {
-      rootFolderId: rootFolderId!,
-      chatFolderId: chatFolderId!,
-      profileDocumentId: profileDocumentId!,
+      documents: documentListId,
+      chats: chatListId,
+      profile: profileId,
       settingsKey: decryptedSettingsKey,
     };
   },
@@ -320,12 +226,10 @@ export const documentService = {
     decryptedSettingsKey: JsonWebKey,
   ): Promise<Document> => {
     const folderMetadata = (
-      await documentRepository.loadDocumentMetadata(user, folderId)
+      await documentRepository.loadDocument(user, folderId)
     ).metadata;
 
-    const encryptedFolderKey =
-      folderMetadata.sharedKey ??
-      (await documentRepository.loadKey(user, folderId));
+    const encryptedFolderKey = await documentRepository.loadKey(user, folderId);
 
     const folderKeyJson = await cryptoService.decryptMessage(
       encryptedFolderKey.sharedKey,
@@ -335,80 +239,63 @@ export const documentService = {
 
     return await decryptDocumentContent(
       user,
-      await decryptDocumentMetadata(folderMetadata, folderKey),
+      await decryptDocumentMetadata(
+        folderId,
+        folderMetadata,
+        encryptedFolderKey,
+        folderKey,
+      ),
       folderKey,
     );
   },
 
   loadDocument: async (
     user: string,
-    metadata: EncryptedDocumentMetadata,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-    parentFolderKey?: JsonWebKey,
+    documentId: string,
+    parentFolderId: string,
+    parentFolderKey: JsonWebKey,
   ): Promise<DocumentMetadata> => {
     try {
-      const encryptedDocumentKey =
-        metadata.sharedKey ??
-        (await documentRepository.loadKey(user, metadata.documentId));
-      let decryptedDocumentKey: JsonWebKey;
-      const actualParentFolderKey = parentFolderKey;
-      if (
-        encryptedDocumentKey.issuerType === "FOLDER" &&
-        !actualParentFolderKey
-      ) {
-        throw new Error(
-          "Parent folder key must be provided for documents in a folder",
-        );
-      }
-      if (
-        encryptedDocumentKey.issuerType === "FOLDER" &&
-        actualParentFolderKey
-      ) {
-        decryptedDocumentKey = JSON.parse(
-          await cryptoService.decryptMessage(
-            encryptedDocumentKey.sharedKey,
-            actualParentFolderKey,
-          ),
-        );
-      } else {
-        decryptedDocumentKey = await cryptoService.decryptKey(
-          encryptedDocumentKey.sharedKey,
-          publicKey,
-          privateKey,
-        );
-      }
-      return await decryptDocumentMetadata(metadata, decryptedDocumentKey);
+      const metadataResponse = await documentRepository.loadDocument(
+        user,
+        documentId,
+      );
+      const encryptedMetadata = metadataResponse.metadata;
+      const encryptedDocumentKey = await documentRepository.loadKey(
+        user,
+        documentId,
+        parentFolderId,
+      );
+      const decryptedDocumentKey = await cryptoService.decryptKey(base64ToArrayBuffer(encryptedDocumentKey.sharedKey), parentFolderKey);
+      return await decryptDocumentMetadata(
+        documentId,
+        encryptedMetadata,
+        encryptedDocumentKey,
+        decryptedDocumentKey,
+      );
     } catch (e) {
-      console.error(e);
-    }
-    const unencrypted = metadata as unknown as Record<string, unknown>;
-    if (!metadata.metadata && unencrypted.type) {
-      return {
-        documentId: metadata.documentId,
-        name: unencrypted.name as string,
-        type: unencrypted.type as "Image" | "Folder",
-        size: unencrypted.size as number,
-        smallImageId: unencrypted.smallImageId as string,
-        previewImageId: unencrypted.previewImageId as string,
-        documents: unencrypted.documents as string[],
-      } as unknown as DocumentMetadata;
+      console.error("loadDocument failed for", documentId, e);
     }
     return {
-      documentId: metadata.documentId,
+      documentId: documentId,
       name: "Encrypted Document",
     };
   },
   loadSharedDocument: async (
     owner: string,
-    metadata: EncryptedDocumentMetadata,
+    documentId: string,
     chatKey: JsonWebKey,
     recipient: string,
   ): Promise<Document> => {
     try {
+      const metadataResponse = await documentRepository.loadDocument(
+        owner,
+        documentId,
+      );
+      const encryptedMetadata = metadataResponse.metadata;
       const encryptedDocumentKey = await documentRepository.loadKey(
         owner,
-        metadata.documentId,
+        documentId,
         recipient,
       );
 
@@ -419,7 +306,9 @@ export const documentService = {
       const decryptedDocumentKey = JSON.parse(docKeyStr) as JsonWebKey;
 
       const documentMetadata = await decryptDocumentMetadata(
-        metadata,
+        documentId,
+        encryptedMetadata,
+        encryptedDocumentKey,
         decryptedDocumentKey,
       );
 
@@ -432,37 +321,28 @@ export const documentService = {
       console.error(e);
     }
     return {
-      documentId: metadata.documentId,
+      documentId: documentId,
       name: "Encrypted Document",
     };
   },
 
+  loadFolder: async (
+    user: string,
+	parentId: string,
+	parentKey: JsonWebKey,
+    folderId: string
+  ): Promise<DocumentMetadata[]> => {
+	return [];
+  },
   loadDocuments: async (
     user: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-    folderId?: string,
-    folderKey?: JsonWebKey,
+    documentIds: string[],
+    parentFolderId: string,
+    folderKey: JsonWebKey,
   ): Promise<DocumentMetadata[]> => {
-    const metadata = await documentRepository.loadDocuments(user, folderId);
-    const validMetadata = metadata.filter(() => {
-      // Find if this is the profile or profile-pic by checking against known UUIDs
-      // Usually, the app should have access to `settings`, but since we don't pass it here,
-      // we can filter out by name or just allow them and filter them in the UI.
-      // Wait, if it's the backend test, the frontend needs to filter these out so they don't show as images.
-      // Let's filter by checking the name if available, or just leave it as is if they are no longer "profile" strings?
-      // Ah, in Imagey, if a document doesn't match the image extension, maybe the UI filters it?
-      return true; // We will have to filter them in the UI or fetch settings later
-    });
     const results = await Promise.allSettled(
-      validMetadata.map((meta) =>
-        documentService.loadDocument(
-          user,
-          meta,
-          publicKey,
-          privateKey,
-          folderKey,
-        ),
+      documentIds.map((id) =>
+        documentService.loadDocument(user, id, parentFolderId, folderKey),
       ),
     );
     return results
@@ -500,15 +380,13 @@ export const documentService = {
   loadDocumentContent: async (
     user: string,
     metadata: DocumentMetadata,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
     encryptedKey?: {
-      issuerType?: string;
       issuer: string;
       kid: string;
       sharedKey: string;
     },
     folderKey?: JsonWebKey,
+    parentFolderId?: string,
   ): Promise<Document> => {
     try {
       let decryptedDocumentKey: JsonWebKey;
@@ -518,22 +396,23 @@ export const documentService = {
         const encryptedDocumentKey =
           encryptedKey ??
           metadata.sharedKey ??
-          (await documentRepository.loadKey(user, metadata.documentId!));
+          (await documentRepository.loadKey(
+            user,
+            metadata.documentId!,
+            parentFolderId,
+          ));
 
-        if (encryptedDocumentKey.issuerType === "FOLDER" && folderKey) {
-          decryptedDocumentKey = JSON.parse(
-            await cryptoService.decryptMessage(
-              encryptedDocumentKey.sharedKey,
-              folderKey,
-            ),
-          );
-        } else {
-          decryptedDocumentKey = await cryptoService.decryptKey(
-            encryptedDocumentKey.sharedKey,
-            publicKey,
-            privateKey,
+        if (!folderKey) {
+          throw new Error(
+            "Folder key must be provided if metadata.key is not present",
           );
         }
+        decryptedDocumentKey = JSON.parse(
+          await cryptoService.decryptMessage(
+            encryptedDocumentKey.sharedKey,
+            folderKey,
+          ),
+        );
       }
       return await decryptDocumentContent(user, metadata, decryptedDocumentKey);
     } catch (e) {
@@ -553,15 +432,17 @@ export const documentService = {
     while (!success && attempts < 5) {
       attempts++;
       try {
-        const { metadata, etag } =
-          await documentRepository.loadDocumentMetadata(email, folderId);
+        const { metadata, etag } = await documentRepository.loadDocument(
+          email,
+          folderId,
+        );
 
         let array: string[] = [];
         let payload: { documents?: string[]; [key: string]: unknown } = {};
-        if (metadata && metadata.metadata) {
+        if (metadata && metadata.byteLength > 0) {
           const decryptedMetadataBuffer = await cryptoService.decryptDocument(
             folderKey,
-            cryptoService.base64ToArrayBuffer(metadata.metadata),
+            metadata,
           );
           const jsonText = new TextDecoder().decode(decryptedMetadataBuffer);
           try {
@@ -609,42 +490,31 @@ export const documentService = {
 };
 
 export async function decryptDocumentMetadata(
-  metadata: EncryptedDocumentMetadata,
+  documentId: string,
+  encryptedMetadata: EncryptedDocumentContent,
+  encryptedKey: {
+    issuer: string;
+    kid: string;
+    sharedKey: string;
+  },
   decryptedDocumentKey: JsonWebKey,
 ): Promise<DocumentMetadata> {
-  if (!metadata.metadata) {
-    const unencrypted = metadata as unknown as Record<string, unknown>;
-    return {
-      documentId: metadata.documentId,
-      name: unencrypted.name as string,
-      type: unencrypted.type as "Image" | "Folder",
-      size: unencrypted.size as number,
-      smallImageId: unencrypted.smallImageId as string,
-      previewImageId: unencrypted.previewImageId as string,
-      documents: unencrypted.documents as string[],
-      sharedKey: metadata.sharedKey,
-      key: decryptedDocumentKey,
-    };
-  }
-
-  const encryptedMetadataBuffer = cryptoService.base64ToArrayBuffer(
-    metadata.metadata,
-  );
   const decryptedMetadataBuffer = await cryptoService.decryptDocument(
     decryptedDocumentKey,
-    encryptedMetadataBuffer,
+    encryptedMetadata,
   );
   const payloadText = new TextDecoder().decode(decryptedMetadataBuffer);
   const payload = JSON.parse(payloadText);
   return {
-    documentId: metadata.documentId,
+    documentId: documentId,
     name: payload.name,
     type: payload.type,
     size: payload.size,
+    contentId: payload.contentId,
     smallImageId: payload.smallImageId,
     previewImageId: payload.previewImageId,
     documents: payload.documents,
-    sharedKey: metadata.sharedKey,
+    sharedKey: encryptedKey,
     key: decryptedDocumentKey,
   };
 }
@@ -669,10 +539,13 @@ async function decryptDocumentContent(
     };
   }
   try {
+    console.log(
+      `loading content with id ${metadata.contentId} for ${metadata.type} and id ${metadata.documentId} and preview image id ${metadata.previewImageId}`,
+    );
     const encryptedContentResponse = await documentRepository.loadContent(
       owner,
       metadata.documentId!,
-      metadata.previewImageId ?? metadata.documentId!,
+      metadata.contentId ?? metadata.previewImageId ?? metadata.documentId!,
       metadata.type?.toLowerCase() === "folder",
     );
 

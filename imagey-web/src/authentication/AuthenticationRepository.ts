@@ -1,37 +1,90 @@
 import { Email } from "../contexts/AuthenticationContext";
 import { ResponseError } from "./ResponseError";
+import { EncryptedSharedKey } from "./types";
 
 export const authenticationRepository = {
   register: async (
     email: Email,
     deviceId: string,
     publicMainKey: JsonWebKey,
-    encryptedPrivateMainKey: string,
+    encryptedPrivateMainKey: ArrayBuffer,
     publicDeviceKey: JsonWebKey,
-    settings: string,
-    settingsSharedKey: { issuer: string; kid: string; sharedKey: string },
+    settingsSharedKey: EncryptedSharedKey,
+    settingsDocument: ArrayBuffer,
+    documentListId: string,
+    documentListKey: EncryptedSharedKey,
+    documentList: ArrayBuffer,
+    chatListId: string,
+    chatListKey: EncryptedSharedKey,
+    chatList: ArrayBuffer,
+    profileId: string,
+    profileKey: EncryptedSharedKey,
+    profile: ArrayBuffer,
   ) => {
-    const response = await fetch("/users/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        email: email,
-        deviceId,
-        mainPublicKey: publicMainKey,
-        devicePublicKey: publicDeviceKey,
-        encryptedPrivateKey: encryptedPrivateMainKey,
-        settings,
-        settingsSharedKey,
+    const formData = new FormData();
+    formData.append("email", email);
+    formData.append("deviceId", deviceId);
+    formData.append(
+      "publicDeviceKey",
+      new Blob([JSON.stringify(publicDeviceKey)], { type: "application/json" }),
+    );
+    formData.append(
+      "publicMainKey",
+      new Blob([JSON.stringify(publicMainKey)], { type: "application/json" }),
+    );
+    formData.append(
+      "privateMainKey",
+      new Blob([encryptedPrivateMainKey], { type: "application/octet-stream" }),
+    );
+    formData.append(
+      "settingsKey",
+      new Blob([JSON.stringify(settingsSharedKey)], {
+        type: "application/json",
       }),
+    );
+    formData.append(
+      "settings",
+      new Blob([settingsDocument], { type: "application/octet-stream" }),
+    );
+    formData.append("documentListId", documentListId);
+    formData.append(
+      "documentListKey",
+      new Blob([JSON.stringify(documentListKey)], { type: "application/json" }),
+    );
+    formData.append(
+      "documentList",
+      new Blob([documentList], { type: "application/octet-stream" }),
+    );
+    formData.append("chatListId", chatListId);
+    formData.append(
+      "chatListKey",
+      new Blob([JSON.stringify(chatListKey)], { type: "application/json" }),
+    );
+    formData.append(
+      "chatList",
+      new Blob([chatList], { type: "application/octet-stream" }),
+    );
+    formData.append("profileId", profileId);
+    formData.append(
+      "profileKey",
+      new Blob([JSON.stringify(profileKey)], { type: "application/json" }),
+    );
+    formData.append(
+      "profile",
+      new Blob([profile], { type: "application/octet-stream" }),
+    );
+
+    const response = await fetch(`/users`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: formData,
     });
 
     return response.status >= 200 && response.status < 300
       ? Promise.resolve()
       : Promise.reject();
   },
+
   findDevices: async (email: string): Promise<string[]> => {
     const response = await fetch("/users/" + email + "/devices", {
       method: "GET",

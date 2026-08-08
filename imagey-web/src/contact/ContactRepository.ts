@@ -76,22 +76,19 @@ export const contactRepository = {
     }
   },
   getContacts: async (
-    userId: UserId,
+    userId: string,
     settings: Settings,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
   ): Promise<Contact[]> => {
     const chatFolder = await documentService.getFolder(
       userId,
-      settings.chatFolderId,
+      settings.chats,
       settings.settingsKey,
     );
     const documents = await documentService.loadDocuments(
       userId,
-      publicKey,
-      privateKey,
-      settings.chatFolderId,
-      chatFolder.key,
+      chatFolder.documents || [],
+      chatFolder.documentId,
+      chatFolder.key!,
     );
     const chatDocuments = documents.filter((d) => d.type === "Chat");
     return chatDocuments.map((d) => ({

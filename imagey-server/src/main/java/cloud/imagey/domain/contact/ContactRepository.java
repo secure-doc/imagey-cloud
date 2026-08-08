@@ -18,13 +18,11 @@ package cloud.imagey.domain.contact;
 
 import static cloud.imagey.domain.contact.ContactStatus.INVITED;
 import static jakarta.json.bind.JsonbBuilder.create;
-import static java.nio.charset.Charset.defaultCharset;
 import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 import java.io.File;
-import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -44,7 +42,6 @@ import cloud.imagey.infrastructure.common.AbstractFileRepository;
 public class ContactRepository extends AbstractFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(ContactRepository.class);
-    private static final Charset UTF_8 = Charset.forName("UTF-8");
 
     @Inject
     @ConfigProperty(name = "root.path")
@@ -56,8 +53,8 @@ public class ContactRepository extends AbstractFileRepository {
         File inviteeRequests = new File(
             getUserHome(new User(contactExchange.invitee())), "contact-requests");
         String content = create().toJson(contactExchange);
-        writeStringToFile(new File(inviterRequests, contactExchange.invitee().address() + ".json"), content, defaultCharset());
-        writeStringToFile(new File(inviteeRequests, contactExchange.inviter().email().address() + ".json"), content, defaultCharset());
+        writeStringToFile(new File(inviterRequests, contactExchange.invitee().address() + ".json"), content);
+        writeStringToFile(new File(inviteeRequests, contactExchange.inviter().email().address() + ".json"), content);
     }
 
     public List<ContactExchange> findContactRequests(User user) {

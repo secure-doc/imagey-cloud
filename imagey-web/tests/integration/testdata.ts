@@ -51,11 +51,8 @@ export const TestData: TestDataStructure = {
     password: "MarysPassword123",
     settings: {
       documents: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-      rootFolderId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-      chatFolderId: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
-      chatFolder: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
-      profileDocumentId: "9b71fa98-8616-4222-b03e-d189289ccbd0",
-      profilePicDocumentId: "3ae437c9-c71e-4cf0-b066-de34d75e1af3",
+      chats: "9c59a4f3-ae55-4c4b-9e4a-2079a2446738",
+      profile: "9b71fa98-8616-4222-b03e-d189289ccbd0",
     },
     publicMainKey: {
       crv: "P-256",
@@ -157,10 +154,10 @@ export const TestData: TestDataStructure = {
     password: "AlicesPassword",
     settings: {
       documents: "7ca8742e-821f-4276-862d-d5d2dbd42038",
-      rootFolderId: "7ca8742e-821f-4276-862d-d5d2dbd42038",
-      chatFolderId: "09128665-7ebf-426f-95fe-84f31ac53167",
+      documentListId: "7ca8742e-821f-4276-862d-d5d2dbd42038",
+      chatListId: "09128665-7ebf-426f-95fe-84f31ac53167",
       chatFolder: "09128665-7ebf-426f-95fe-84f31ac53167",
-      profileDocumentId: "15917f2b-220c-4ecb-a08b-fb3a695b4424",
+      profileId: "15917f2b-220c-4ecb-a08b-fb3a695b4424",
       profilePicDocumentId: "8e1ff0be-5c0e-40af-9f39-35ed57c8f1fb",
     },
     publicMainKey: {
@@ -254,10 +251,10 @@ export const TestData: TestDataStructure = {
     password: "LaurasPassword123",
     settings: {
       documents: "fa2f1875-d2d1-4706-94f7-ba69880578e7",
-      rootFolderId: "fa2f1875-d2d1-4706-94f7-ba69880578e7",
-      chatFolderId: "8d54110e-5ff5-4f78-a9d3-73e08393339a",
+      documentListId: "fa2f1875-d2d1-4706-94f7-ba69880578e7",
+      chatListId: "8d54110e-5ff5-4f78-a9d3-73e08393339a",
       chatFolder: "8d54110e-5ff5-4f78-a9d3-73e08393339a",
-      profileDocumentId: "f3ed850d-4813-439b-a1c8-5a1d9a06fe24",
+      profileId: "f3ed850d-4813-439b-a1c8-5a1d9a06fe24",
       profilePicDocumentId: "59197529-6431-478e-a166-adcef68c1f27",
     },
     publicMainKey: {
@@ -316,10 +313,10 @@ export const TestData: TestDataStructure = {
     password: "BillsPassword123",
     settings: {
       documents: "a2fdae4a-fac3-4d20-bfca-7c34146f8587",
-      rootFolderId: "a2fdae4a-fac3-4d20-bfca-7c34146f8587",
-      chatFolderId: "28f136c4-394a-416a-8f47-10f844b47ac5",
+      documentListId: "a2fdae4a-fac3-4d20-bfca-7c34146f8587",
+      chatListId: "28f136c4-394a-416a-8f47-10f844b47ac5",
       chatFolder: "28f136c4-394a-416a-8f47-10f844b47ac5",
-      profileDocumentId: "d841a46e-1522-4af8-8063-e1bb1e9585ed",
+      profileId: "d841a46e-1522-4af8-8063-e1bb1e9585ed",
       profilePicDocumentId: "3122289e-dd5d-4017-b3d0-cc1e96b5f470",
     },
     publicMainKey: {

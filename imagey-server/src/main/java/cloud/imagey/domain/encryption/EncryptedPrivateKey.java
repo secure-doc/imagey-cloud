@@ -16,6 +16,29 @@
  */
 package cloud.imagey.domain.encryption;
 
-public record EncryptedPrivateKey(String key) {
+import jakarta.json.bind.adapter.JsonbAdapter;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
+import com.nimbusds.jose.util.Base64;
+
+@JsonbTypeAdapter(EncryptedPrivateKey.Base64Adapter.class)
+public record EncryptedPrivateKey(byte[] key) {
+    public static class Base64Adapter implements JsonbAdapter<EncryptedPrivateKey, String> {
+
+        @Override
+        public String adaptToJson(EncryptedPrivateKey key) throws Exception {
+            if (key == null || key.key() == null) {
+                return null;
+            }
+            return Base64.encode(key.key()).toString();
+        }
+
+        @Override
+        public EncryptedPrivateKey adaptFromJson(String key) throws Exception {
+            if (key == null) {
+                return null;
+            }
+            return new EncryptedPrivateKey(new Base64(key).decode());
+        }
+    }
 }

@@ -1,5 +1,9 @@
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
-import { cryptoService } from "../authentication/CryptoService";
+import {
+  arrayBufferToBase64,
+  base64ToArrayBuffer,
+  cryptoService,
+} from "../authentication/CryptoService";
 import { deviceRepository } from "./DeviceRepository";
 
 export const deviceService = {
@@ -48,7 +52,7 @@ export const deviceService = {
       email,
       thisDeviceId,
       deviceId,
-      encryptedPrivateMainKey,
+      arrayBufferToBase64(encryptedPrivateMainKey),
     );
   },
   unlockLocalDeviceKey: async (deviceId: string, devicePassword: string) => {
@@ -90,7 +94,7 @@ export const deviceService = {
         encryptingDeviceId,
       );
     const decryptedPrivateMainKey = await cryptoService.decryptKey(
-      encryptedPrivateMainKeyMetadata.key,
+      base64ToArrayBuffer(encryptedPrivateMainKeyMetadata.key),
       encryptingPublicKey,
       privateDeviceKey,
     );
