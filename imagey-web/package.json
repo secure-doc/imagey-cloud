@@ -62,5 +62,8 @@
     "vite": "^8.0.16",
     "vite-plugin-istanbul": "^9.0.1",
     "vitest": "^4.0.16"
+  },
+  "overrides": {
+    "js-yaml": "^4.2.0"
   }
 }
