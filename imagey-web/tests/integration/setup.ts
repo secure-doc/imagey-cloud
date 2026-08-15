@@ -434,37 +434,37 @@ export async function prepareMarysDocuments() {
 
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get settings document metadata")
+    .uponReceiving("a request of mary to get settings document")
     .withRequest(
       "GET",
       "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/mary@imagey.cloud/document.enc",
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get settings key")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
       (r) =>
         r.headers({
           Accept: "application/json",
         }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "mary@imagey.cloud",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/mary@imagey.cloud/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/mary@imagey.cloud/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
+      r.binaryFile(
+        "application/json",
+        "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+      ),
     );
   provider
     .addInteraction()
@@ -616,43 +616,6 @@ export async function prepareMarysRootFolder() {
             path.resolve(
               process.cwd(),
               "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of mary to get settings document metadata for empty folder",
-    )
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "mary@imagey.cloud",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/mary@imagey.cloud/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/mary@imagey.cloud/keys/mary@imagey.cloud/encrypted-shared.key",
             ),
             "base64",
           ),

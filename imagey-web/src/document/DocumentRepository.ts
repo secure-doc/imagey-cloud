@@ -62,6 +62,25 @@ export const documentRepository = {
     });
   },
 
+  loadDocument: async (
+    email: string,
+    documentId: string,
+  ): Promise<{ metadata: ArrayBuffer; etag: string | null }> => {
+    const url = `/users/${email}/documents/${documentId}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/octet-stream",
+      },
+      credentials: "same-origin",
+    });
+    return resolve(response, async () => {
+      const metadata = await response.arrayBuffer();
+      const etag = response.headers.get("ETag");
+      return { metadata, etag };
+    });
+  },
+
   loadDocumentMetadata: async (
     email: string,
     documentId: string,

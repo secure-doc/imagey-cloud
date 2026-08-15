@@ -1,4 +1,6 @@
 import { cryptoService } from "../authentication/CryptoService";
+import { UserId } from "../authentication/UserId";
+import { Settings } from "../contexts/AuthenticationContext";
 import { imageService } from "../image/ImageService";
 import Document from "./Document";
 import DocumentMetadata from "./DocumentMetadata";
@@ -116,6 +118,56 @@ export const documentService = {
       );
     }
     return documentMetadata;
+  },
+  getSettings: async (
+    user: UserId,
+    publicKey: JsonWebKey,
+    privateKey: JsonWebKey,
+  ): Promise<Settings> => {
+    const settingsDocResponse = await documentRepository.loadDocument(
+      user,
+      user,
+    );
+    const settingsDocMetadata = settingsDocResponse.metadata;
+
+    let documentListId: string | undefined = undefined;
+    let chatListId: string | undefined = undefined;
+    let profileId: string | undefined = undefined;
+
+    const encryptedDocumentKey = await documentRepository.loadKey(
+      user,
+      user,
+      "0",
+    );
+
+    const decryptedSettingsKey = await cryptoService.decryptKey(
+      encryptedDocumentKey.sharedKey,
+      publicKey,
+      privateKey,
+    );
+
+    if (settingsDocMetadata.byteLength > 0) {
+      const decryptedMetadataBuffer = await cryptoService.decryptDocument(
+        decryptedSettingsKey,
+        settingsDocMetadata,
+      );
+      const metadataJson = new TextDecoder().decode(decryptedMetadataBuffer);
+      const payload = JSON.parse(metadataJson);
+      documentListId = payload.documents || payload.documentListId;
+      chatListId = payload.chats || payload.chatListId;
+      profileId = payload.profile || payload.profileId;
+    }
+
+    if (!documentListId || !chatListId || !profileId) {
+      throw new Error("Settings document is missing required IDs");
+    }
+
+    return {
+      documents: documentListId,
+      chats: chatListId,
+      profile: profileId,
+      settingsKey: decryptedSettingsKey,
+    };
   },
 
   getRootFolder: async (

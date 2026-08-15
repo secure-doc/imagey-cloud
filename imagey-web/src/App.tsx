@@ -18,10 +18,13 @@ import {
   Email,
   JsonWebKeyPairs,
   AuthenticationContext,
+  Settings as SettingsType,
 } from "./contexts/AuthenticationContext";
 import Activities from "./pages/Activities";
+import { SettingsContext } from "./contexts/SettingsContext";
 
 import { useParams } from "react-router";
+import { documentService } from "./document/DocumentService";
 
 function ChatRoute() {
   const { contactEmail } = useParams();
@@ -38,34 +41,25 @@ function BottomNavLayout() {
 }
 
 function App() {
-  /*
-  There are different situations how we come to here:
-  1. "currentUser" local storage property is not set.
-     User has to put in her/his email address and the symmetric key is tried to receive.
-     a) Symmetric key is gotten, "currentUser" obviously was lost and has to be set.
-        Go on with 2.
-     b) Symmetric key cannot be found. Trigger registration mail.
-     c) Symmetric key cannot be received, because the user is not authenticated. Trigger login mail. 
-  2. "currentUser" local storage property is set.
-     Symmetric key is tried to receive.
-     a) Symmetric key cannot be found. Trigger registration mail.
-     b) Symmetric key cannot be received, because the user is not authenticated. Trigger login mail. 
-     c) Symmetric key can be received.
-        - Successfully decrypt private key. User is logged in.
-        - Private key cannot be decrypted.
-          Either device id is missing or private key is missing or something else went wrong.
-          Device has to be reregistered.
-          - Create and register device id and encrypt private key. User is logged in.
-  3. User comes with login token
-     Set "currentUser" local storage property and go on with 2. 
-  4. User comes with registration token.
-     Create symmetric key, register device. User is logged in.
-  */
   const [user, setUser] = useState<Email>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
+  const [settings, setSettings] = useState<SettingsType | undefined>();
   useEffect(() => {
     ui("theme", "#1176f3");
   }, []);
+
+  useEffect(() => {
+    if (user && keyPairs && !settings) {
+      documentService
+        .getSettings(
+          user,
+          keyPairs.mainKeyPair.publicKey,
+          keyPairs.mainKeyPair.privateKey,
+        )
+        .then((s) => setSettings(s));
+    }
+  }, [user, keyPairs, settings]);
+
   if (!user || !keyPairs) {
     return (
       <AuthenticationComponent
@@ -76,32 +70,50 @@ function App() {
       />
     );
   }
+
+  if (!settings) {
+    return (
+      <dialog className="surface-bright" open>
+        Loading settings...
+      </dialog>
+    );
+  }
+
   return (
-    <AuthenticationContext.Provider value={{ user, keyPairs }}>
-      <ActionBarContextProvider>
-        <BrowserRouter>
-          <AppBar />
-          <Navigation className="left max l" />
-          <Navigation className="left m" />
-          <Routes>
-            <Route element={<BottomNavLayout />}>
-              <Route path="/" element={<Activities />} />
-              <Route path="images">
-                <Route index element={<Images />} />
-                <Route path=":id" element={<Image />} />
+    <AuthenticationContext.Provider value={{ user, keyPairs, settings }}>
+      <SettingsContext.Provider
+        value={{
+          settingsKey: settings.settingsKey,
+          documentsId: settings.documents,
+          chatsId: settings.chats,
+          profileId: settings.profile,
+        }}
+      >
+        <ActionBarContextProvider>
+          <BrowserRouter>
+            <AppBar />
+            <Navigation className="left max l" />
+            <Navigation className="left m" />
+            <Routes>
+              <Route element={<BottomNavLayout />}>
+                <Route path="/" element={<Activities />} />
+                <Route path="images">
+                  <Route index element={<Images />} />
+                  <Route path=":id" element={<Image />} />
+                </Route>
+                <Route path="chats" element={<Chats />} />
+                <Route path="settings">
+                  <Route index element={<Settings />} />
+                  <Route path="profile" element={user && <Profile />} />
+                  <Route path="devices" element={user && <Devices />} />
+                </Route>
               </Route>
-              <Route path="chats" element={<Chats />} />
-              <Route path="settings">
-                <Route index element={<Settings />} />
-                <Route path="profile" element={user && <Profile />} />
-                <Route path="devices" element={user && <Devices />} />
-              </Route>
-            </Route>
-            <Route path="chats/:contactEmail" element={<ChatRoute />} />
-          </Routes>
-          <aside></aside>
-        </BrowserRouter>
-      </ActionBarContextProvider>
+              <Route path="chats/:contactEmail" element={<ChatRoute />} />
+            </Routes>
+            <aside></aside>
+          </BrowserRouter>
+        </ActionBarContextProvider>
+      </SettingsContext.Provider>
     </AuthenticationContext.Provider>
   );
 }
