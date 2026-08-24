@@ -456,25 +456,25 @@ export async function prepareMarysDocuments() {
         "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a.json",
       ),
     );
-	provider
-	  .addInteraction()
-	  .uponReceiving(
-	    "a request of mary to get content 330e1a82-6626-4a4b-b1ca-9c8a59c859e4 of document f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-	  )
-	  .withRequest(
-	    "GET",
-	    "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
-	    (r) =>
-	      r.headers({
-	        Accept: "application/octet-stream",
-	      }),
-	  )
-	  .willRespondWith(200, (r) =>
-	    r.binaryFile(
-	      "application/octet-stream",
-	      "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
-	    ),
-	  );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get content 330e1a82-6626-4a4b-b1ca-9c8a59c859e4 of document f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+    )
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+      ),
+    );
   provider
     .addInteraction()
     .uponReceiving(
@@ -513,26 +513,25 @@ export async function prepareMarysDocuments() {
         "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a.json",
       ),
     );
-	return provider
-	  .addInteraction()
-	  .uponReceiving(
-	    "a request of mary to get content 7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0 of document bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-	  )
-	  .withRequest(
-	    "GET",
-	    "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
-	    (r) =>
-	      r.headers({
-	        Accept: "application/octet-stream",
-	      }),
-	  )
-	  .willRespondWith(200, (r) =>
-	    r.binaryFile(
-	      "application/octet-stream",
-	      "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
-	    ),
-	  );
-
+  return provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get content 7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0 of document bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+    )
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+      ),
+    );
 }
 
 export async function prepareMarysProfileContents() {

@@ -133,7 +133,7 @@ export const cryptoService = {
         "decryptKey imported: " + JSON.stringify(publicKeyOrSymmetricKey),
       );
       try {
-		console.log("encrypted: " + encrypted)
+        console.log("encrypted: " + encrypted);
         const decryptedKey = await decryptAESGCM(
           base64ToArrayBuffer(encrypted),
           cryptoKey,

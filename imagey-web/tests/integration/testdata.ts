@@ -15,7 +15,7 @@ export interface TestDocument {
   documentId: string;
   name: string;
   metadata?: string;
-  key?: JsonWebKey
+  key?: JsonWebKey;
 }
 
 export interface TestUser<
@@ -35,7 +35,15 @@ export interface TestUser<
 export interface TestDataStructure {
   mary: TestUser<
     [TestDevice, TestDevice],
-    [TestDocument, TestDocument, TestDocument, TestDocument, TestDocument, TestDocument, TestDocument]
+    [
+      TestDocument,
+      TestDocument,
+      TestDocument,
+      TestDocument,
+      TestDocument,
+      TestDocument,
+      TestDocument,
+    ]
   >;
   alice: TestUser<
     [TestDevice, TestDevice],
@@ -111,50 +119,50 @@ export const TestData: TestDataStructure = {
       k: "KIPiBHgacwR9iAz9BCFkLlw9vgtTXYFvSrRTILDD0bs",
     },
     documents: [
-		{
-			documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
-			name: "Documents",
-			metadata: "",
-			key: 			{
-			  alg: "A256GCM",
-			  ext: true,
-			  k: "f3R0OqL-AJLZrjCuTothiDzOfGbG0Rc0theoayM9fjM",
-			  key_ops: ["encrypt", "decrypt"],
-			  kty: "oct"
-			}
-		},
-		{
-			documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-			name: "",
-			metadata: "",
-			decryptedMetadata: 			{
-			    name: "beach-4524911_1920.jpg",
-			    type: "image/jpeg",
-			    size: "3334311",
-			    contentId: "f232a44d-6396-42bb-9196-f0013d46ded5",
-			    smallImageId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-			    previewImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4"
-			},
-			key: {
-				alg: "A256GCM",
-				  ext: true,
-				  k: "5SWIR8VDyuwNU3MkjdULIHKqWbpDdj-z-mCvShtL4SA",
-				  key_ops: ["encrypt", "decrypt"],
-				  kty: "oct"
-			}	
-		},
-		{
-			documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-			name: "",
-			metadata: "",
-			key: {
-				alg: "A256GCM",
-				  ext: true,
-				  k: "NWx3KUTQIOMBUKIcF7aOoIuCsRiaNeUo5hcHBfHSoI8",
-				  key_ops: ["encrypt", "decrypt"],
-				  kty: "oct"
-			}	
-		},
+      {
+        documentId: "68980188-577d-4d2f-9e36-a6b32b25cd3a",
+        name: "Documents",
+        metadata: "",
+        key: {
+          alg: "A256GCM",
+          ext: true,
+          k: "f3R0OqL-AJLZrjCuTothiDzOfGbG0Rc0theoayM9fjM",
+          key_ops: ["encrypt", "decrypt"],
+          kty: "oct",
+        },
+      },
+      {
+        documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+        name: "",
+        metadata: "",
+        decryptedMetadata: {
+          name: "beach-4524911_1920.jpg",
+          type: "image/jpeg",
+          size: "3334311",
+          contentId: "f232a44d-6396-42bb-9196-f0013d46ded5",
+          smallImageId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+          previewImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+        },
+        key: {
+          alg: "A256GCM",
+          ext: true,
+          k: "5SWIR8VDyuwNU3MkjdULIHKqWbpDdj-z-mCvShtL4SA",
+          key_ops: ["encrypt", "decrypt"],
+          kty: "oct",
+        },
+      },
+      {
+        documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+        name: "",
+        metadata: "",
+        key: {
+          alg: "A256GCM",
+          ext: true,
+          k: "NWx3KUTQIOMBUKIcF7aOoIuCsRiaNeUo5hcHBfHSoI8",
+          key_ops: ["encrypt", "decrypt"],
+          kty: "oct",
+        },
+      },
       {
         documentId: "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb",
         name: "child-355176_1920.jpg",

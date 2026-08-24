@@ -1,25 +1,30 @@
 import { cryptoService } from "../authentication/CryptoService";
 import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
 
-const cache: Map<string, ArrayBuffer> = new Map();
-
 export const documentRepository = {
   uploadDocument: async (
     email: string,
-    metadata: ArrayBuffer,
+    folderId: string,
+    folderContent: ArrayBuffer,
+    documentId: string,
+    documentContent: ArrayBuffer,
     sharedKey: {
-      issuerType?: string;
       issuer: string;
       kid: string;
       sharedKey: string;
     },
-    content: ArrayBuffer[],
+    files: { filename: string; buffer: ArrayBuffer }[],
   ): Promise<string> => {
-    /*
-	    const formData = new FormData();
+    const formData = new FormData();
+    formData.append("folderId", folderId);
     formData.append(
-      "metadata",
-      new Blob([metadata], { type: "application/octet-stream" }),
+      "folder",
+      new Blob([folderContent], { type: "application/octet-stream" }),
+    );
+    formData.append("documentId", documentId);
+    formData.append(
+      "document",
+      new Blob([documentContent], { type: "application/octet-stream" }),
     );
     formData.append(
       "key",
@@ -28,26 +33,11 @@ export const documentRepository = {
       }),
       "key",
     );
-    formData.append("issuer", sharedKey.issuer);
-    if (content.length > 0) {
+    for (const file of files) {
       formData.append(
-        "content",
-        new Blob([content[0]], { type: "application/octet-stream" }),
-        "content",
-      );
-    }
-    if (content.length > 1) {
-      formData.append(
-        "smallImage",
-        new Blob([content[1]], { type: "application/octet-stream" }),
-        "smallImage",
-      );
-    }
-    if (content.length > 2) {
-      formData.append(
-        "previewImage",
-        new Blob([content[2]], { type: "application/octet-stream" }),
-        "previewImage",
+        "files",
+        new Blob([file.buffer], { type: "application/octet-stream" }),
+        file.filename,
       );
     }
 
@@ -60,8 +50,7 @@ export const documentRepository = {
       const location = response.headers.get("Location");
       if (!location) throw new Error("No location header");
       return Promise.resolve(location.substring(location.lastIndexOf("/") + 1));
-    });*/
-    return Promise.reject();
+    });
   },
 
   loadDocument: async (

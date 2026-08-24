@@ -45,47 +45,22 @@ export const documentService = {
   storeDocument: async (
     email: string,
     file: File,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-    parentFolderId?: string,
-    parentFolderKey?: JsonWebKey,
+    parentFolder: Document,
+    parentFolderKey: JsonWebKey,
   ): Promise<DocumentMetadata> => {
-    /*
     const buffers: ArrayBuffer[] =
       file.size > 0 ? [await file.arrayBuffer()] : [];
     const documentKey = await cryptoService.generateSymmetricKey();
+    const documentId = cryptoService.generateUuid();
+    const contentId = cryptoService.generateUuid();
     const documentMetadata: DocumentMetadata = {
-      documentId: "",
+      documentId: documentId,
       name: file.name,
       type: file.type,
       size: file.size,
       key: documentKey,
+      contentId,
     };
-
-    let encryptedDocumentKeyString: string;
-    let issuer: string;
-
-    if (parentFolderId && parentFolderId !== email && parentFolderKey) {
-      encryptedDocumentKeyString = await cryptoService.encryptMessage(
-        JSON.stringify(documentKey),
-        parentFolderKey,
-      );
-      issuer = email;
-    } else {
-      encryptedDocumentKeyString = await cryptoService.encryptKey(
-        documentKey,
-        publicKey,
-        privateKey,
-      );
-      issuer = email;
-    }
-
-    const encryptedDocumentKey = {
-      issuer,
-      kid: parentFolderId && parentFolderId !== email ? parentFolderId : "0",
-      sharedKey: encryptedDocumentKeyString,
-    };
-
     if (imageService.isImage(file.type)) {
       const scaledImages = await imageService.scale(file);
       buffers.push(scaledImages.smallImage);
@@ -93,45 +68,52 @@ export const documentService = {
       documentMetadata.smallImageId = cryptoService.generateUuid();
       documentMetadata.previewImageId = cryptoService.generateUuid();
     }
-
-    const payload = JSON.stringify({
-      name: documentMetadata.name,
-      type: documentMetadata.type,
-      size: documentMetadata.size,
-      smallImageId: documentMetadata.smallImageId,
-      previewImageId: documentMetadata.previewImageId,
-      documents: file.type === "Folder" ? [] : undefined,
-    });
-    const payloadBuffer = new TextEncoder().encode(payload).buffer;
-    const encryptedPayload = await cryptoService.encryptDocument(documentKey, [
-      payloadBuffer,
-    ]);
-
-    const encryptedDocuments = await cryptoService.encryptDocument(
+    const newDocuments = parentFolder.documents
+      ? [...parentFolder.documents, documentId]
+      : [documentId];
+    const newParentFolder = { ...parentFolder, documents: newDocuments };
+    const newEncryptedParent = await cryptoService.encryptDocument(
+      parentFolderKey,
+      [new TextEncoder().encode(JSON.stringify(newParentFolder)).buffer],
+    );
+    const encryptedKey = await cryptoService.encryptKey(
       documentKey,
-      buffers,
+      parentFolderKey,
     );
-
-    const documentId = await documentRepository.uploadDocument(
-      email,
-      encryptedPayload[0],
-      encryptedDocumentKey,
-      encryptedDocuments,
-    );
-
-    documentMetadata.documentId = documentId;
-
-    if (parentFolderId && parentFolderId !== email && parentFolderKey) {
-      await documentService.addDocumentToFolder(
-        email,
-        parentFolderId,
-        parentFolderKey,
-        documentId,
-      );
+    const encryptedContent = await cryptoService.encryptDocument(documentKey, [
+      new TextEncoder().encode(JSON.stringify(documentMetadata)).buffer,
+      ...buffers,
+    ]);
+    const encryptedDocumentKey = {
+      issuer: email,
+      kid: parentFolder.documentId,
+      sharedKey: encryptedKey,
+    };
+    const files: { filename: string; buffer: ArrayBuffer }[] = [
+      { filename: contentId, buffer: encryptedContent[1] },
+    ];
+    if (documentMetadata.smallImageId) {
+      files.push({
+        filename: documentMetadata.smallImageId,
+        buffer: encryptedContent[2],
+      });
     }
+    if (documentMetadata.previewImageId) {
+      files.push({
+        filename: documentMetadata.previewImageId,
+        buffer: encryptedContent[3],
+      });
+    }
+    documentRepository.uploadDocument(
+      email,
+      parentFolder.documentId,
+      newEncryptedParent[0],
+      documentId,
+      encryptedContent[0],
+      encryptedDocumentKey,
+      files,
+    );
     return documentMetadata;
-	*/
-    return Promise.reject();
   },
   getSettings: async (
     user: UserId,

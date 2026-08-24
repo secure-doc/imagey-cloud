@@ -594,7 +594,7 @@ test("existing user authenticates via challenge-response on existing device", as
   page,
 }) => {
   // Given
-  await prepareEmptyMarysDocuments();
+  await prepareMarysDocuments();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -628,7 +628,7 @@ test("existing user authenticates via challenge-response on existing device", as
       }),
     );
 
-  await provider
+  provider
     .addInteraction()
     .given("marys second device registered")
     .given("User has invalid token")
@@ -665,7 +665,7 @@ test("existing user authenticates via challenge-response on existing device", as
       }),
     );
 
-  await provider
+  provider
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
@@ -687,7 +687,7 @@ test("existing user authenticates via challenge-response on existing device", as
       ),
     );
 
-  await provider
+  provider
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
@@ -712,7 +712,7 @@ test("existing user authenticates via challenge-response on existing device", as
       ),
     );
 
-  await provider
+  provider
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
@@ -723,7 +723,7 @@ test("existing user authenticates via challenge-response on existing device", as
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
-  await provider
+  provider
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
