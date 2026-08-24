@@ -85,7 +85,7 @@ export const profileService = {
       }
 
       const metadata: EncryptedDocumentMetadata = await response.json();
-      const docMetadata = await documentService.loadDocument(
+      const docMetadata = await documentService.loadDocumentFile(
         user,
         metadata,
         publicKey,

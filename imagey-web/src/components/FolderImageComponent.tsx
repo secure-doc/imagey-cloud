@@ -29,10 +29,7 @@ export default function FolderImageComponent({
       alt={folder.name}
       loading="lazy"
       className={className}
-      onClick={() => {
-        console.log("Folder clicked!", folder.documentId);
-        if (onClick) onClick();
-      }}
+      onClick={onClick}
       style={{ cursor: onClick ? "pointer" : "default" }}
     />
   );

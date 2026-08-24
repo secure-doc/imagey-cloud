@@ -15,7 +15,8 @@ export const documentRepository = {
     },
     content: ArrayBuffer[],
   ): Promise<string> => {
-    const formData = new FormData();
+    /*
+	    const formData = new FormData();
     formData.append(
       "metadata",
       new Blob([metadata], { type: "application/octet-stream" }),
@@ -59,13 +60,14 @@ export const documentRepository = {
       const location = response.headers.get("Location");
       if (!location) throw new Error("No location header");
       return Promise.resolve(location.substring(location.lastIndexOf("/") + 1));
-    });
+    });*/
+    return Promise.reject();
   },
 
   loadDocument: async (
     email: string,
     documentId: string,
-  ): Promise<{ metadata: ArrayBuffer; etag: string | null }> => {
+  ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
     const url = `/users/${email}/documents/${documentId}`;
     const response = await fetch(url, {
       method: "GET",
@@ -75,9 +77,9 @@ export const documentRepository = {
       credentials: "same-origin",
     });
     return resolve(response, async () => {
-      const metadata = await response.arrayBuffer();
+      const content = await response.arrayBuffer();
       const etag = response.headers.get("ETag");
-      return { metadata, etag };
+      return { content, etag };
     });
   },
 
@@ -86,6 +88,7 @@ export const documentRepository = {
     documentId: string,
     folderId?: string,
   ): Promise<{ metadata: EncryptedDocumentMetadata; etag: string | null }> => {
+    /*
     let url = `/users/${email}/documents/${documentId}`;
     if (folderId) {
       url += "?folderId=" + encodeURIComponent(folderId);
@@ -101,7 +104,8 @@ export const documentRepository = {
       const metadata = await response.json();
       const etag = response.headers.get("ETag");
       return { metadata, etag };
-    });
+    });*/
+    return Promise.reject();
   },
 
   updateDocumentMetadata: async (
@@ -110,6 +114,7 @@ export const documentRepository = {
     metadata: ArrayBuffer,
     etag?: string,
   ): Promise<void> => {
+    /*
     const headers: Record<string, string> = {
       "Content-Type": "application/octet-stream",
     };
@@ -124,12 +129,15 @@ export const documentRepository = {
       body: metadata,
     });
     return resolve(response, () => Promise.resolve());
+	*/
+    return Promise.reject();
   },
 
   loadDocuments: async (
     email: string,
     folderId?: string,
   ): Promise<EncryptedDocumentMetadata[]> => {
+    /*
     let url = "/users/" + email + "/documents";
     if (folderId) {
       url += "?folderId=" + encodeURIComponent(folderId);
@@ -143,21 +151,22 @@ export const documentRepository = {
       cache: "no-cache",
     });
     return resolve(response, () => response.json());
+	*/
   },
 
   loadKey: async (
     email: string,
     documentId: string,
-    shareEmail?: string,
+    kid: string,
   ): Promise<{
     issuerType?: string;
     issuer: string;
     kid: string;
     sharedKey: string;
   }> => {
-    const targetEmail = shareEmail ?? email;
+    const targetKid = kid ?? email;
     const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/keys/" + targetEmail,
+      "/users/" + email + "/documents/" + documentId + "/keys/" + targetKid,
       {
         method: "GET",
         headers: {
@@ -173,15 +182,8 @@ export const documentRepository = {
     email: string,
     documentId: string,
     contentId: string,
-    noCache?: boolean,
   ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
     const path = `/users/${email}/documents/${documentId}/files/${contentId}`;
-    if (!noCache) {
-      const cachedValue = cache.get(path);
-      if (cachedValue) {
-        return { content: cachedValue, etag: null };
-      }
-    }
     const response = await fetch(path, {
       method: "GET",
       headers: {
@@ -191,9 +193,6 @@ export const documentRepository = {
       cache: "no-cache",
     });
     const content = await resolve(response, () => response.arrayBuffer());
-    if (!noCache) {
-      cache.set(path, content);
-    }
     return { content, etag: response.headers.get("ETag") };
   },
 
@@ -203,6 +202,7 @@ export const documentRepository = {
     shareEmail: string,
     key: { issuer: string; kid: string; sharedKey: string },
   ): Promise<void> => {
+    /*
     const response = await fetch(
       "/users/" + email + "/documents/" + documentId + "/keys/" + shareEmail,
       {
@@ -215,6 +215,8 @@ export const documentRepository = {
       },
     );
     return resolve(response, () => Promise.resolve());
+	*/
+    return Promise.reject();
   },
 };
 

@@ -1,6 +1,6 @@
 import { UserId } from "../authentication/UserId";
 import { contactRepository } from "../contact/ContactRepository";
-import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
+import DocumentMetadata from "../document/DocumentMetadata";
 import { documentService } from "../document/DocumentService";
 import {
   Activity,
@@ -12,22 +12,34 @@ import {
 export const activityService = {
   getActivities: async (
     user: UserId,
-    keyPair: JsonWebKeyPair,
+    settingsKey: JsonWebKey,
+    documentsId: string,
   ): Promise<Activity[]> => {
     const contactRequests = await contactRepository.getContactRequests(user);
-    const rootFolder = await documentService.getRootFolder(
+    const rootFolder = await documentService.loadDocument(
       user,
-      keyPair.publicKey,
-      keyPair.privateKey,
-    );
-    const images = await documentService.loadDocuments(
+      documentsId,
       user,
-      keyPair.publicKey,
-      keyPair.privateKey,
-      rootFolder.documentId,
-      rootFolder.key,
+      settingsKey,
     );
-
+    let documents: DocumentMetadata[] = [];
+    if (rootFolder.documents && rootFolder.key) {
+      const rootFolderKey = rootFolder.key;
+      documents = await Promise.all(
+        rootFolder.documents.map(async (documentId) => {
+          const doc = await documentService.loadDocument(
+            user,
+            documentId,
+            documentsId,
+            rootFolderKey,
+          );
+          console.log(
+            "key in activityService.getActivities: " + JSON.stringify(doc.key),
+          );
+          return doc;
+        }),
+      );
+    }
     const activities: Activity[] = [
       ...contactRequests.map(
         (request): InvitationActivity => ({
@@ -36,7 +48,7 @@ export const activityService = {
           userId: request.userId,
         }),
       ),
-      ...images.map(
+      ...documents.map(
         (image): ImageActivity => ({
           id: `image-${image.documentId}`,
           type: ActivityType.IMAGE,

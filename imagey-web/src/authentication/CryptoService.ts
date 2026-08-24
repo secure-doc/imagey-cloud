@@ -1,6 +1,6 @@
-import { MessageContent } from "../chat/Message";
-import { Nonce } from "./AuthenticationService";
-import { DeviceId, Password } from "./UserId";
+import { MessageContent } from "../chat/Message.ts";
+import { Nonce } from "./AuthenticationService.ts";
+import { DeviceId, Password } from "./UserId.ts";
 
 export type EncryptedKey = string;
 export type EncryptedContent = string;
@@ -79,45 +79,78 @@ export const cryptoService = {
 
   encryptKey: async (
     keyToEncrypt: JsonWebKey,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
+    publicKeyOrSymmetricKey: JsonWebKey,
+    privateKey?: JsonWebKey,
   ): Promise<EncryptedKey> => {
-    const derivedKey = await deriveKey(privateKey, publicKey);
-    const plaintext = new TextEncoder().encode(JSON.stringify(keyToEncrypt));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      derivedKey,
-      plaintext,
-    );
+    if (privateKey) {
+      const derivedKey = await deriveKey(privateKey, publicKeyOrSymmetricKey);
+      const plaintext = new TextEncoder().encode(JSON.stringify(keyToEncrypt));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encrypted = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        derivedKey,
+        plaintext,
+      );
 
-    const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(encrypted), iv.byteLength);
+      const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
+      combined.set(iv, 0);
+      combined.set(new Uint8Array(encrypted), iv.byteLength);
 
-    const base64 = arrayBufferToBase64(combined.buffer);
-
-    return base64;
+      return arrayBufferToBase64(combined.buffer);
+    } else {
+      const cryptoKey = await importSymmetricKey(publicKeyOrSymmetricKey);
+      const encrypted = await encryptAESGCM(
+        new TextEncoder().encode(JSON.stringify(keyToEncrypt))
+          .buffer as ArrayBuffer,
+        cryptoKey,
+      );
+      return arrayBufferToBase64(encrypted);
+    }
   },
 
   decryptKey: async (
-    encryptedBase64: EncryptedKey,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
+    encrypted: EncryptedKey,
+    publicKeyOrSymmetricKey: JsonWebKey,
+    privateKey?: JsonWebKey,
   ): Promise<JsonWebKey> => {
-    const combined = base64ToArrayBuffer(encryptedBase64);
-    const iv = combined.slice(0, 12);
-    const ciphertext = combined.slice(12);
+    if (privateKey) {
+      const combined = base64ToArrayBuffer(encrypted);
+      const iv = combined.slice(0, 12);
+      const ciphertext = combined.slice(12);
 
-    const derivedKey = await deriveKey(privateKey, publicKey);
-    const decryptedBytes = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: new Uint8Array(iv) },
-      derivedKey,
-      ciphertext,
-    );
-    const text = new TextDecoder().decode(decryptedBytes);
-    const keyToDecrypt = JSON.parse(text);
-    return keyToDecrypt;
+      const derivedKey = await deriveKey(privateKey, publicKeyOrSymmetricKey);
+      const decryptedBytes = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: new Uint8Array(iv) },
+        derivedKey,
+        ciphertext,
+      );
+      const text = new TextDecoder().decode(decryptedBytes);
+      const keyToDecrypt = JSON.parse(text);
+      return keyToDecrypt;
+    } else {
+      const cryptoKey = await importSymmetricKey(publicKeyOrSymmetricKey);
+      console.log(
+        "decryptKey imported: " + JSON.stringify(publicKeyOrSymmetricKey),
+      );
+      try {
+		console.log("encrypted: " + encrypted)
+        const decryptedKey = await decryptAESGCM(
+          base64ToArrayBuffer(encrypted),
+          cryptoKey,
+        );
+        console.log("key decrypted");
+        const text = new TextDecoder().decode(decryptedKey);
+        return JSON.parse(text);
+      } catch (e) {
+        console.log(
+          "failed to decrypt " +
+            encrypted +
+            " with key " +
+            JSON.stringify(publicKeyOrSymmetricKey),
+        );
+        throw e;
+      }
+    }
   },
 
   encryptDocument: async (
@@ -156,7 +189,6 @@ export const cryptoService = {
 
     return arrayBufferToBase64(combined.buffer);
   },
-
   encryptMessage: async (
     message: MessageContent,
     key: JsonWebKey,

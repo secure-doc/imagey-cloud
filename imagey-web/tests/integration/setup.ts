@@ -236,6 +236,41 @@ export async function prepareMarysLogin(page: Page) {
         key: TestData.mary.devices[0].encryptedPrivateMainKey,
       }),
     );
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get settings document")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/mary@imagey.cloud/document.enc",
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get settings key")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+      ),
+    );
+
   await setupMarysDevice(page);
 }
 
@@ -349,95 +384,12 @@ export async function prepareJoesLogin(page: Page) {
 }
 
 export async function prepareMarysDocuments() {
-  await prepareMarysRootFolder();
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "root-folder-id" }).headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody([
-        {
-          documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-          metadata:
-            "2OQTYRVrHbaTeRzMcQpy9gD5WmAGRWf64hN82P+CkWwqP+H4bDKxPFY3NO2QOEdnkCs2NIz+dpNA7XUMdpvzUcyYY4fpIvsJrtzRl4wkhlLo6Dd2yAVZ6Qzd0YY2p9VKV1rGJ1m2d8Ci2k/6tIoDzyZv9GgC1V7qetWcCaG1rYkJPU1KG0Kqdc+r+IJcVwkwDqtrVcWZok0mlvNM0jtQ4XF8QVeYx1qwwVu6gPN3beHYEgidAKXBwg/BsgVz5MdHlKEi0pv0pPkLbPOo8QDVu+1+wWbf345C7BMJCn3uCRIQVbVYa85HvsiV7Ho+mf2rzd564Q7wT0YZVYgfX425inI=",
-          sharedKey: {
-            issuerType: "FOLDER",
-            issuer: "root-folder-id",
-            kid: "0",
-            sharedKey: fs.readFileSync(
-              path.resolve(
-                process.cwd(),
-                `tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/root-folder-id/encrypted-shared.key`,
-              ),
-              "base64",
-            ),
-          },
-        },
-        {
-          documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-          metadata:
-            "BwEtcDjTQejb5vMpd/3xT1vtdaRPGeRPErhdVmtyfI36iDNjQs2nCWTEwNsvqXCDem++/DZiEH3ezfp3VNpOhRLMwJ1uMlvI6+r16d+ZjYeeSqweGa95h+00c7fKj3eFEmkPbXABGEoUW16JWVnHwwhoPhKvVKVBpgBxUOMrnqmjQgA4kNFyAPVWC/P4nR80/Ox5ibx+jeT/Lv8GdK8HFJcoiZEDsgzFaon3paw6/980934UHWqYz4ynsvFlaYCzYuM8WfTl9ByZVxcNIv8jJbrj9A6jqqY4uWu8gNOpT8V9Kt+Wqf3R9rhlw7a03/ZAndvuAtGM9hbz5qOCHWM7c1E=",
-          sharedKey: {
-            issuerType: "FOLDER",
-            issuer: "root-folder-id",
-            kid: "0",
-            sharedKey: fs.readFileSync(
-              path.resolve(
-                process.cwd(),
-                `tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/root-folder-id/encrypted-shared.key`,
-              ),
-              "base64",
-            ),
-          },
-        },
-      ]),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get root folder document metadata")
+    .uponReceiving("a request of mary to get document root")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/root-folder-id",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "root-folder-id",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/root-folder-id/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      }),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get settings document")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
+      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -446,15 +398,15 @@ export async function prepareMarysDocuments() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "tests/images/encrypted/mary@imagey.cloud/document.enc",
+        "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/document.enc",
       ),
     );
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get settings key")
+    .uponReceiving("a request of mary to get document root key")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
+      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -463,17 +415,17 @@ export async function prepareMarysDocuments() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+        "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud.json",
       ),
     );
   provider
     .addInteraction()
     .uponReceiving(
-      "a request of mary to get content with id 6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+      "a request of mary to get document f9910aa7-4db6-4b02-b596-c3ccf872ae98",
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -482,38 +434,55 @@ export async function prepareMarysDocuments() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+        "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/document.enc",
       ),
     );
-
   provider
     .addInteraction()
     .uponReceiving(
-      "a second request of mary to get content with id 6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b of document with id bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+      "a request of mary to get document key for f9910aa7-4db6-4b02-b596-c3ccf872ae98",
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
-          Accept: "application/octet-stream",
+          Accept: "application/json",
         }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+        "application/json",
+        "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a.json",
       ),
     );
-
+	provider
+	  .addInteraction()
+	  .uponReceiving(
+	    "a request of mary to get content 330e1a82-6626-4a4b-b1ca-9c8a59c859e4 of document f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+	  )
+	  .withRequest(
+	    "GET",
+	    "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+	    (r) =>
+	      r.headers({
+	        Accept: "application/octet-stream",
+	      }),
+	  )
+	  .willRespondWith(200, (r) =>
+	    r.binaryFile(
+	      "application/octet-stream",
+	      "tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+	    ),
+	  );
   provider
     .addInteraction()
     .uponReceiving(
-      "a request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+      "a request of mary to get document bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
+      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -522,29 +491,48 @@ export async function prepareMarysDocuments() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
+        "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/document.enc",
       ),
     );
-
-  return provider
+  provider
     .addInteraction()
     .uponReceiving(
-      "a second request of mary to get content with id f232a44d-6396-42bb-9196-f0013d46ded5 of document with id f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+      "a request of mary to get document key for bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
+      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
-          Accept: "application/octet-stream",
+          Accept: "application/json",
         }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/f232a44d-6396-42bb-9196-f0013d46ded5",
+        "application/json",
+        "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a.json",
       ),
     );
+	return provider
+	  .addInteraction()
+	  .uponReceiving(
+	    "a request of mary to get content 7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0 of document bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+	  )
+	  .withRequest(
+	    "GET",
+	    "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+	    (r) =>
+	      r.headers({
+	        Accept: "application/octet-stream",
+	      }),
+	  )
+	  .willRespondWith(200, (r) =>
+	    r.binaryFile(
+	      "application/octet-stream",
+	      "tests/images/encrypted/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+	    ),
+	  );
+
 }
 
 export async function prepareMarysProfileContents() {

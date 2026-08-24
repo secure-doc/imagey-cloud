@@ -39,7 +39,7 @@ export default function Profile() {
                 auth.user,
                 p.profilePictureId,
               );
-            const picMetadata = await documentService.loadDocument(
+            const picMetadata = await documentService.loadDocumentFile(
               auth.user,
               encryptedPicMetadata,
               auth.keyPairs.mainKeyPair.publicKey,

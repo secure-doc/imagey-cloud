@@ -25,6 +25,7 @@ test("display image activity in panel", async ({ page }) => {
   // When
   await provider.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
+    page.on("console", (msg) => console.log(msg.text()));
     await loginAsMary(page);
     await page.getByRole("link", { name: "Home" }).click();
 

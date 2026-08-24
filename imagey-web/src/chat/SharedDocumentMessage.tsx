@@ -32,7 +32,7 @@ export function SharedDocumentMessage({
         .loadDocumentMetadata(owner, documentId)
         .then(({ metadata }) => {
           if (user === owner) {
-            return documentService.loadDocument(
+            return documentService.loadDocumentFile(
               owner,
               metadata,
               publicKey,

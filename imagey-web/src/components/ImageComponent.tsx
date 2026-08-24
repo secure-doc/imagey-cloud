@@ -1,14 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import DocumentMetadata from "../document/DocumentMetadata";
 import { documentService } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
+import Document from "../document/Document";
 
 export default function ImageComponent({
   image,
   className = "small-width small-height",
 }: {
-  image: DocumentMetadata;
+  image: Document;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -29,14 +29,9 @@ export default function ImageComponent({
     }
 
     if (user && publicMainKey && privateMainKey) {
+      console.log("imageComponent: " + image.key);
       documentService
-        .loadDocumentContent(
-          user,
-          image,
-          publicMainKey,
-          privateMainKey,
-          image.sharedKey,
-        )
+        .loadDocumentContent(user, image)
         .then((doc) => {
           if (doc.content) {
             setContent(doc.content);

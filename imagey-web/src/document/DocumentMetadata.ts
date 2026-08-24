@@ -3,6 +3,7 @@ export default interface DocumentMetadata {
   name: string;
   type?: string;
   size?: number;
+  contentId?: string;
   smallImageId?: string;
   previewImageId?: string;
   documents?: string[];

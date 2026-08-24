@@ -9,26 +9,28 @@ import { activityService } from "../activity/ActivityService";
 import { contactRepository } from "../contact/ContactRepository";
 import { Contact } from "../contact/Contact";
 import { ActivityType } from "../activity/Activity";
+import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
 
 export default function Activities() {
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
-  const keyPair = authentication.keyPairs.mainKeyPair;
 
   const [activities, setActivities] = useState<Activity[]>();
   const [contacts, setContacts] = useState<Contact[]>();
+  const settingsKey = useSettingsKey();
+  const documentsId = useDocumentsId();
 
   useEffect(() => {
     activityService
-      .getActivities(user, keyPair)
+      .getActivities(user, settingsKey, documentsId)
       .then((activities) => setActivities(activities))
       .catch((e) => console.error("Failed to fetch activities", e));
     contactRepository
       .getContacts(user)
       .then((contacts) => setContacts(contacts))
       .catch((e) => console.error("Failed to fetch contacts", e));
-  }, [user, keyPair]);
+  }, [user, settingsKey, documentsId]);
 
   return (
     <main
