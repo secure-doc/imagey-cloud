@@ -27,9 +27,9 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.Files.writeString;
 import static java.util.Optional.empty;
 import static org.apache.commons.io.FileUtils.copyDirectory;
+import static org.apache.commons.io.FileUtils.copyFile;
 import static org.apache.commons.io.FileUtils.copyURLToFile;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
-import static org.apache.commons.io.FileUtils.writeByteArrayToFile;
 import static org.apache.commons.io.FileUtils.writeStringToFile;
 
 import java.io.File;
@@ -57,6 +57,7 @@ import au.com.dius.pact.provider.junitsupport.State;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -70,6 +71,13 @@ import cloud.imagey.junit.GreenMail;
 public class ContractTest {
 
     private static final File TEST_DATA_DIRECTORY = new File("src/test/resources/data");
+    // Bill's public key below matches TestData.bill.publicMainKey in imagey-web's setup.ts -
+    // several Pact interactions assert its exact JWK content, not just its shape.
+    private static final String BILLS_PUBLIC_KEY = "{"
+        + "\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\","
+        + "\"x\":\"nwGwyL6D7-mpGv3ahjdgFz7-FxEFSZZqWio5TvGEHWc\","
+        + "\"y\":\"ubcX2RHk7odTGx6g7dgJpkhEBjzJ8YQ5q0wqtQc9Umc\""
+        + "}";
     @ConfigurationInject
     private static Meecrowave.Builder config;
     @Inject
@@ -91,6 +99,11 @@ public class ContractTest {
             deleteQuietly(data);
         }
         copyDirectory(TEST_DATA_DIRECTORY, data);
+        // Joe does not exist by default - src/test/resources/data/joe@imagey.cloud only models an
+        // already-registered account (settings/document-list/chat-list documents and their keys),
+        // which is wrong for the registration-flow interactions ("verify his email", "register joe").
+        // Interactions that DO need him already registered opt in via @State("Joe is registered").
+        deleteQuietly(new File(data, "joe@imagey.cloud"));
     }
 
     @TestTemplate
@@ -104,45 +117,96 @@ public class ContractTest {
             String method = request.getMethod();
 
             if ("POST".equals(method) && path.endsWith("/documents")) {
+                // The new document lands in the caller's tree; the folder it is added to belongs to
+                // metadata.folderOwner (the caller, for one's own folders). The consumer contract
+                // only pins the multipart content type and the 201 + Location response, so the exact
+                // ids here are free - we just make the referenced folder exist for the caller.
+                User owner = extractUser(request).orElseThrow();
+                DocumentId folderId = new DocumentId("00000000-0000-0000-0000-0000000f01de");
+                documentRepository.persist(owner, folderId, new EncryptedContent("folder".getBytes(UTF_8)));
+                String folderETag = documentRepository.getETag(owner, folderId).orElseThrow();
+
                 String boundary = "----WebKitFormBoundary";
                 request.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+                String metadata = "{\"folderOwner\":\"" + owner.email().address() + "\","
+                    + "\"folderId\":\"" + folderId.id() + "\","
+                    + "\"folderETag\":\"" + folderETag + "\","
+                    + "\"documentId\":\"11111111-1111-1111-1111-111111111111\","
+                    + "\"key\":{\"issuer\":\"" + owner.email().address() + "\","
+                    + "\"kid\":\"" + folderId.id() + "\",\"sharedKey\":\"AAAA\"}}";
                 String dummyBody = "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"metadata\"\r\n\r\n"
+                    + "Content-Disposition: form-data; name=\"metadata\"\r\n"
+                    + "Content-Type: application/json\r\n\r\n"
+                    + metadata + "\r\n"
+                    + "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"folder\"\r\n"
+                    + "Content-Type: application/octet-stream\r\n\r\n"
                     + "0\r\n"
                     + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"key\"\r\n\r\n"
+                    + "Content-Disposition: form-data; name=\"document\"\r\n"
+                    + "Content-Type: application/octet-stream\r\n\r\n"
                     + "0\r\n"
-                    + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"issuer\"\r\n\r\n"
-                    + "a\r\n"
                     + "--" + boundary + "--\r\n";
                 updatableRequest.setEntity(new StringEntity(dummyBody));
-            } else if ("PUT".equals(method) && path.endsWith("/profile")) {
+            } else if ("POST".equals(method) && path.equals("/users")) {
+                // extractUser() defaults to joe@imagey.cloud when the path carries no email segment
+                // (true for POST /users itself), so the token used for this request is always his -
+                // metadata.email below has to match that for registerUser's self-registration check
+                // to pass. The body is one JSON "metadata" part plus the four encrypted document
+                // blobs as binary parts (see UserResource#registerUser / RegistrationMetadata).
                 String boundary = "----WebKitFormBoundary";
                 request.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+                String dummyKey = "{\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\","
+                    + "\"x\":\"OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY\","
+                    + "\"y\":\"D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM\"}";
+                String metadata = "{"
+                    + "\"email\":\"joe@imagey.cloud\","
+                    + "\"deviceId\":\"2d9e9f58-2f39-408a-b3d7-e66e6a431b45\","
+                    + "\"devicePublicKey\":" + dummyKey + ","
+                    + "\"mainPublicKey\":" + dummyKey + ","
+                    + "\"encryptedPrivateKey\":\"dummy-private-key\","
+                    + "\"settingsKey\":{\"issuer\":\"joe@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"AAAA\"},"
+                    + "\"documentList\":{\"id\":\"22222222-2222-2222-2222-222222222222\","
+                    + "\"key\":{\"issuer\":\"joe@imagey.cloud\",\"kid\":\"joe@imagey.cloud\",\"sharedKey\":\"AAAA\"}},"
+                    + "\"chatList\":{\"id\":\"33333333-3333-3333-3333-333333333333\","
+                    + "\"key\":{\"issuer\":\"joe@imagey.cloud\",\"kid\":\"joe@imagey.cloud\",\"sharedKey\":\"AAAA\"}},"
+                    + "\"profile\":{\"id\":\"44444444-4444-4444-4444-444444444444\","
+                    + "\"key\":{\"issuer\":\"joe@imagey.cloud\",\"kid\":\"joe@imagey.cloud\",\"sharedKey\":\"AAAA\"}}"
+                    + "}";
                 String dummyBody = "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"metadata\"\r\n\r\n"
-                    + "0\r\n"
-                    + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"key\"\r\n\r\n"
-                    + "0\r\n"
-                    + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"issuer\"\r\n\r\n"
-                    + "a\r\n"
-                    + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"content\"\r\n\r\n"
-                    + "0\r\n"
+                    + "Content-Disposition: form-data; name=\"metadata\"\r\n"
+                    + "Content-Type: application/json\r\n\r\n"
+                    + metadata + "\r\n"
+                    + binaryPart(boundary, "settings")
+                    + binaryPart(boundary, "documentList")
+                    + binaryPart(boundary, "chatList")
+                    + binaryPart(boundary, "profile")
                     + "--" + boundary + "--\r\n";
                 updatableRequest.setEntity(new StringEntity(dummyBody));
+            } else if ("GET".equals(method) && path.startsWith("/invitations/")) {
+                // The consumer pins only the shape of the emailed link (any token) and of the
+                // 302 it produces. Point the request at a real, valid invitation token carrying
+                // joe as subject.
+                Token invitationToken = tokenService.generateToken(
+                    new User(new Email("joe@imagey.cloud")), ONE_DAY);
+                updatableRequest.setUri(create("http://localhost:" + config.getHttpPort()
+                    + "/invitations/" + invitationToken.token() + "?invited-by=mary@imagey.cloud"));
             } else if ("PUT".equals(method) && path.contains("users/mary%40imagey.cloud/documents")) {
                 int documentIdStart
                     = path.indexOf("users/mary%40imagey.cloud/documents") + "users/mary%40imagey.cloud/documents".length() + 1;
                 String documentId = path.substring(documentIdStart);
-                documentRepository.getTimestamp(new User(new Email("mary@imagey.cloud")), new DocumentId(documentId))
-                    .ifPresent(etag -> updatableRequest.setHeader("If-Match", etag));
+                documentRepository.getETag(new User(new Email("mary@imagey.cloud")), new DocumentId(documentId))
+                    .ifPresent(etag -> updatableRequest.setHeader("If-Match", "\"" + etag + "\""));
             }
         }
         context.verifyInteraction();
+    }
+
+    private static String binaryPart(String boundary, String name) {
+        return "--" + boundary + "\r\n"
+            + "Content-Disposition: form-data; name=\"" + name + "\"\r\n"
+            + "Content-Type: application/octet-stream\r\n\r\n"
+            + "0\r\n";
     }
 
     void joeExists() throws IOException {
@@ -156,9 +220,13 @@ public class ContractTest {
         settingsDoc.mkdirs();
         writeStringToFile(new File(settingsDoc, "metadata.enc"), "{}", UTF_8);
         File settingsKeys = new File(settingsDoc, "keys");
-        File settingsEmailKeys = new File(settingsKeys, "joe@imagey.cloud");
-        settingsEmailKeys.mkdirs();
-        writeStringToFile(new File(settingsEmailKeys, "encrypted-shared.key"), "dummySettingsSharedKey", UTF_8);
+        settingsKeys.mkdirs();
+        // The settings document's self-key is filed under kid "0" (matching the public/private
+        // key versioning convention), not the owner's email - see the keys/0.json files under
+        // mary@imagey.cloud/documents/mary@imagey.cloud, alice@imagey.cloud/documents/alice@imagey.cloud
+        // and bill@imagey.cloud/documents/bill@imagey.cloud in src/test/resources/data.
+        writeStringToFile(new File(settingsKeys, "0.json"),
+            "{\"issuer\":\"joe@imagey.cloud\",\"kid\":\"0\",\"sharedKey\":\"ZHVtbXk=\"}", UTF_8);
 
         File devices = new File(joesData, "devices");
         devices.mkdirs();
@@ -264,17 +332,96 @@ public class ContractTest {
     void maryHasNoContactsAndBillRequest() throws IOException {
         File marysContacts = new File(getMarysData(), "contacts");
         deleteQuietly(marysContacts);
-        File marysContactRequests = new File(getMarysData(), "contact-requests");
+        File marysContactRequests = getMarysContactRequests();
         deleteQuietly(marysContactRequests);
-        File billReq = new File(marysContactRequests, "bill@imagey.cloud");
-        billReq.mkdirs();
-        writeStringToFile(new File(billReq, "status.txt"), "INVITATION_RECEIVED", UTF_8);
+        marysContactRequests.mkdirs();
+        // A ContactExchange as ContactRepository.persist actually writes it (JSON, one file per
+        // counterpart) - bill invited mary, still INVITED, so chatId/sharedKey are unset.
+        writeStringToFile(new File(marysContactRequests, "bill@imagey.cloud.json"),
+            "{\"inviter\":\"bill@imagey.cloud\",\"invitee\":\"mary@imagey.cloud\","
+            + "\"status\":\"INVITED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
+            + "\"chatId\":null,\"sharedKey\":null}",
+            UTF_8);
+    }
+
+    // Restores the exact fixture @BeforeEach normally excludes by default (see above) - settings
+    // document, fresh document-list (id 22222222-...) and fresh chat-list (id 33333333-...), each
+    // with their keys - for the handful of interactions that run against an already-registered joe.
+    @State("Joe is registered")
+    void joeIsRegistered() throws IOException {
+        copyDirectory(new File(TEST_DATA_DIRECTORY, "joe@imagey.cloud"), new File(rootPath, "joe@imagey.cloud"));
+    }
+
+    @State("mary has invited joe")
+    void maryHasInvitedJoe() throws IOException {
+        // Joe doesn't exist as a registered user yet at this point (see "a request of joe to
+        // accept marys invitation on registration" - he registers via POST /users earlier in
+        // the same flow) - but ContactService.invite already writes the pending invitation
+        // under his (future) home directory when mary sends it, exactly like this, so it's
+        // waiting for him the moment he registers and accepts it.
+        File joesContactRequests = new File(new File(rootPath, "joe@imagey.cloud"), "contact-requests");
+        deleteQuietly(joesContactRequests);
+        joesContactRequests.mkdirs();
+        writeStringToFile(new File(joesContactRequests, "mary@imagey.cloud.json"),
+            "{\"inviter\":\"mary@imagey.cloud\",\"invitee\":\"joe@imagey.cloud\","
+            + "\"status\":\"INVITED\",\"publicKey\":{"
+            + "\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\","
+            + "\"x\":\"OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY\","
+            + "\"y\":\"D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM\"},"
+            + "\"chatId\":null,\"sharedKey\":null}",
+            UTF_8);
+    }
+
+    @State("mary has no contacts and bill has accepted marys invitation")
+    void maryHasNoContactsAndBillAcceptedInvitation() throws IOException {
+        File marysContacts = new File(getMarysData(), "contacts");
+        deleteQuietly(marysContacts);
+        File marysContactRequests = getMarysContactRequests();
+        deleteQuietly(marysContactRequests);
+        marysContactRequests.mkdirs();
+        // Mary invited bill (see ContactService.acceptInvitation) and he already accepted -
+        // chatId/sharedKey are set, but mary hasn't confirmed receipt yet (see
+        // "a request of mary to confirm receipt of bills contact"). Once she does, this
+        // transitions to RECEIVED and stops showing up (see ContactRepository.isActionableFor).
+        writeStringToFile(new File(marysContactRequests, "bill@imagey.cloud.json"),
+            "{\"inviter\":\"mary@imagey.cloud\",\"invitee\":\"bill@imagey.cloud\","
+            + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
+            + "\"chatId\":\"chat-bill-for-mary\",\"sharedKey\":"
+            + "\"5g3Pwjzwg5gFdJ1VLcsU/3oWZoZsdpeZJ/1dstB/y/tYRXjeWojoXV30BE3WWoMqGr4vo/"
+            + "GywXw7XrOtDE95dVDHqrZwmjZ6fn0ux8HA2u5F2VcQh6mX2LnkqCoQnMIVCwheSlJaQ0Wx1ulCdW06MgO"
+            + "+yMugMY/jae47T8Hu7fgKooQ+HbZl637mOULWTjzG6CCPnmpu\"}",
+            UTF_8);
     }
 
     @State("mary has no contacts")
     void maryHasNoContacts() throws IOException {
         deleteQuietly(new File(getMarysData(), "contacts"));
         deleteQuietly(new File(getMarysData(), "contact-requests"));
+    }
+
+    @State("Alice owns a chat shared with mary")
+    void aliceOwnsAChatSharedWithMary() throws IOException {
+        // The chat Document lives in the owner's (alice's) namespace; mary reaches it via the
+        // "member" role, which needs a shared key filed under keys/{mary's email}.json whose issuer
+        // is mary herself (she re-wrapped it under her own chats-document key on receipt
+        // confirmation, and the server synced it here). Reuse a real encrypted fixture for the
+        // metadata so Pact's octet-stream sniffing sees genuine binary rather than ASCII text.
+        File aliceChatMary = new File(getAlicesData(), "documents/chat-mary");
+        File chatDocument = new File(getAlicesData(), "documents/chat-alice-owned");
+        copyFile(new File(aliceChatMary, "metadata.enc"), new File(chatDocument, "metadata.enc"));
+        writeStringToFile(new File(chatDocument, "keys/mary@imagey.cloud.json"),
+            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"mary@imagey.cloud\",\"sharedKey\":\"c3luY2VkLWNoYXQta2V5\"}",
+            UTF_8);
+    }
+
+    @State("Mary has a profile picture")
+    void maryHasAProfilePicture() throws IOException {
+        // The profile document (9b71fa98-...) already exists as a fixture; only its picture
+        // content file is added here. Reuse a real encrypted fixture so Pact's octet-stream
+        // content sniffing sees binary data (the body itself is not byte-compared).
+        File profilePicture = new File(getMarysDocuments(),
+            "9b71fa98-8616-4222-b03e-d189289ccbd0/files/1f6386d5-cbed-48c3-9ed1-f8e4c1445223");
+        copyFile(new File(getMarysDocuments(), "9c59a4f3-ae55-4c4b-9e4a-2079a2446738/metadata.enc"), profilePicture);
     }
 
     @State("mary has no documents")
@@ -290,18 +437,18 @@ public class ContractTest {
         maryHasNoDocuments();
         File folder = new File(getMarysDocuments(), "folder-uuid-1234");
         folder.mkdirs();
-        File keysDir = new File(folder, "keys/root-folder-id");
+        File keysDir = new File(folder, "keys");
         keysDir.mkdirs();
         File metadataEnc = new File(folder, "metadata.enc");
         java.nio.file.Files.write(metadataEnc.toPath(),
             java.util.Base64.getDecoder().decode("9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU"
             + "+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U"
             + "+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX"));
-        metadataEnc.setLastModified(123456789L);
-        java.nio.file.Files.write(new File(keysDir, "encrypted-shared.key").toPath(),
-            java.util.Base64.getDecoder().decode("DpZid3W9uclNjSCcWaGqvtETZuImyP+xISDVpXHVoUjkoC/vwUqAtLpv2IW/vB0Gs64fd"
+        writeStringToFile(new File(keysDir, "root-folder-id.json"),
+            "{\"issuer\":\"mary@imagey.cloud\",\"kid\":\"root-folder-id\",\"sharedKey\":\""
+            + "DpZid3W9uclNjSCcWaGqvtETZuImyP+xISDVpXHVoUjkoC/vwUqAtLpv2IW/vB0Gs64fd"
             + "RYqK2Gf4RC6QJmYS1w9C3AsONu2EcYA0BOo1kOC8b22uYNR5Ikt0QaIjr5V6VGGjWY15ah66"
-            + "nqfCR3iFepNR2XMqHZnPREyuJdHDCMNbnxqHxf9dpJ3TlCbTqe4JwOMCp41"));
+            + "nqfCR3iFepNR2XMqHZnPREyuJdHDCMNbnxqHxf9dpJ3TlCbTqe4JwOMCp41\"}", UTF_8);
     }
 
     @State("Mary has a chat with alice")
@@ -335,19 +482,9 @@ public class ContractTest {
     @State("marys second device unlocked")
     void marysSecondDeviceUnlocked() throws URISyntaxException, IOException {
         marysSecondDeviceRegistered();
-        File marysDataForUnlock = new File(rootPath, "mary@imagey.cloud");
-        File marysDocumentsForUnlock = new File(marysDataForUnlock, "documents");
-        if (marysDocumentsForUnlock.exists()) {
-            for (File file : marysDocumentsForUnlock.listFiles()) {
-                deleteQuietly(file);
-            }
-        }
-        File marysContactRequests = new File(marysDataForUnlock, "contact-requests");
-        if (marysContactRequests.exists()) {
-            for (File file : marysContactRequests.listFiles()) {
-                deleteQuietly(file);
-            }
-        }
+        // Mary's documents (settings/chats/documents-root) are deliberately left in place -
+        // App.tsx re-fetches them right after unlock, so the "get the chats document" /
+        // "get the fresh document list" interactions that pair with this state need them.
         File marysData = new File(rootPath, "mary@imagey.cloud");
         File marysDevices = new File(marysData, "devices");
         File secondDevice = new File(marysDevices, "00b7d225-202c-4ab9-8efc-36e6f3afb169");
@@ -371,6 +508,20 @@ public class ContractTest {
 
     @State(value = "Mary has uploaded document", action = TEARDOWN)
     void removeMarysUpload() throws URISyntaxException, IOException {
+        File data = new File(rootPath);
+        if (data.exists()) {
+            deleteQuietly(data);
+        }
+        copyDirectory(TEST_DATA_DIRECTORY, data);
+    }
+
+    @State("Bill has uploaded document")
+    void billHasUploadedDocument() throws URISyntaxException, IOException {
+        copyDirectory(new File(TEST_DATA_DIRECTORY, "uploaded-data"), getBillsDocuments());
+    }
+
+    @State(value = "Bill has uploaded document", action = TEARDOWN)
+    void removeBillsUpload() throws URISyntaxException, IOException {
         File data = new File(rootPath);
         if (data.exists()) {
             deleteQuietly(data);
@@ -422,7 +573,22 @@ public class ContractTest {
             + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
             UTF_8);
 
-        File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
+        // ContactExchange so MessageResource.resolveChatId(alice, mary) can find chatId "chat-mary" -
+        // the actual chat document alice owns with mary (see src/test/resources/data/alice@imagey.cloud/
+        // documents/chat-mary). Without this, sending/receiving on this chat 404s instead of working.
+        File aliceContactRequests = new File(getAlicesData(), "contact-requests");
+        aliceContactRequests.mkdirs();
+        writeStringToFile(new File(aliceContactRequests, "mary@imagey.cloud.json"),
+            "{\"inviter\":\"alice@imagey.cloud\",\"invitee\":\"mary@imagey.cloud\","
+            + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
+            + "\"chatId\":\"chat-mary\",\"sharedKey\":\""
+            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
+            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
+            UTF_8);
+
+        // Message storage lives under the chat document itself (see MessageRepository.persist/
+        // fetchMessages), not under a flat "messages/{contact}" folder.
+        File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         messagesDir.mkdirs();
         File messageFile = new File(messagesDir, "msg-123.json");
         writeStringToFile(messageFile,
@@ -433,7 +599,19 @@ public class ContractTest {
 
     @State("Alice has received a message from Mary with shared doc")
     void aRequestToReceiveMessagesWithSharedDoc() throws IOException {
-        File messagesDir = new File(getAlicesData(), "messages/mary@imagey.cloud");
+        // Same ContactExchange as "Alice has a chat with mary" - written independently here since
+        // pact interactions using this state don't necessarily also declare that one.
+        File aliceContactRequests = new File(getAlicesData(), "contact-requests");
+        aliceContactRequests.mkdirs();
+        writeStringToFile(new File(aliceContactRequests, "mary@imagey.cloud.json"),
+            "{\"inviter\":\"alice@imagey.cloud\",\"invitee\":\"mary@imagey.cloud\","
+            + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
+            + "\"chatId\":\"chat-mary\",\"sharedKey\":\""
+            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
+            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
+            UTF_8);
+
+        File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         messagesDir.mkdirs();
         File messageFile = new File(messagesDir, "msg-999.json");
         writeStringToFile(messageFile,
@@ -447,15 +625,16 @@ public class ContractTest {
     void aRequestToLoadSharedKeyAsRecipient() throws IOException, URISyntaxException {
         user = new User(new Email("alice@imagey.cloud"));
         maryHasUploadedDocument(); // ensures bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3 exists
-        File sharedKeyDir = new File(getMarysDocuments(), "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/alice@imagey.cloud");
-        sharedKeyDir.mkdirs();
-        File sharedKeyFile = new File(sharedKeyDir, "encrypted-shared.key");
-        byte[] keyBytes = java.util.Base64.getDecoder().decode(
-            "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
+        // Alice issued this key (she wrapped Mary's document key under her own chat key), which is
+        // what gives her the "member" role on Mary's document (see RolesFilter / isIssuerInKeyChain).
+        File keys = new File(getMarysDocuments(), "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys");
+        keys.mkdirs();
+        writeStringToFile(new File(keys, "alice@imagey.cloud.json"),
+            "{\"issuer\":\"alice@imagey.cloud\",\"kid\":\"alice@imagey.cloud\",\"sharedKey\":\""
+            + "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
             + "RVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07"
             + "geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR"
-            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8");
-        writeByteArrayToFile(sharedKeyFile, keyBytes);
+            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8\"}", UTF_8);
     }
 
 
@@ -493,6 +672,14 @@ public class ContractTest {
 
     private File getMarysDocuments() {
         return new File(getMarysData(), "documents");
+    }
+
+    private File getBillsData() {
+        return new File(rootPath, "bill@imagey.cloud");
+    }
+
+    private File getBillsDocuments() {
+        return new File(getBillsData(), "documents");
     }
 
     private File getMarysContactRequestOfLaura() {

@@ -4,9 +4,508 @@ import {
   MatchersV3,
   MatchersV2 as Matchers,
 } from "@pact-foundation/pact";
+import { webcrypto } from "node:crypto";
 import * as fs from "fs";
-import * as path from "path";
-import { TestData, TestDataStructure, TestUser } from "./testdata";
+import { TestData } from "./testdata";
+
+// --- Chats/contact-requests test helpers -----------------------------------
+// Contacts/chats are (like documents, folders and the profile) their own
+// encrypted Document: the user's "chats" list document holds a
+// `contacts: {userId, chatId, owner}[]` array instead of a dedicated
+// /users/{id}/contacts endpoint, and each chat itself is now a further
+// Document nested under "chats" - its own Document key doubles as the
+// chat's message/sharing key (see ContactService.loadChatKey /
+// ENCRYPTION.md section 5). Mary's and Bill's settingsKey are known
+// statically (see testdata.ts), so - unlike the static binary .enc/.json
+// fixtures used elsewhere in this file - we can encrypt genuinely valid
+// chats-document and chat-document fixtures for them at test-run time with
+// real AES-GCM, instead of hand-authoring ciphertext offline (see
+// scripts/encryptMarysDocuments.ts for that older, offline approach).
+
+// The plaintext AES-GCM chat key that a handful of pre-baked static
+// fixtures were genuinely encrypted under back when chat keys were
+// exchanged via the older /contacts/{email}/key endpoint (mary.chats[].
+// messages[].content in testdata.ts, and the hardcoded "shared document"
+// message/key-envelope strings in chat.test.ts's "view shared document
+// from another user" test). Reusing it here - as the chat Document's own
+// key - means those fixtures keep decrypting for real without having to
+// re-author them.
+const KNOWN_CHAT_KEY: JsonWebKey = {
+  key_ops: ["encrypt", "decrypt"],
+  ext: true,
+  alg: "A256GCM",
+  kty: "oct",
+  k: "rHlLiQjRuBoEcZCWwG6VuYbgcuiJGN4mmohJn5MHpAU",
+};
+
+async function importAesGcmKey(key: JsonWebKey): Promise<CryptoKey> {
+  return webcrypto.subtle.importKey(
+    "jwk",
+    key,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+export async function aesGcmEncrypt(
+  key: JsonWebKey,
+  plaintext: Uint8Array,
+): Promise<Buffer> {
+  const cryptoKey = await importAesGcmKey(key);
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await webcrypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    cryptoKey,
+    plaintext,
+  );
+  return Buffer.concat([Buffer.from(iv), Buffer.from(encrypted)]);
+}
+
+async function aesGcmDecrypt(
+  key: JsonWebKey,
+  payload: Buffer,
+): Promise<Buffer> {
+  const cryptoKey = await importAesGcmKey(key);
+  const iv = payload.subarray(0, 12);
+  const ciphertext = payload.subarray(12);
+  const decrypted = await webcrypto.subtle.decrypt(
+    { name: "AES-GCM", iv: new Uint8Array(iv) },
+    cryptoKey,
+    ciphertext,
+  );
+  return Buffer.from(decrypted);
+}
+
+export async function generateAesGcmKeyJwk(): Promise<JsonWebKey> {
+  const key = await webcrypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  return webcrypto.subtle.exportKey("jwk", key) as Promise<JsonWebKey>;
+}
+
+// Wraps `keyToWrap` symmetrically with `wrappingKey`, matching
+// cryptoService.encryptKey()'s symmetric-key branch (random 12-byte IV
+// prepended to the ciphertext, base64-encoded).
+export async function encryptKeyEnvelope(
+  keyToWrap: JsonWebKey,
+  wrappingKey: JsonWebKey,
+): Promise<string> {
+  const encrypted = await aesGcmEncrypt(
+    wrappingKey,
+    new TextEncoder().encode(JSON.stringify(keyToWrap)),
+  );
+  return encrypted.toString("base64");
+}
+
+async function deriveEcdhAesKey(
+  privateKey: JsonWebKey,
+  publicKey: JsonWebKey,
+): Promise<CryptoKey> {
+  const priv = await webcrypto.subtle.importKey(
+    "jwk",
+    privateKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey"],
+  );
+  const pub = await webcrypto.subtle.importKey(
+    "jwk",
+    publicKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    [],
+  );
+  return webcrypto.subtle.deriveKey(
+    { name: "ECDH", public: pub },
+    priv,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+// Decrypts a self-wrapped (ECDH of a user's own key pair with itself) key
+// envelope, matching cryptoService.decryptKey()'s asymmetric branch. Used
+// to recover Alice's real settingsKey from her pre-baked static fixtures
+// (tests/images/encrypted/alice@imagey.cloud/**), since - unlike Mary and
+// Bill - her settingsKey isn't stored directly in testdata.ts.
+async function decryptEcdhKeyEnvelope(
+  encryptedBase64: string,
+  publicKey: JsonWebKey,
+  privateKey: JsonWebKey,
+): Promise<JsonWebKey> {
+  const combined = Buffer.from(encryptedBase64, "base64");
+  const iv = combined.subarray(0, 12);
+  const ciphertext = combined.subarray(12);
+  const derivedKey = await deriveEcdhAesKey(privateKey, publicKey);
+  const decrypted = await webcrypto.subtle.decrypt(
+    { name: "AES-GCM", iv: new Uint8Array(iv) },
+    derivedKey,
+    ciphertext,
+  );
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+// Wraps `keyToWrap` via ECDH (deriveKey(senderPrivateKey,
+// recipientPublicKey), then AES-GCM with a random 12-byte IV prepended,
+// base64-encoded) - matches cryptoService.encryptKey()'s asymmetric
+// branch. Used both for accepting a contact request (the chat key shared
+// with the inviter - see ContactService.acceptContactRequest's
+// `sharedKeyForInviter`) and for the non-owner branch of
+// ContactService.loadChatKey (opening a chat someone else created).
+export async function encryptKeyEnvelopeEcdh(
+  keyToWrap: JsonWebKey,
+  senderPrivateKey: JsonWebKey,
+  recipientPublicKey: JsonWebKey,
+): Promise<string> {
+  const derivedKey = await deriveEcdhAesKey(
+    senderPrivateKey,
+    recipientPublicKey,
+  );
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await webcrypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    derivedKey,
+    new TextEncoder().encode(JSON.stringify(keyToWrap)),
+  );
+  return Buffer.concat([Buffer.from(iv), Buffer.from(encrypted)]).toString(
+    "base64",
+  );
+}
+
+let alicesSettingsPromise:
+  | Promise<{ settingsKey: JsonWebKey; chatsId: string }>
+  | undefined;
+
+// Alice's settings document is a pre-baked static fixture (unlike Mary's
+// and Bill's, whose settingsKey is known upfront in testdata.ts), so her
+// real chats-document id and settingsKey have to be recovered by actually
+// decrypting that fixture once, using her main key pair.
+function getAlicesSettings(): Promise<{
+  settingsKey: JsonWebKey;
+  chatsId: string;
+}> {
+  if (!alicesSettingsPromise) {
+    alicesSettingsPromise = (async () => {
+      const keyEnvelope = JSON.parse(
+        fs.readFileSync(
+          "tests/images/encrypted/alice@imagey.cloud/keys/0.json",
+          "utf-8",
+        ),
+      );
+      const settingsKey = await decryptEcdhKeyEnvelope(
+        keyEnvelope.sharedKey,
+        TestData.alice.publicMainKey,
+        TestData.alice.privateMainKey!,
+      );
+      const encryptedSettingsDocument = fs.readFileSync(
+        "tests/images/encrypted/alice@imagey.cloud/document.enc",
+      );
+      const decrypted = await aesGcmDecrypt(
+        settingsKey,
+        encryptedSettingsDocument,
+      );
+      const payload = JSON.parse(new TextDecoder().decode(decrypted));
+      return { settingsKey, chatsId: payload.chats };
+    })();
+  }
+  return alicesSettingsPromise;
+}
+
+// Registers a GET for a user's "chats" document (content + key), encrypted
+// on the fly with a freshly generated (or caller-supplied) Document key
+// wrapped under `settingsKey` - the same shape documentService.loadDocument
+// (user, id, user, settingsKey) resolves for any other top-level document
+// (see prepareMarysEmptyProfile for the analogous profile case). Returns
+// the chats Document's own key so callers can reuse it - e.g. to wrap a
+// chat Document's key for its owner (see mockChatDocument below).
+async function mockChatsDocument(
+  email: string,
+  chatsId: string,
+  settingsKey: JsonWebKey,
+  contacts: { userId: string; chatId: string; owner: string }[],
+  given?: string | string[],
+  chatsDocumentKey?: JsonWebKey,
+): Promise<JsonWebKey> {
+  const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
+  const key = chatsDocumentKey ?? (await generateAesGcmKeyJwk());
+  const content = await aesGcmEncrypt(
+    key,
+    new TextEncoder().encode(
+      JSON.stringify({ contacts, type: "folder", name: "Chats" }),
+    ),
+  );
+  const wrappedKey = await encryptKeyEnvelope(key, settingsKey);
+
+  let contentBuilder = provider.addInteraction();
+  for (const state of givenStates) contentBuilder = contentBuilder.given(state);
+  contentBuilder
+    .uponReceiving(`a request of ${email} to get the chats document`)
+    .withRequest("GET", `/users/${email}/documents/${chatsId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) => r.body("application/octet-stream", content));
+
+  let keyBuilder = provider.addInteraction();
+  for (const state of givenStates) keyBuilder = keyBuilder.given(state);
+  keyBuilder
+    .uponReceiving(`a request of ${email} to get the chats document key`)
+    .withRequest(
+      "GET",
+      `/users/${email}/documents/${chatsId}/keys/${email}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: email,
+        kid: email,
+        sharedKey: MatchersV3.string(wrappedKey),
+      }),
+    );
+
+  return key;
+}
+
+export async function prepareMarysChatsDocument(
+  contacts: { userId: string; chatId: string; owner: string }[] = [],
+  given?: string | string[],
+  chatsDocumentKey?: JsonWebKey,
+): Promise<JsonWebKey> {
+  return mockChatsDocument(
+    "mary@imagey.cloud",
+    TestData.mary.settings!.chats,
+    TestData.mary.settingsKey!,
+    contacts,
+    given,
+    chatsDocumentKey,
+  );
+}
+
+export async function prepareBillsChatsDocument(
+  contacts: { userId: string; chatId: string; owner: string }[] = [],
+  given?: string | string[],
+  chatsDocumentKey?: JsonWebKey,
+): Promise<JsonWebKey> {
+  return mockChatsDocument(
+    "bill@imagey.cloud",
+    TestData.bill.settings!.chats,
+    TestData.bill.settingsKey!,
+    contacts,
+    given,
+    chatsDocumentKey,
+  );
+}
+
+export async function prepareAlicesChatsDocument(
+  contacts: { userId: string; chatId: string; owner: string }[] = [],
+  given?: string,
+  chatsDocumentKey?: JsonWebKey,
+): Promise<JsonWebKey> {
+  const { settingsKey, chatsId } = await getAlicesSettings();
+  return mockChatsDocument(
+    "alice@imagey.cloud",
+    chatsId,
+    settingsKey,
+    contacts,
+    given,
+    chatsDocumentKey,
+  );
+}
+
+// Registers a GET for a chat Document's content + key entry, self-owned by
+// `ownerEmail` - i.e. as if `ownerEmail` were the one who originally
+// accepted the contact request and created the chat (see ContactService.
+// acceptContactRequest): its key is wrapped symmetrically under the
+// "chats" document's own key, exactly like ContactService.loadChatKey's
+// owner branch (kid = chatsId). Most tests in this suite model the chat as
+// self-owned by whichever user is under test - simplest, and sufficient to
+// exercise the chat UI itself (which doesn't care how the key was
+// obtained). See mockChatDocumentSharedViaSync below for the non-owner
+// branch.
+async function mockChatDocument({
+  ownerEmail,
+  chatId,
+  chatsId,
+  chatsDocumentKey,
+  given,
+  suffix = "",
+  chatDocumentKey = KNOWN_CHAT_KEY,
+  validKey = true,
+}: {
+  ownerEmail: string;
+  chatId: string;
+  chatsId: string;
+  chatsDocumentKey: JsonWebKey;
+  given?: string | string[];
+  suffix?: string;
+  chatDocumentKey?: JsonWebKey;
+  validKey?: boolean;
+}): Promise<ConfiguredInteraction> {
+  const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
+  const content = await aesGcmEncrypt(
+    chatDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({ documentId: chatId, name: "Chat", type: "Chat" }),
+    ),
+  );
+
+  let contentBuilder = provider.addInteraction();
+  for (const state of givenStates) contentBuilder = contentBuilder.given(state);
+  contentBuilder
+    .uponReceiving(
+      `a request of ${ownerEmail} to get the chat document ${chatId}${suffix}`,
+    )
+    .withRequest("GET", `/users/${ownerEmail}/documents/${chatId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) => r.body("application/octet-stream", content));
+
+  const wrappedKey = validKey
+    ? await encryptKeyEnvelope(chatDocumentKey, chatsDocumentKey)
+    : "AAAA";
+
+  let keyBuilder = provider.addInteraction();
+  for (const state of givenStates) keyBuilder = keyBuilder.given(state);
+  return keyBuilder
+    .uponReceiving(
+      `a request of ${ownerEmail} to get the chat document ${chatId} key${suffix}`,
+    )
+    .withRequest(
+      "GET",
+      `/users/${ownerEmail}/documents/${chatId}/keys/${chatsId}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: ownerEmail,
+        kid: chatsId,
+        sharedKey: MatchersV3.string(wrappedKey),
+      }),
+    );
+}
+
+// Registers a GET for a chat Document's content + key entry as seen from
+// the NON-owning side of ContactService.loadChatKey (contact.owner !==
+// user): the key entry lives under the owner's own document namespace,
+// keyed by the viewer's email. The viewer re-wrapped the chat key under
+// their OWN chats-document key when confirming receipt of the contact
+// (see ContactService.receiveContactRequest); the server synced that entry
+// here, with the viewer as issuer. This is what exercises that branch,
+// unlike mockChatDocument above.
+async function mockChatDocumentSharedViaSync({
+  ownerEmail,
+  viewerEmail,
+  viewerChatsDocumentKey,
+  chatId,
+  given,
+  suffix = "",
+  chatDocumentKey,
+}: {
+  ownerEmail: string;
+  viewerEmail: string;
+  viewerChatsDocumentKey: JsonWebKey;
+  chatId: string;
+  given?: string | string[];
+  suffix?: string;
+  chatDocumentKey: JsonWebKey;
+}): Promise<ConfiguredInteraction> {
+  const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
+
+  const content = await aesGcmEncrypt(
+    chatDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({ documentId: chatId, name: "Chat", type: "Chat" }),
+    ),
+  );
+
+  let contentBuilder = provider.addInteraction();
+  for (const state of givenStates) contentBuilder = contentBuilder.given(state);
+  contentBuilder
+    .uponReceiving(
+      `a request of ${viewerEmail} to get the synced chat document ${chatId}${suffix}`,
+    )
+    .withRequest("GET", `/users/${ownerEmail}/documents/${chatId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) => r.body("application/octet-stream", content));
+
+  const wrappedKey = await encryptKeyEnvelope(
+    chatDocumentKey,
+    viewerChatsDocumentKey,
+  );
+
+  let keyBuilder = provider.addInteraction();
+  for (const state of givenStates) keyBuilder = keyBuilder.given(state);
+  return keyBuilder
+    .uponReceiving(
+      `a request of ${viewerEmail} to get the synced chat document ${chatId} key${suffix}`,
+    )
+    .withRequest(
+      "GET",
+      `/users/${ownerEmail}/documents/${chatId}/keys/${viewerEmail}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: viewerEmail,
+        kid: viewerEmail,
+        sharedKey: MatchersV3.string(wrappedKey),
+      }),
+    );
+}
+
+// Mary opens a chat Alice created and shared with her (contact.owner ===
+// "alice@imagey.cloud" in Mary's own "chats" document) - the non-owner
+// branch of ContactService.loadChatKey, from Mary's side. `chatsDocumentKey`
+// must be the same key prepareMarysChatsDocument was given, since Mary's
+// synced copy of the chat key is wrapped under it.
+export async function prepareMarysChatOwnedByAlice(
+  chatId: string,
+  chatsDocumentKey: JsonWebKey,
+  given: string | string[] = "Alice owns a chat shared with mary",
+  chatDocumentKey?: JsonWebKey,
+): Promise<JsonWebKey> {
+  const key = chatDocumentKey ?? (await generateAesGcmKeyJwk());
+  await mockChatDocumentSharedViaSync({
+    ownerEmail: "alice@imagey.cloud",
+    viewerEmail: "mary@imagey.cloud",
+    viewerChatsDocumentKey: chatsDocumentKey,
+    chatId,
+    given,
+    chatDocumentKey: key,
+  });
+  return key;
+}
+
+// Accepting a contact request now also creates the chat's own Document (see
+// ContactService.acceptContactRequest) via the same generic multipart
+// upload every other document/folder creation uses - mirrors
+// prepareMarysFolderCreation() below.
+export async function prepareMarysChatCreation() {
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to create a chat document")
+    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
+      r.headers({
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=.*",
+        ),
+      });
+    })
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/mary@imagey.cloud/documents/new-chat-id",
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
+      }),
+    );
+}
+// --- end Chats-as-a-Document test helpers ----------------------------------
 
 type ConfiguredInteraction = ReturnType<
   ReturnType<
@@ -57,20 +556,6 @@ export async function loginAsMary(page: Page) {
   await inputMarysPassword(page);
 }
 
-export async function loginAsJoe(page: Page) {
-  await page.goto("/");
-  const passwordInput = page.getByLabel("Password", { exact: true });
-  await expect(passwordInput).toBeVisible();
-  await passwordInput.fill(TestData.joe.password);
-  const confirmButton = page.getByRole("button", {
-    name: "Confirm",
-    exact: true,
-  });
-  await expect(confirmButton).toBeVisible();
-  await confirmButton.click();
-  await expect(confirmButton).not.toBeVisible();
-}
-
 export async function loginAsBill(page: Page) {
   await page.goto("/");
   const passwordInput = page.getByLabel("Password", { exact: true });
@@ -90,105 +575,102 @@ export let expectedUploadDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 export let expectedUploadSmallImageId: string | undefined = undefined;
 export let expectedUploadPreviewImageId: string | undefined = undefined;
 
-export function createMultipartPayload(documentId: string): Buffer {
-  const boundary = "----WebKitFormBoundary";
-
-  // Use dummy text instead of real binary files to prevent pact-js binary payload tokio panics
-  const metadataStr = `{"documentId":"${documentId}"}`;
-  const keyStr = "dummy-base64-key-bytes";
-  const contentStr = "dummy-file-content";
-
-  let body = `--${boundary}\r\n`;
-  body += `Content-Disposition: form-data; name="metadata"; filename="meta-data"\r\n`;
-  body += `Content-Type: application/json\r\n\r\n`;
-  body += `${metadataStr}\r\n`;
-
-  body += `--${boundary}\r\n`;
-  body += `Content-Disposition: form-data; name="key"; filename="key"\r\n`;
-  body += `Content-Type: application/octet-stream\r\n\r\n`;
-  body += `${keyStr}\r\n`;
-
-  body += `--${boundary}\r\n`;
-  body += `Content-Disposition: form-data; name="issuer"\r\nContent-Type: text/plain\r\n\r\n`;
-  body += `mary@imagey.cloud\r\n`;
-
-  body += `--${boundary}\r\n`;
-  body += `Content-Disposition: form-data; name="content"; filename="blob"\r\n`;
-  body += `Content-Type: application/octet-stream\r\n\r\n`;
-  body += `${contentStr}\r\n`;
-
-  if (expectedUploadSmallImageId) {
-    body += `--${boundary}\r\n`;
-    body += `Content-Disposition: form-data; name="smallImage"; filename="blob"\r\n`;
-    body += `Content-Type: application/octet-stream\r\n\r\n`;
-    body += `small-image-content\r\n`;
-  }
-
-  if (expectedUploadPreviewImageId) {
-    body += `--${boundary}\r\n`;
-    body += `Content-Disposition: form-data; name="previewImage"; filename="blob"\r\n`;
-    body += `Content-Type: application/octet-stream\r\n\r\n`;
-    body += `preview-image-content\r\n`;
-  }
-
-  body += `--${boundary}--\r\n`;
-
-  return Buffer.from(body, "utf-8");
-}
-
 export async function setupMockServer(page: Page, mockServer: MockServer) {
   const mockServerUrl = new URL(mockServer.url);
 
-  await page.route("/users/**", async (route, request) => {
-    runningPactRequests++;
+  // Matches "/users/..." (the vast majority of endpoints) AND the bare
+  // "/users" registration endpoint (no trailing slash) - the old
+  // registration endpoint was "/users/" (trailing slash, matched the old
+  // stricter pattern), the new one is "/users" with the payload as
+  // multipart/form-data, so the pattern needs to allow an empty tail too.
+  // "/invitations/<token>" is the emailed registration link the browser
+  // follows (a 302 back into the SPA, see InvitationFilter) - it is a real
+  // provider interaction too, so route it through the Pact mock as well.
+  await page.route(
+    /^.*\/(users(\/.*)?|invitations\/[^/?]+)(\?.*)?$/,
+    async (route, request) => {
+      runningPactRequests++;
+      console.log(`Intercepted ${request.method()} ${request.url()}`);
 
-    try {
-      const requestUrl = new URL(request.url());
-      requestUrl.port = mockServerUrl.port;
-      requestUrl.hostname = mockServerUrl.hostname;
+      try {
+        const requestUrl = new URL(request.url());
+        requestUrl.port = mockServerUrl.port;
+        requestUrl.hostname = mockServerUrl.hostname;
+        requestUrl.protocol = mockServerUrl.protocol;
 
-      let postData: Buffer | null = request.postDataBuffer();
-      const headers = request.headers();
+        const postData: Buffer | null = request.postDataBuffer();
+        const headers = request.headers();
 
-      if (
-        request.method() === "GET" &&
-        requestUrl.pathname === "/users/mary@imagey.cloud/profile"
-      ) {
-        await route.fulfill({ status: 404 });
-        return;
-      }
-
-      if (
-        (request.method() === "POST" || request.method() === "PUT") &&
-        headers["content-type"]?.includes("multipart/form-data")
-      ) {
-        // To bypass strict body matching of dynamically encrypted files, we send the mock payload expected by pact instead.
-        const boundary = "----WebKitFormBoundary";
-        headers["content-type"] = `multipart/form-data; boundary=${boundary}`;
-
-        if (request.method() === "POST") {
-          const documentId = expectedUploadDocumentId;
-          postData = createMultipartPayload(documentId);
-        } else {
-          // For PUT (profile update), we just use a static mock payload because the actual payload is dynamically encrypted
-          postData = Buffer.from(
-            `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n{ "documentId": "profile" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="sharedKey"\r\n\r\n{ "issuer": "mary@imagey.cloud", "kid": "0", "sharedKey": "encrypted-key" }\r\n--${boundary}\r\nContent-Disposition: form-data; name="content"; filename="profile.json"\r\nContent-Type: application/octet-stream\r\n\r\ncontent\r\n--${boundary}--\r\n`,
-          );
+        if (
+          request.method() === "GET" &&
+          requestUrl.pathname === "/users/mary@imagey.cloud/profile"
+        ) {
+          await route.fulfill({ status: 404 });
+          return;
         }
+
+        const response = await route.fetch({
+          url: requestUrl.href,
+          method: request.method(),
+          headers: headers,
+          postData: postData,
+          // The invitation link responds 302 back into the SPA - hand that
+          // redirect to the browser to follow (so the SPA sees the ?email /
+          // ?inviter params) instead of following it here.
+          maxRedirects: requestUrl.pathname.startsWith("/invitations/")
+            ? 0
+            : undefined,
+        });
+
+        await route.fulfill({ response });
+      } finally {
+        runningPactRequests--;
       }
+    },
+  );
+}
 
-      const response = await route.fetch({
-        url: requestUrl.href,
-        method: request.method(),
-        headers: headers,
-        postData: postData,
-      });
-
-      await route.fulfill({ response });
-    } finally {
-      runningPactRequests--;
-    }
-  });
+// Registers the interactions for fetching Mary's settings document (her
+// own document, keyed by her own email as documentId) and its key. Split
+// out from prepareMarysLogin() because a few flows reach the "fully logged
+// in" app state (which always fetches settings once keys are available,
+// see App.tsx) without going through prepareMarysLogin() - e.g. a test
+// that registers/unlocks a brand new device from scratch.
+export async function prepareMarysSettingsDocument() {
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get settings document")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/mary@imagey.cloud/document.enc",
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get settings key")
+    .withRequest(
+      "GET",
+      "/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+      ),
+    );
 }
 
 export async function prepareMarysLogin(page: Page) {
@@ -236,40 +718,7 @@ export async function prepareMarysLogin(page: Page) {
         key: TestData.mary.devices[0].encryptedPrivateMainKey,
       }),
     );
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get settings document")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "tests/images/encrypted/mary@imagey.cloud/document.enc",
-      ),
-    );
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get settings key")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/json",
-        "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
-      ),
-    );
+  await prepareMarysSettingsDocument();
 
   await setupMarysDevice(page);
 }
@@ -319,68 +768,41 @@ export async function prepareBillsLogin(page: Page) {
         key: TestData.bill.devices[0].encryptedPrivateMainKey,
       }),
     );
+  provider
+    .addInteraction()
+    .uponReceiving("a request of bill to get settings document")
+    .withRequest(
+      "GET",
+      "/users/bill@imagey.cloud/documents/bill@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/bill@imagey.cloud/document.enc",
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving("a request of bill to get settings key")
+    .withRequest(
+      "GET",
+      "/users/bill@imagey.cloud/documents/bill@imagey.cloud/keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        "tests/images/encrypted/bill@imagey.cloud/keys/0.json",
+      ),
+    );
   await setupBillsDevice(page);
-}
-
-export async function prepareJoesLogin(page: Page) {
-  provider
-    .addInteraction()
-    .given("joe is logged in")
-    .uponReceiving("a request of authenticated joe to get public key")
-    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(TestData.joe.publicMainKey));
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to get public device key")
-    .withRequest(
-      "GET",
-      `/users/joe@imagey.cloud/devices/${TestData.joe.devices[0].deviceId}/public-keys/0`,
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody(TestData.joe.devices[0].publicDeviceKey),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving(
-      "a request of joe to get encrypted private main key for device",
-    )
-    .withRequest(
-      "GET",
-      `/users/joe@imagey.cloud/devices/${TestData.joe.devices[0].deviceId}/private-keys/0`,
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        kid: "0",
-        encryptingDeviceId: TestData.joe.devices[0].deviceId,
-        key: TestData.joe.devices[0].encryptedPrivateMainKey,
-      }),
-    );
-
-  await page.goto("/");
-  await page.evaluate(
-    ({ deviceId, privateDeviceKey }) => {
-      localStorage.setItem("imagey.user", "joe@imagey.cloud");
-      localStorage.setItem("imagey.deviceIds[joe@imagey.cloud]", deviceId);
-      localStorage.setItem(`imagey.devices[${deviceId}].key`, privateDeviceKey);
-    },
-    {
-      deviceId: TestData.joe.devices[0].deviceId,
-      privateDeviceKey: TestData.joe.devices[0].encryptedPrivateDeviceKey,
-    },
-  );
 }
 
 export async function prepareMarysDocuments() {
@@ -534,112 +956,327 @@ export async function prepareMarysDocuments() {
     );
 }
 
-export async function prepareMarysProfileContents() {
+// A root folder variant that contains a single sub-folder ("My Vacation")
+// instead of the two regular images from prepareMarysDocuments(). The
+// sub-folder's own key is wrapped with the root folder's (existing, unchanged)
+// key, exactly like any other child document.
+export async function prepareMarysDocumentsWithFolder(folderId: string) {
+  const rootId = TestData.mary.documents[0].documentId;
+
   provider
     .addInteraction()
-    .uponReceiving("a request of mary to get profile content")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/profile/files/profile",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
+    .uponReceiving("a request of mary to get document root containing a folder")
+    .withRequest("GET", `/users/mary@imagey.cloud/documents/${rootId}`, (r) =>
+      r.headers({
+        Accept: "application/octet-stream",
+      }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "../imagey-server/src/test/resources/data/mary@imagey.cloud/documents/profile/files/profile",
+        `tests/images/encrypted/${rootId}/document-with-folder.enc`,
       ),
     );
 
-  return provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get profile picture content")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "../imagey-server/src/test/resources/data/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
-      ),
-    );
-}
-
-export async function prepareMarysRootFolder() {
   provider
     .addInteraction()
-    .uponReceiving(
-      "a request of mary to get root folder document metadata for empty folder",
-    )
+    .uponReceiving("a request of mary to get document root key for folder test")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/root-folder-id",
+      `/users/mary@imagey.cloud/documents/${rootId}/keys/mary@imagey.cloud`,
       (r) =>
         r.headers({
           Accept: "application/json",
         }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "root-folder-id",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/root-folder-id/metadata",
-          ),
-          "base64",
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${rootId}/keys/mary@imagey.cloud.json`,
+      ),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get the My Vacation folder")
+    .withRequest("GET", `/users/mary@imagey.cloud/documents/${folderId}`, (r) =>
+      r.headers({
+        Accept: "application/octet-stream",
+      }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${folderId}/document.enc`,
+      ),
+    );
+
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get the My Vacation folder key")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${folderId}/keys/${rootId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${folderId}/keys/${rootId}.json`,
+      ),
+    );
+}
+
+// A root folder variant with no children at all, used when a test wants to
+// create the very first folder from a clean slate.
+export async function prepareMarysEmptyDocumentsFolder() {
+  const rootId = TestData.mary.documents[0].documentId;
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get an empty document root")
+    .withRequest("GET", `/users/mary@imagey.cloud/documents/${rootId}`, (r) =>
+      r.headers({
+        Accept: "application/octet-stream",
+      }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${rootId}/document-empty-folder.enc`,
+      ),
+    );
+
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get empty document root key")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${rootId}/keys/mary@imagey.cloud`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${rootId}/keys/mary@imagey.cloud.json`,
+      ),
+    );
+}
+
+// Creating a folder is just storeDocument() with a zero-byte "Folder" typed
+// file: one multipart POST (parent-folder update + new folder metadata + key,
+// all in one request) - there's no separate PUT for the parent anymore, and
+// since FolderImageComponent never fetches file content for folder-type
+// documents, no content GET follows either.
+export async function prepareMarysFolderCreation() {
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to create a folder")
+    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
+      r.headers({
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=.*",
         ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
+      });
+    })
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/mary@imagey.cloud/documents/new-folder-id",
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
       }),
     );
 }
 
-export async function prepareEmptyMarysDocuments() {
-  await prepareMarysRootFolder();
+// Mary's profile is now loaded like any other document: a document.enc encrypted
+// with the profile document's own key, plus a keys/mary@imagey.cloud.json holding
+// that key wrapped with Mary's settingsKey (documentService.loadDocument(user, id,
+// user, settingsKey)). The profile picture is a file attached to the same
+// document (documentService.loadContent(user, id, profile.key, profilePictureId)),
+// not a separate document.
+// A registered interaction is only ever matched once by Pact's mock
+// server - a test that genuinely revisits the profile page (and so
+// re-fetches it) must register it again with a distinct suffix so each
+// visit gets its own expected interaction.
+export async function prepareMarysEmptyProfile(suffix: string = "") {
+  const profileId = TestData.mary.settings!.profile;
+
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get her empty profile document" + suffix,
+    )
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${profileId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${profileId}/document-empty.enc`,
+      ),
+    );
 
   return provider
     .addInteraction()
-    .given("mary has no documents")
-    .uponReceiving("a request of mary to get empty documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r.query({ folderId: "root-folder-id" }).headers({
-        Accept: "application/json",
-      }),
+    .uponReceiving(
+      "a request of mary to get her empty profile document key" + suffix,
     )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${profileId}/keys/mary@imagey.cloud`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${profileId}/keys/mary@imagey.cloud-empty.json`,
+      ),
+    );
 }
 
-export async function prepareDocumentUpload(
-  documentName: string,
-  documentId: string,
-) {
-  expectedUploadDocumentId = documentId;
-  const previewImageId =
-    documentId === TestData.mary.documents[0].documentId
-      ? "9e4742c8-b3b8-44b9-ab83-8e4912271dee"
-      : "2211b759-744c-40f3-aec2-10c8d549a49e";
+export async function prepareMarysProfile() {
+  const profileId = TestData.mary.settings!.profile;
+  const pictureContentId = TestData.mary.documents[5].contentId!;
 
-  const smallImageId =
-    documentId === TestData.mary.documents[0].documentId
-      ? "d09630e2-437e-40ff-8da1-753a0e05caad"
-      : "01e9b15b-655c-4baf-8fd3-78c23df70a67";
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get her profile document")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${profileId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${profileId}/document.enc`,
+      ),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get her profile document key")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${profileId}/keys/mary@imagey.cloud`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${profileId}/keys/mary@imagey.cloud.json`,
+      ),
+    );
+
+  return provider
+    .addInteraction()
+    .given("Mary has a profile picture")
+    .uponReceiving("a request of mary to get her profile picture content")
+    .withRequest(
+      "GET",
+      `/users/mary@imagey.cloud/documents/${profileId}/files/${pictureContentId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${profileId}/files/${pictureContentId}`,
+      ),
+    );
+}
+
+export async function prepareProfileSave() {
+  const profileId = TestData.mary.settings!.profile;
+
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to store a new profile picture")
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        matcher: `/users/mary@imagey\\.cloud/documents/${profileId}/files/.+`,
+        generate: `/users/mary@imagey.cloud/documents/${profileId}/files/00000000-0000-0000-0000-000000000000`,
+      }),
+      (r) =>
+        r.headers({
+          "Content-Type": "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200);
+
+  return (
+    provider
+      .addInteraction()
+      .uponReceiving("a request of mary to update her profile metadata")
+      .withRequest(
+        "PUT",
+        `/users/mary@imagey.cloud/documents/${profileId}`,
+        (r) =>
+          r.headers({
+            "Content-Type": "application/octet-stream",
+          }),
+      )
+      // No body, so 204 No Content - but the server returns the document's new
+      // ETag header so a follow-up save in the same session can send a fresh
+      // If-Match instead of the now-stale one.
+      .willRespondWith(204, (r) =>
+        r.headers({ ETag: MatchersV3.string('"updated-profile-etag"') }),
+      )
+  );
+}
+
+export async function prepareDocumentUpload(documentId: string) {
+  expectedUploadDocumentId = documentId;
+
+  // For 945331a6-b9a8-4f88-a5f5-5928bcdf2fdb (child-355176_1920.jpg, documents[3])
+  // preview: 9e4742c8-b3b8-44b9-ab83-8e4912271dee, small: d09630e2-437e-40ff-8da1-753a0e05caad
+  // For 78d1b093-45ec-4a25-9594-615ca2d70ba2 (beach-4524911_480.jpg, documents[4])
+  // preview: 2211b759-744c-40f3-aec2-10c8d549a49e, small: 01e9b15b-655c-4baf-8fd3-78c23df70a67
+  // For f9910aa7-4db6-4b02-b596-c3ccf872ae98 (beach-4524911_1920.jpg, documents[1])
+  // preview: 330e1a82-6626-4a4b-b1ca-9c8a59c859e4, small: f9910aa7-4db6-4b02-b596-c3ccf872ae98
+
+  let previewImageId: string;
+  let smallImageId: string;
+
+  if (documentId === TestData.mary.documents[3].documentId) {
+    previewImageId = "9e4742c8-b3b8-44b9-ab83-8e4912271dee";
+    smallImageId = "d09630e2-437e-40ff-8da1-753a0e05caad";
+  } else if (documentId === TestData.mary.documents[1].documentId) {
+    previewImageId = "330e1a82-6626-4a4b-b1ca-9c8a59c859e4";
+    smallImageId = "f9910aa7-4db6-4b02-b596-c3ccf872ae98";
+  } else if (documentId === TestData.mary.documents[4].documentId) {
+    previewImageId = "2211b759-744c-40f3-aec2-10c8d549a49e";
+    smallImageId = "01e9b15b-655c-4baf-8fd3-78c23df70a67";
+  } else {
+    // Fallback for other documents
+    previewImageId = "9e4742c8-b3b8-44b9-ab83-8e4912271dee";
+    smallImageId = "d09630e2-437e-40ff-8da1-753a0e05caad";
+  }
 
   expectedUploadSmallImageId = smallImageId;
   expectedUploadPreviewImageId = previewImageId;
@@ -656,12 +1293,19 @@ export async function prepareDocumentUpload(
 
   provider
     .addInteraction()
-    .uponReceiving(`a request of mary to upload a document`)
+    // No provider state needed: the backend generates the documentId itself and the
+    // Location header is only loosely matched, so there is nothing to prepare. The id is
+    // folded into the description instead, purely so each call site's interaction stays
+    // distinct in the merged contract (this function is called with different documentIds
+    // from different tests, and the request/response shape would otherwise be identical).
+    .uponReceiving(
+      `a request of mary to upload a document with id ${documentId}`,
+    )
     .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
       r.headers({
         "Content-Type": MatchersV3.regex(
           "multipart/form-data.*",
-          "multipart/form-data; boundary=----WebKitFormBoundary",
+          "multipart/form-data; boundary=.*",
         ),
       });
     })
@@ -670,62 +1314,9 @@ export async function prepareDocumentUpload(
         Location: MatchersV3.string(
           `/users/mary@imagey.cloud/documents/${documentId}`,
         ),
-        "Access-Control-Expose-Headers": "Location",
+        "Access-Control-Expose-Headers": "Location, ETag",
       }),
     );
-
-  provider
-    .addInteraction()
-    .given("Mary has uploaded document")
-    .uponReceiving("a request to get root folder metadata to update")
-    .withRequest(
-      "GET",
-      `/users/mary@imagey.cloud/documents/root-folder-id`,
-      (r) => {
-        r.headers({
-          Accept: "application/json",
-        });
-      },
-    )
-    .willRespondWith(200, (r) => {
-      r.headers({ ETag: MatchersV3.string("123456789") });
-      r.jsonBody({
-        documentId: "root-folder-id",
-        metadata: fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            "tests/images/encrypted/root-folder-id/metadata",
-          ),
-          "base64",
-        ),
-        sharedKey: {
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs.readFileSync(
-            path.resolve(
-              process.cwd(),
-              "tests/images/encrypted/root-folder-id/keys/mary@imagey.cloud/encrypted-shared.key",
-            ),
-            "base64",
-          ),
-        },
-      });
-    });
-
-  provider
-    .addInteraction()
-    .given("Mary has uploaded document")
-    .uponReceiving("a request to update root folder metadata with new document")
-    .withRequest(
-      "PUT",
-      `/users/mary@imagey.cloud/documents/root-folder-id`,
-      (r) => {
-        r.headers({
-          "Content-Type": "application/octet-stream",
-        });
-      },
-    )
-    .willRespondWith(200);
 
   return provider
     .addInteraction()
@@ -748,7 +1339,7 @@ export async function prepareDocumentUpload(
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        `./tests/images/encrypted/${documentId}/files/${previewImageId}`,
+        `tests/images/encrypted/${documentId}/files/${previewImageId}`,
       ),
     );
 }
@@ -844,17 +1435,21 @@ export async function inputMarysPassword(page: Page) {
   await expect(confirmButton).not.toBeVisible();
 }
 
-export async function prepareMarysContactRequests() {
-  provider
-    .addInteraction()
-    .given("mary has no contacts and a contact request from bill")
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+export async function prepareMarysContactRequests(
+  chatsDocumentKey?: JsonWebKey,
+) {
+  // Accepting a request re-reads the "chats" document a second time (see
+  // ContactService.acceptContactRequest) - callers that also exercise the
+  // accept flow in the same test must pass the SAME key they used for
+  // their own second registration here, otherwise the two independently
+  // random keys leave the client's decryption unpredictable depending on
+  // which of the two identical-looking interactions the mock server
+  // happens to match a given request against.
+  await prepareMarysChatsDocument(
+    [],
+    "mary has no contacts and a contact request from bill",
+    chatsDocumentKey,
+  );
 
   return provider
     .addInteraction()
@@ -865,20 +1460,67 @@ export async function prepareMarysContactRequests() {
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody(["bill@imagey.cloud"]));
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          inviter: "bill@imagey.cloud",
+          invitee: "mary@imagey.cloud",
+          publicKey: TestData.bill.publicMainKey,
+          status: "INVITED",
+        },
+      ]),
+    );
 }
 
-export async function prepareMarysEmptyContactRequests() {
-  provider
+// The inviter's side of the handshake (ContactService.receiveContactRequest,
+// via Chats.tsx's second effect): Mary is the inviter, Bill (the invitee)
+// already ACCEPTED, and the request now carries Bill's own public key
+// (overwritten on accept - see ContactRequest.ts) plus the chat key,
+// ECDH-wrapped by Bill for Mary exactly as ContactService.
+// acceptContactRequest wraps `sharedKeyForInviter`.
+export async function prepareMarysAcceptedContactRequest(
+  chatId: string,
+  chatDocumentKey: JsonWebKey,
+  given: string = "mary has no contacts and bill has accepted marys invitation",
+  chatsDocumentKey?: JsonWebKey,
+) {
+  await prepareMarysChatsDocument([], given, chatsDocumentKey);
+
+  const sharedKey = await encryptKeyEnvelopeEcdh(
+    chatDocumentKey,
+    TestData.bill.privateMainKey!,
+    TestData.mary.publicMainKey,
+  );
+
+  return provider
     .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get empty contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
+    .given(given)
+    .uponReceiving(
+      "a request of mary to get an accepted contact request from bill",
+    )
+    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
       }),
     )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          inviter: "mary@imagey.cloud",
+          invitee: "bill@imagey.cloud",
+          publicKey: TestData.bill.publicMainKey,
+          status: "ACCEPTED",
+          chatId,
+          // ECDH-wrapped, so the concrete bytes differ every run - the provider
+          // fixture carries its own; only the shape matters for the contract.
+          sharedKey: MatchersV3.string(sharedKey),
+        },
+      ]),
+    );
+}
+
+export async function prepareMarysEmptyContactRequests() {
+  await prepareMarysChatsDocument([], "mary has no contacts");
 
   return provider
     .addInteraction()
@@ -892,12 +1534,18 @@ export async function prepareMarysEmptyContactRequests() {
     .willRespondWith(200, (r) => r.jsonBody([]));
 }
 
-export async function prepareMarysEmptyDocuments() {
+export async function prepareBillsEmptyContactRequests() {
+  // "no contacts" is bill's default fixture state throughout this suite -
+  // unlike mary, he's never given contacts elsewhere, so this needs no
+  // explicit provider state (see prepareMarysEmptyContactRequests for the
+  // contrasting case, where mary's "no contacts" state IS meaningful
+  // because other scenarios give her contacts).
+  await prepareBillsChatsDocument([]);
+
   return provider
     .addInteraction()
-    .given("mary has no documents")
-    .uponReceiving("a request of mary to get empty documents")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
+    .uponReceiving("a request of bill to get empty contact requests")
+    .withRequest("GET", "/users/bill@imagey.cloud/contact-requests", (r) =>
       r.headers({
         Accept: "application/json",
       }),
@@ -905,76 +1553,87 @@ export async function prepareMarysEmptyDocuments() {
     .willRespondWith(200, (r) => r.jsonBody([]));
 }
 
+export async function prepareBillsDocuments() {
+  provider
+    .addInteraction()
+    .uponReceiving("a request of bill to get document root")
+    .withRequest(
+      "GET",
+      "/users/bill@imagey.cloud/documents/31e3569a-d2a7-493d-8d45-06370ebd2705",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/31e3569a-d2a7-493d-8d45-06370ebd2705/document.enc",
+      ),
+    );
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of bill to get document root key")
+    .withRequest(
+      "GET",
+      "/users/bill@imagey.cloud/documents/31e3569a-d2a7-493d-8d45-06370ebd2705/keys/bill@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        "tests/images/encrypted/31e3569a-d2a7-493d-8d45-06370ebd2705/keys/bill@imagey.cloud.json",
+      ),
+    );
+}
+
 export async function prepareMarysChat(
   contactEmail: string,
   suffix: string = "",
   validKey: boolean = true,
 ) {
-  const chat = TestData.mary.chats!.find(
-    (c) => c.contactEmail === contactEmail,
-  )!;
-  const contactName = contactEmail.split("@")[0] as keyof TestDataStructure;
+  const chatId = "chat-" + contactEmail.split("@")[0];
+  const given =
+    contactEmail !== "laura@imagey.cloud"
+      ? `Mary has a chat with ${contactEmail.split("@")[0]}`
+      : undefined;
+
+  // Mary already has both laura and alice as contacts (see the fixed
+  // chatId's below); the actually-visited `contactEmail` is always one of
+  // them, so returning both regardless of which one is under test matches
+  // what a real "chats" document would contain.
+  const chatsDocumentKey = await prepareMarysChatsDocument(
+    [
+      {
+        userId: "laura@imagey.cloud",
+        chatId: "chat-laura",
+        owner: "mary@imagey.cloud",
+      },
+      {
+        userId: "alice@imagey.cloud",
+        chatId: "chat-alice",
+        owner: "mary@imagey.cloud",
+      },
+    ],
+    given,
+  );
+
+  await mockChatDocument({
+    ownerEmail: "mary@imagey.cloud",
+    chatId,
+    chatsId: TestData.mary.settings!.chats,
+    chatsDocumentKey,
+    given,
+    suffix,
+    validKey,
+  });
 
   let builder = provider.addInteraction();
-  if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(
-      `Mary has a chat with ${contactEmail.split("@")[0]}`,
-    );
-  }
-
-  if (!validKey) {
-    // Add it twice because React StrictMode fetches it twice
-    for (let i = 0; i < 2; i++) {
-      builder
-        .uponReceiving(
-          `a request of mary to get ${contactName as string}s public key${suffix} (${i})`,
-        )
-        .withRequest("GET", `/users/${contactEmail}/public-keys/0`, (r) => {
-          r.headers({ Accept: "application/json" });
-        })
-        .willRespondWith(200, (r) =>
-          r.jsonBody((TestData[contactName] as TestUser).publicMainKey!),
-        );
-
-      builder = provider.addInteraction();
-      if (contactEmail !== "laura@imagey.cloud") {
-        builder = builder.given(
-          `Mary has a chat with ${contactEmail.split("@")[0]}`,
-        );
-      }
-    }
-  }
-
-  builder
-    .uponReceiving(`a request to get shared contact key${suffix}`)
-    .withRequest("GET", `/users/mary@imagey.cloud/contacts/${contactEmail}/key`)
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "mary@imagey.cloud",
-        kid: "0",
-        sharedKey: Matchers.string(validKey ? chat.encryptedSharedKey : "AAAA"),
-      }),
-    );
-
-  builder = provider.addInteraction();
-  if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(
-      `Mary has a chat with ${contactEmail.split("@")[0]}`,
-    );
-  }
-
-  builder
-    .uponReceiving(`a request of mary to get contacts in chat${suffix}`)
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) => {
-      r.headers({ Accept: "application/json" });
-    })
-    .willRespondWith(200, (r) => r.jsonBody([contactEmail]));
-
-  builder = provider.addInteraction();
-  if (contactEmail !== "laura@imagey.cloud") {
-    builder = builder.given(
-      `Mary has a chat with ${contactEmail.split("@")[0]}`,
-    );
+  if (given) {
+    builder = builder.given(given);
   }
 
   return builder
@@ -1087,30 +1746,78 @@ export async function prepareAlicesLogin() {
     .withRequest(
       "GET",
       "/users/alice@imagey.cloud/documents/alice@imagey.cloud",
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
     )
-    .willRespondWith(404);
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        "tests/images/encrypted/alice@imagey.cloud/document.enc",
+      ),
+    );
 
   provider
     .addInteraction()
     .given("Alice exists")
-    .uponReceiving("a request to create Alices documents")
+    .uponReceiving("a request to get Alices settings key")
     .withRequest(
-      "PUT",
-      Matchers.regex({
-        matcher: "/users/alice@imagey\\.cloud/documents/.*",
-        generate: "/users/alice@imagey.cloud/documents/some-uuid",
+      "GET",
+      "/users/alice@imagey.cloud/documents/alice@imagey.cloud/keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        "tests/images/encrypted/alice@imagey.cloud/keys/0.json",
+      ),
+    );
+}
+
+// Alice, like Mary, has her own (empty) documents root folder that the
+// Activities/Home page eagerly loads right after login - independent of
+// whatever chat/document-sharing scenario the test is actually about.
+export async function prepareAlicesEmptyDocumentsFolder() {
+  const rootId = "68980188-577d-4d2f-9e36-a6b32b25cd3a"; // Alice reuses this fixture ID; see prepareAlicesLogin above.
+
+  provider
+    .addInteraction()
+    .given("Alice exists")
+    .uponReceiving("a request of alice to get an empty document root")
+    .withRequest("GET", `/users/alice@imagey.cloud/documents/${rootId}`, (r) =>
+      r.headers({
+        Accept: "application/octet-stream",
       }),
     )
-    .willRespondWith(200);
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${rootId}/document-empty-folder.enc`,
+      ),
+    );
 
-  provider
+  return provider
     .addInteraction()
     .given("Alice exists")
-    .uponReceiving("a request to get Alices documents")
-    .withRequest("GET", "/users/alice@imagey.cloud/documents", (r) =>
-      r.query({ folderId: Matchers.string("some-uuid") }),
+    .uponReceiving("a request of alice to get empty document root key")
+    .withRequest(
+      "GET",
+      `/users/alice@imagey.cloud/documents/${rootId}/keys/alice@imagey.cloud`,
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
-    .willRespondWith(200, (builder) => builder.jsonBody([]));
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${rootId}/keys/alice@imagey.cloud.json`,
+      ),
+    );
 }
 
 export async function prepareAlicesChat(
@@ -1118,38 +1825,277 @@ export async function prepareAlicesChat(
   suffix: string = "",
   returnValidKey: boolean = true,
 ) {
-  provider
-    .addInteraction()
-    .given("Alice has a chat with mary")
-    .uponReceiving("a request to get the contacts" + suffix)
-    .withRequest("GET", "/users/alice@imagey.cloud/contacts")
-    .willRespondWith(200, (builder) => builder.jsonBody([contact]));
+  const { chatsId } = await getAlicesSettings();
+  const chatId = "chat-" + contact.split("@")[0];
+
+  const chatsDocumentKey = await prepareAlicesChatsDocument(
+    [{ userId: contact, chatId, owner: "alice@imagey.cloud" }],
+    "Alice has a chat with mary",
+  );
+
+  await mockChatDocument({
+    ownerEmail: "alice@imagey.cloud",
+    chatId,
+    chatsId,
+    chatsDocumentKey,
+    given: "Alice has a chat with mary",
+    suffix,
+    validKey: returnValidKey,
+  });
+
+  return provider;
+}
+
+export async function prepareBillsDocumentUpload(documentId: string) {
+  expectedUploadDocumentId = documentId;
+  const previewImageId =
+    documentId === TestData.mary.documents[3].documentId
+      ? "9e4742c8-b3b8-44b9-ab83-8e4912271dee"
+      : "330e1a82-6626-4a4b-b1ca-9c8a59c859e4";
+
+  const smallImageId =
+    documentId === TestData.mary.documents[3].documentId
+      ? "d09630e2-437e-40ff-8da1-753a0e05caad"
+      : "f9910aa7-4db6-4b02-b596-c3ccf872ae98";
+
+  expectedUploadSmallImageId = smallImageId;
+  expectedUploadPreviewImageId = previewImageId;
 
   provider
     .addInteraction()
-    .given("Alice has a chat with mary")
-    .uponReceiving("a request to get contact key" + suffix)
-    .withRequest("GET", `/users/alice@imagey.cloud/contacts/${contact}/key`)
-    .willRespondWith(200, (builder) =>
-      builder.jsonBody({
-        issuer: "alice@imagey.cloud",
-        kid: "0",
-        sharedKey: returnValidKey
-          ? TestData.mary.chats![1].encryptedSharedKey
-          : "invalid-dummy-key",
+    .uponReceiving("a request of bill to get public key")
+    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
+
+  // Mock für den Upload-Request
+  provider
+    .addInteraction()
+    // See the comment on the equivalent mary interaction above: no provider state is
+    // needed here either, the id in the description is only there to keep this interaction
+    // distinct in the merged contract.
+    .uponReceiving(
+      `a request of bill to upload a document with id ${documentId}`,
+    )
+    .withRequest("POST", "/users/bill@imagey.cloud/documents", (r) => {
+      r.headers({
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=.*",
+        ),
+      });
+    })
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          `/users/bill@imagey.cloud/documents/${documentId}`,
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
       }),
     );
 
-  if (!returnValidKey) {
-    provider
-      .addInteraction()
-      .given(`Alice has a chat with ${contact}`)
-      .uponReceiving("a request to get contact public key" + suffix)
-      .withRequest("GET", `/users/${contact}/public-keys/0`)
-      .willRespondWith(200, (builder) =>
-        builder.jsonBody(TestData.mary.publicMainKey),
-      );
+  return provider
+    .addInteraction()
+    .given("Bill has uploaded document")
+    .uponReceiving(
+      "a request of bill to load document content of " + documentId,
+    )
+    .withRequest(
+      "GET",
+      Matchers.regex({
+        matcher:
+          "/users/bill@imagey\\.cloud/documents/(?!(bb66|f991)).+/files/.+",
+        generate: `/users/bill@imagey.cloud/documents/${documentId}/files/${previewImageId}`,
+      }),
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${documentId}/files/${previewImageId}`,
+      ),
+    );
+}
+
+// Registers the fetches App.tsx/ActivityService make right after a FRESH
+// registration: the settings document, its key envelope, the (now, per the
+// updated registration implementation) already-created empty document-list
+// root, and its key envelope. Unlike Mary's fixtures (pre-encrypted offline
+// under known, fixed keys), a freshly registered user's settingsKey and
+// mainKeyPair are generated randomly IN THE BROWSER during the test run, so
+// there is no way to pre-bake matching ciphertext ahead of time. Instead we
+// generate a settings key HERE (in Node, using the same AES-GCM algorithm
+// the app uses), encrypt real, valid fixtures with it, and return that key
+// so the caller's test can install a crypto.subtle.decrypt override (see
+// the existing pattern in unlock.test.ts) that intercepts only the ONE
+// decrypt the mock server genuinely can't satisfy - the settings key
+// envelope itself, which the app decrypts asymmetrically using its
+// randomly-generated mainKeyPair - and returns this key instead. Every
+// other decrypt in the chain (the document-list key envelope, the settings
+// document content, the document-list content) is genuinely, correctly
+// encrypted under that same key, so it decrypts for real, no interception
+// needed.
+export async function prepareFreshUserSettings(email: string) {
+  const subtle = webcrypto.subtle;
+  const settingsKeyCryptoKey = await subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  const settingsKeyJwk = (await subtle.exportKey(
+    "jwk",
+    settingsKeyCryptoKey,
+  )) as JsonWebKey;
+
+  // Freely chosen - the real registration call generates its own random
+  // IDs, but the app forgets those and re-derives everything from this
+  // mocked settings document instead, so these are the IDs that end up
+  // actually being used for the rest of the test.
+  const documentListId = "22222222-2222-2222-2222-222222222222";
+  const chatListId = "33333333-3333-3333-3333-333333333333";
+  const profileId = "44444444-4444-4444-4444-444444444444";
+
+  async function encryptWithSettingsKey(plaintext: string): Promise<Buffer> {
+    const iv = webcrypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await subtle.encrypt(
+      { name: "AES-GCM", iv },
+      settingsKeyCryptoKey,
+      new TextEncoder().encode(plaintext),
+    );
+    return Buffer.concat([Buffer.from(iv), Buffer.from(encrypted)]);
   }
 
-  return provider;
+  const settingsDocument = await encryptWithSettingsKey(
+    JSON.stringify({
+      documents: documentListId,
+      chats: chatListId,
+      profile: profileId,
+    }),
+  );
+  const documentList = await encryptWithSettingsKey(
+    JSON.stringify({ documents: [], type: "folder", name: "Documents" }),
+  );
+  // Contacts/chats are also just a Document now (see mockChatsDocument
+  // above) - a freshly registered user starts with an empty contacts list,
+  // same shape as the empty document list below.
+  const chatList = await encryptWithSettingsKey(
+    JSON.stringify({ contacts: [], type: "folder", name: "Chats" }),
+  );
+  // The document-list/chat-list keys are "self-wrapped" with the settings
+  // key (i.e. we reuse the same key as their own key) - one fewer key to
+  // generate, and ActivityService only ever needs to decrypt these
+  // envelopes with settingsKey, so it doesn't matter that it's the same key.
+  const documentListSharedKey = (
+    await encryptWithSettingsKey(JSON.stringify(settingsKeyJwk))
+  ).toString("base64");
+  const chatListSharedKey = documentListSharedKey;
+
+  // Placeholder for the settings key's own envelope - real bytes don't
+  // matter here since the test's crypto.subtle.decrypt override intercepts
+  // this specific decrypt (see doc comment above), but it must still be
+  // valid base64 so base64ToArrayBuffer() doesn't throw before decrypt is
+  // even attempted.
+  const settingsKeyEnvelope = Buffer.from(
+    webcrypto.getRandomValues(new Uint8Array(28)),
+  ).toString("base64");
+
+  provider
+    .addInteraction()
+    // Only meaningful for joe@imagey.cloud (the only caller, right after a fresh
+    // registration) - see prepareFreshUserSettings doc comment above.
+    .given("Joe is registered")
+    .uponReceiving(`a request of ${email} to get settings document`)
+    .withRequest("GET", `/users/${email}/documents/${email}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", settingsDocument),
+    );
+
+  provider
+    .addInteraction()
+    // Only meaningful for joe@imagey.cloud (the only caller, right after a fresh
+    // registration) - see prepareFreshUserSettings doc comment above.
+    .given("Joe is registered")
+    .uponReceiving(`a request of ${email} to get settings key`)
+    .withRequest("GET", `/users/${email}/documents/${email}/keys/0`, (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: email,
+        kid: "0",
+        sharedKey: MatchersV3.string(settingsKeyEnvelope),
+      }),
+    );
+
+  provider
+    .addInteraction()
+    // Only meaningful for joe@imagey.cloud (the only caller, right after a fresh
+    // registration) - see prepareFreshUserSettings doc comment above.
+    .given("Joe is registered")
+    .uponReceiving(`a request of ${email} to get fresh document list`)
+    .withRequest("GET", `/users/${email}/documents/${documentListId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", documentList),
+    );
+
+  provider
+    .addInteraction()
+    // Only meaningful for joe@imagey.cloud (the only caller, right after a fresh
+    // registration) - see prepareFreshUserSettings doc comment above.
+    .given("Joe is registered")
+    .uponReceiving(`a request of ${email} to get fresh document list key`)
+    .withRequest(
+      "GET",
+      `/users/${email}/documents/${documentListId}/keys/${email}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: email,
+        kid: email,
+        sharedKey: MatchersV3.string(documentListSharedKey),
+      }),
+    );
+
+  provider
+    .addInteraction()
+    // Only meaningful for joe@imagey.cloud (the only caller, right after a fresh
+    // registration) - see prepareFreshUserSettings doc comment above.
+    .given("Joe is registered")
+    .uponReceiving(`a request of ${email} to get fresh chat list`)
+    .withRequest("GET", `/users/${email}/documents/${chatListId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) => r.body("application/octet-stream", chatList));
+
+  provider
+    .addInteraction()
+    // Only meaningful for joe@imagey.cloud (the only caller, right after a fresh
+    // registration) - see prepareFreshUserSettings doc comment above.
+    .given("Joe is registered")
+    .uponReceiving(`a request of ${email} to get fresh chat list key`)
+    .withRequest(
+      "GET",
+      `/users/${email}/documents/${chatListId}/keys/${email}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: email,
+        kid: email,
+        sharedKey: MatchersV3.string(chatListSharedKey),
+      }),
+    );
+
+  return { settingsKeyJwk, documentListId, chatListId, profileId };
 }

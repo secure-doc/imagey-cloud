@@ -20,13 +20,15 @@ import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 import static jakarta.ws.rs.core.Response.created;
+import static jakarta.ws.rs.core.Response.noContent;
 import static jakarta.ws.rs.core.Response.ok;
-import static java.util.Base64.getDecoder;
 import static java.util.Optional.ofNullable;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.annotation.security.RolesAllowed;
@@ -40,13 +42,11 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.ResponseBuilder;
-import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
 
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
@@ -55,12 +55,15 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import cloud.imagey.domain.document.DocumentId;
-import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.document.DocumentService;
+import cloud.imagey.domain.document.DocumentUpload;
+import cloud.imagey.domain.document.EncryptedMetadata;
 import cloud.imagey.domain.document.FileName;
+import cloud.imagey.domain.document.UploadMetadata;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
-import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -72,47 +75,33 @@ public class DocumentResource {
     @Inject
     private DocumentRepository documentRepository;
 
-    @Context
-    private SecurityContext securityContext;
+    @Inject
+    private DocumentService documentService;
 
     @GET
-    @RolesAllowed("owner")
-    @Produces(APPLICATION_JSON)
-    public List<DocumentMetadata> getDocumentMetadata(
-        @PathParam("email") User user,
-        @QueryParam("folderId") DocumentId folderId) throws IOException {
-
-        return documentRepository.findMetadata(user, ofNullable(folderId));
-    }
-
-    @GET
-    @RolesAllowed({"owner", "recipient"})
+    @RolesAllowed({"owner", "member"})
     @Path("{documentId}")
-    @Produces(APPLICATION_JSON)
-    public Response getDocumentMetadata(
+    @Produces(APPLICATION_OCTET_STREAM)
+    public Response getDocument(
         @PathParam("email") User user,
-        @PathParam("documentId") DocumentId documentId,
-        @QueryParam("folderId") DocumentId folderId) throws IOException {
+        @PathParam("documentId") DocumentId documentId) throws IOException {
 
-        Email callerEmail = new Email(securityContext.getUserPrincipal().getName());
-        DocumentMetadata metadata = documentRepository.findMetadata(user, documentId, callerEmail, ofNullable(folderId))
+        EncryptedMetadata metadata = documentRepository.loadEncryptedMetadataWithETag(user, documentId)
             .orElseThrow(NotFoundException::new);
-        long etag = documentRepository.getTimestamp(user, documentId).orElseThrow(NotFoundException::new);
-        return ok(metadata).header("ETag", Long.valueOf(etag)).build();
+        return ok(metadata.content()).tag(new EntityTag(metadata.etag())).build();
     }
 
     @PUT
     @RolesAllowed("owner")
     @Path("{documentId}")
     @Consumes(APPLICATION_OCTET_STREAM)
-    public Response storeEncryptedDocumentMetadata(
+    public Response updateDocument(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
         EncryptedContent metadata,
         @Context Request request) throws IOException {
 
-        return documentRepository.getTimestamp(user, documentId)
-            .map(String::valueOf)
+        return documentRepository.getETag(user, documentId)
             .map(EntityTag::new)
             .map(request::evaluatePreconditions)
             .map(Optional::ofNullable)
@@ -120,12 +109,17 @@ public class DocumentResource {
             .map(Optional::get)
             .map(ResponseBuilder::build).orElseGet(() -> {
                 documentRepository.persist(user, documentId, metadata);
-                return ok().build();
+                // Hand back the new ETag so the client can chain another save without a re-read -
+                // the PUT response is otherwise the only place it can learn the post-write tag
+                // (a 204 with no tag leaves the client on a stale ETag and its next save 412s).
+                ResponseBuilder response = noContent();
+                documentRepository.getETag(user, documentId).ifPresent(etag -> response.tag(new EntityTag(etag)));
+                return response.build();
             });
     }
 
     @GET
-    @RolesAllowed({"owner", "recipient"})
+    @RolesAllowed({"owner", "member"})
     @Path("{documentId}/files/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public EncryptedContent getDocumentContent(
@@ -136,64 +130,81 @@ public class DocumentResource {
         return documentRepository.loadContent(user, documentId, contentId).orElseThrow(NotFoundException::new);
     }
 
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{documentId}/files/{contentId}")
+    @Consumes(APPLICATION_OCTET_STREAM)
+    public Response storeDocumentContent(
+        @PathParam("email") User user,
+        @PathParam("documentId") DocumentId documentId,
+        @PathParam("contentId") DocumentId contentId,
+        EncryptedContent content) throws IOException {
+
+        documentRepository.persist(user, documentId, new FileName(contentId.id()), content);
+        return ok().build();
+    }
+
     @GET
-    @RolesAllowed({"owner", "recipient"})
-    @Path("{documentId}/keys/{share-email}")
+    @RolesAllowed({"owner", "member"})
+    @Path("{documentId}/keys/{kid}")
     @Produces(APPLICATION_JSON)
     public EncryptedSharedKey getSharedKey(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
-        @PathParam("share-email") Email userTheDocumentIsSharedWith) throws IOException {
+        @PathParam("kid") Kid kid) throws IOException {
 
-        return documentRepository.findDocumentKey(user, documentId, userTheDocumentIsSharedWith)
+        return documentRepository.findDocumentKey(user, documentId, kid)
                 .orElseThrow(NotFoundException::new);
     }
 
-    @PUT
+    @POST
     @RolesAllowed("owner")
-    @Path("{documentId}/keys/{share-email}")
+    @Path("{documentId}/keys")
     @Consumes(APPLICATION_JSON)
     public Response storeSharedKey(
         @PathParam("email") User user,
         @PathParam("documentId") DocumentId documentId,
-        @PathParam("share-email") Email userTheDocumentIsSharedWith,
         EncryptedSharedKey key) throws IOException {
 
-        EncryptedContent keyContent = new EncryptedContent(getDecoder().decode(key.sharedKey()));
-        documentRepository.persist(user, documentId, userTheDocumentIsSharedWith, keyContent);
+        documentRepository.create(user, documentId, key);
         return ok().build();
     }
 
-    /**
-     * Uploads a document via multipart form data containing metadata, shared key,
-     * and multiple content streams.
-     *
-     * @param user  the user uploading the document
-     * @param input the multipart form data input
-     * @return a successful response if the upload succeeds
-     * @throws IOException if reading the input fails
-     */
     @POST
     @RolesAllowed("owner")
     @Consumes(MULTIPART_FORM_DATA)
     public Response uploadDocument(
         @Context UriInfo uriInfo,
         @PathParam("email") User user,
-        @Multipart(value = "metadata") EncryptedContent metadata,
-        @Multipart(value = "key") byte[] keyBytes,
-        @Multipart(value = "issuer") String issuer,
+        @Multipart("metadata") UploadMetadata metadata,
+        @Multipart("folder") EncryptedContent folderContent,
+        @Multipart("document") EncryptedContent documentContent,
         List<Attachment> files) throws IOException {
 
-        DocumentId documentId = documentRepository.persist(user, metadata);
+        Map<FileName, EncryptedContent> uploadedFiles = new LinkedHashMap<>();
+        for (Attachment attachment: ofNullable(files).orElseGet(List::of)) {
+            if (attachment.getContentDisposition().getFilename() != null) {
+                uploadedFiles.put(
+                    new FileName(attachment.getContentDisposition().getFilename()),
+                    new EncryptedContent(attachment.getObject(byte[].class)));
+            }
+        }
 
-        documentRepository.persist(user, documentId, new Email(issuer), new EncryptedContent(keyBytes));
+        DocumentUpload upload = new DocumentUpload(
+            metadata.folderOwner(),
+            metadata.folderId(),
+            folderContent,
+            metadata.folderETag(),
+            metadata.documentId(),
+            documentContent,
+            metadata.key(),
+            uploadedFiles);
+        String folderETag = documentService.uploadDocument(user, upload);
 
-        ofNullable(files).ifPresent(f -> f.stream().filter(a -> a.getContentDisposition().getFilename() != null).forEach(attachment -> {
-            FileName name = new FileName(attachment.getContentDisposition().getFilename());
-            EncryptedContent content = new EncryptedContent(attachment.getObject(byte[].class));
-            documentRepository.persist(user, documentId, name, content);
-        }));
-        URI location = uriInfo.getAbsolutePathBuilder().path(documentId.id()).build();
-        return created(location).build();
+        URI location = uriInfo.getAbsolutePathBuilder().path(metadata.documentId().id()).build();
+        // Hand back the folder's new ETag (computed by the service from the bytes it just wrote, so
+        // no extra read here) - the client chains another change onto it without a re-read, and a
+        // retry after a 412 lands on a known-fresh value.
+        return created(location).tag(new EntityTag(folderETag)).build();
     }
 }

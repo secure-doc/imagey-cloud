@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Message } from "./Message";
 import { messageService } from "./MessageService";
-import { useAuthentication } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
+import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
 
 import DocumentMetadata from "../document/DocumentMetadata";
 import ImageList from "../components/ImageList";
@@ -11,6 +11,8 @@ import ImageList from "../components/ImageList";
 interface SendMessageFormProps {
   userEmail: string;
   contactEmail: string;
+  ownerEmail: string;
+  chatId: string;
   sharedKey: JsonWebKey;
   onMessageSent: (message: Message) => void;
 }
@@ -18,13 +20,14 @@ interface SendMessageFormProps {
 export function SendMessageForm({
   userEmail,
   contactEmail,
+  ownerEmail,
+  chatId,
   sharedKey,
   onMessageSent,
 }: SendMessageFormProps) {
   const { t } = useTranslation();
-  const authentication = useAuthentication();
-  const publicKey = authentication.keyPairs?.mainKeyPair.publicKey;
-  const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
+  const documentsId = useDocumentsId();
+  const settingsKey = useSettingsKey();
 
   const [inputMessage, setInputMessage] = useState("");
   const [showDialog, setShowDialog] = useState(false);
@@ -32,22 +35,13 @@ export function SendMessageForm({
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    if (showDialog && !documents && publicKey && privateKey) {
+    if (showDialog && !documents && userEmail && settingsKey) {
       documentService
-        .getRootFolder(userEmail, publicKey, privateKey)
-        .then((rootFolder) => {
-          return documentService.loadDocuments(
-            userEmail,
-            publicKey,
-            privateKey,
-            rootFolder.documentId,
-            rootFolder.key,
-          );
-        })
+        .loadFolderChildren(userEmail, documentsId, userEmail, settingsKey)
         .then((docs) => setDocuments(docs))
         .catch(console.error);
     }
-  }, [showDialog, documents, userEmail, publicKey, privateKey]);
+  }, [showDialog, documents, userEmail, documentsId, settingsKey]);
 
   useEffect(() => {
     if (showDialog) {
@@ -67,7 +61,8 @@ export function SendMessageForm({
     try {
       const newMessage = await messageService.sendEncryptedMessage(
         userEmail,
-        contactEmail,
+        ownerEmail,
+        chatId,
         messageText,
         sharedKey,
       );
@@ -80,7 +75,6 @@ export function SendMessageForm({
 
   const handleShareDocument = async (document: DocumentMetadata) => {
     setShowDialog(false);
-    if (!publicKey || !privateKey) return;
     try {
       await documentService.shareDocument(
         userEmail,
@@ -97,7 +91,8 @@ export function SendMessageForm({
 
       const newMessage = await messageService.sendEncryptedMessage(
         userEmail,
-        contactEmail,
+        ownerEmail,
+        chatId,
         payload,
         sharedKey,
       );

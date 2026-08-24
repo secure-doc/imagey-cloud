@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./translation/i18n";
 import "beercss";
 import "material-dynamic-colors";
@@ -11,7 +11,7 @@ import Chats from "./pages/Chats";
 import Chat from "./pages/Chat";
 import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
-import Profile from "./pages/Profile";
+import Profile from "./pages/ProfilePage";
 import Devices from "./pages/Devices";
 import {
   Email,
@@ -35,7 +35,9 @@ function DocumentRoute() {
 
 function ChatRoute() {
   const { contactEmail } = useParams();
-  return contactEmail ? <Chat contactEmail={contactEmail} /> : null;
+  return contactEmail ? (
+    <Chat key={contactEmail} contactEmail={contactEmail} />
+  ) : null;
 }
 
 function BottomNavLayout() {
@@ -53,19 +55,35 @@ function App() {
   const [settings, setSettings] = useState<SettingsType | undefined>();
   const [folders, setFolders] = useState<Record<string, FolderInfo>>({});
 
-  const registerParentFolder = (id: string, parentId: string) => {
+  const registerParentFolder = useCallback((id: string, parentId: string) => {
     setFolders((prev) => {
       const folder = prev[id] || {};
+      if (folder.parentId === parentId) {
+        return prev;
+      }
       return { ...prev, [id]: { parentId, key: folder.key } };
     });
-  };
+  }, []);
 
-  const registerKey = (id: string, key: JsonWebKey) => {
+  const registerKey = useCallback((id: string, key: JsonWebKey) => {
     setFolders((prev) => {
       const folder = prev[id] || {};
+      if (folder.key === key) {
+        return prev;
+      }
       return { ...prev, [id]: { parentId: folder.parentId, key } };
     });
-  };
+  }, []);
+
+  // The settings document is the parent of the documents root folder, so the
+  // root folder key can be derived on every page, not just the documents page.
+  useEffect(() => {
+    if (!user || !settings) {
+      return;
+    }
+    registerParentFolder(settings.documents, user);
+    registerKey(user, settings.settingsKey);
+  }, [user, settings, registerParentFolder, registerKey]);
 
   useEffect(() => {
     ui("theme", "#1176f3");
@@ -135,10 +153,13 @@ function App() {
                     <Route index element={<DocumentsPage />} />
                     <Route path=":documentId" element={<DocumentRoute />} />
                   </Route>
-                  <Route path="chats" element={<Chats />} />
+                  <Route path="chats" element={<Chats id={settings.chats} />} />
                   <Route path="settings">
                     <Route index element={<Settings />} />
-                    <Route path="profile" element={user && <Profile />} />
+                    <Route
+                      path="profile"
+                      element={user && <Profile id={settings.profile} />}
+                    />
                     <Route path="devices" element={user && <Devices />} />
                   </Route>
                 </Route>

@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
+import { useObjectUrl } from "../hooks/useObjectUrl";
 import Document from "../document/Document";
 
 export default function ImageComponent({
@@ -22,6 +23,12 @@ export default function ImageComponent({
   const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
+    // A reused/re-ordered slot may hand this component a different `image` -
+    // clear the previous document's resolved content and error state so it
+    // doesn't show through while the new content loads.
+    setContent(undefined);
+    setError(false);
+
     // If it's already a Document with content, just use it
     if ("content" in image && image.content) {
       setContent(image.content as ArrayBuffer);
@@ -29,16 +36,9 @@ export default function ImageComponent({
     }
 
     if (user && publicMainKey && privateMainKey) {
-      console.log("imageComponent: " + image.key);
       documentService
-        .loadDocumentContent(user, image)
-        .then((doc) => {
-          if (doc.content) {
-            setContent(doc.content);
-          } else {
-            setError(true);
-          }
-        })
+        .loadContent(user, image)
+        .then((content) => setContent(content))
         .catch((e) => {
           console.error("Error loading image content", e);
           setError(true);
@@ -46,18 +46,25 @@ export default function ImageComponent({
     }
   }, [user, image, publicMainKey, privateMainKey]);
 
-  if (content) {
-    const blob = new Blob([content], {
-      type:
-        image.type && image.type.startsWith("image/")
-          ? "image/png"
-          : image.type,
-    });
-    const url = URL.createObjectURL(blob);
+  const blob = useMemo(
+    () =>
+      content
+        ? new Blob([content], {
+            type:
+              image.type && image.type.startsWith("image/")
+                ? "image/png"
+                : image.type,
+          })
+        : undefined,
+    [content, image.type],
+  );
+  const objectUrl = useObjectUrl(blob);
+
+  if (objectUrl) {
     return (
       <img
         key={image.documentId}
-        src={url}
+        src={objectUrl}
         alt={image.name}
         loading="lazy"
         className={className}

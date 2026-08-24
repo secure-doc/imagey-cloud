@@ -3,6 +3,7 @@ import {
   clearLocalStorage,
   inputMarysPassword,
   loginAsMary,
+  prepareMarysChatsDocument,
   prepareMarysContactRequests,
   prepareMarysDevices,
   prepareMarysDocuments,
@@ -22,16 +23,7 @@ test("navigate to chats", async ({ page }) => {
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
 
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareMarysChatsDocument([], "mary has no contacts");
 
   const given = provider
     .addInteraction()
@@ -53,14 +45,27 @@ test("navigate to chats", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    await page.waitForTimeout(10_000);
     const chatsLink = page.getByRole("link", { name: "Chats" }).first();
     await expect(chatsLink).toBeVisible();
+
+    // "No contacts yet?" renders while the chats document's own load is still
+    // in flight (contacts undefined), so it doesn't gate that load. Its key
+    // GET is the load's last request and runningPactRequests briefly dips to
+    // 0 between the content GET and the key GET - wait for the key response
+    // explicitly, otherwise the poll below can pass in that gap and tear the
+    // mock server down mid-request (route.fetch -> ECONNREFUSED, flaky in CI).
+    const chatsKeyResponse = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(
+          `/users/mary@imagey.cloud/documents/${TestData.mary.settings!.chats}/keys/`,
+        ),
+    );
     await chatsLink.click();
 
     // Then
     await expect(page.getByText("No contacts yet?")).toBeVisible();
-    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await chatsKeyResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -104,16 +109,7 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
   await prepareMarysLogin(page);
 
   await prepareMarysDocuments();
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareMarysChatsDocument([], "mary has no contacts");
 
   const given = provider
     .addInteraction()
@@ -140,6 +136,17 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
     await menuButton.click();
     const chatsLink = page.getByRole("link", { name: "Chats" });
     await expect(chatsLink).toHaveCount(2);
+
+    // See the "navigate to chats" test above: "No contacts yet?" renders
+    // before the chats document's own load finishes, so wait for that load's
+    // last request (its key GET) explicitly instead of racing the teardown.
+    const chatsKeyResponse = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(
+          `/users/mary@imagey.cloud/documents/${TestData.mary.settings!.chats}/keys/`,
+        ),
+    );
     await chatsLink.first().click();
 
     // Then
@@ -147,6 +154,7 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
     const chatsLinks = page.getByRole("link", { name: "Chats" });
 
     await expect(chatsLinks).toHaveCount(1);
+    await chatsKeyResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

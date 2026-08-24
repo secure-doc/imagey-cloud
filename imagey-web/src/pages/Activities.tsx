@@ -1,15 +1,18 @@
 import { useTranslation } from "react-i18next";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-//import { useActionIcons } from "../contexts/ActionBarContext";
-//import FileChooser from "../components/FileChooser";
 import { Activity } from "../activity/Activity";
 import ActivityPanel from "../activity/ActivityPanel";
 import { activityService } from "../activity/ActivityService";
-import { contactRepository } from "../contact/ContactRepository";
+import { documentService } from "../document/DocumentService";
+import { useReloadableLoad } from "../hooks/useReloadableLoad";
 import { Contact } from "../contact/Contact";
 import { ActivityType } from "../activity/Activity";
-import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
+import {
+  useChatsId,
+  useDocumentsId,
+  useSettingsKey,
+} from "../contexts/SettingsContext";
 
 export default function Activities() {
   const { t } = useTranslation();
@@ -20,17 +23,28 @@ export default function Activities() {
   const [contacts, setContacts] = useState<Contact[]>();
   const settingsKey = useSettingsKey();
   const documentsId = useDocumentsId();
+  const chatsId = useChatsId();
 
-  useEffect(() => {
+  const { failed: loadFailed } = useReloadableLoad(async () => {
     activityService
       .getActivities(user, settingsKey, documentsId)
       .then((activities) => setActivities(activities))
       .catch((e) => console.error("Failed to fetch activities", e));
-    contactRepository
-      .getContacts(user)
-      .then((contacts) => setContacts(contacts))
-      .catch((e) => console.error("Failed to fetch contacts", e));
-  }, [user, settingsKey, documentsId]);
+    // Contacts now live inside the (also encrypted) "chats" document,
+    // same as on the Chats page, instead of a dedicated /contacts endpoint.
+    const chatsDocument = await documentService.loadDocument(
+      user,
+      chatsId,
+      user,
+      settingsKey,
+    );
+    if (chatsDocument.loadFailed) {
+      console.error("Failed to load chats document");
+      return false;
+    }
+    setContacts(chatsDocument.contacts ?? []);
+    return true;
+  }, [user, settingsKey, documentsId, chatsId]);
 
   return (
     <main
@@ -41,6 +55,7 @@ export default function Activities() {
         gridTemplateColumns: "repeat(auto-fill, minmax(400px, 1fr))",
       }}
     >
+      {loadFailed && <p>{t("Could not load your activities. Retrying...")}</p>}
       {contacts && contacts.length === 0 && (
         <ActivityPanel
           key="no-contacts"

@@ -3,27 +3,30 @@ import { useTranslation } from "react-i18next";
 import UploadButton from "../components/UploadButton";
 import { useActionIcons } from "../contexts/ActionBarContext";
 import DocumentMetadata from "../document/DocumentMetadata";
+import { StoreResult } from "../document/DocumentService";
 import { useParentFolderId } from "../contexts/FolderContext";
 import { useNavigate } from "react-router";
 import { useDocumentsId } from "../contexts/SettingsContext";
+import Document from "../document/Document";
 
 export function useFolderIcons(
-  folderId: string,
-  folderKey: JsonWebKey | undefined,
+  id: string,
+  folder: Document | undefined,
   onCreateFolder: () => void,
-  onDocumentUploaded: (document: DocumentMetadata) => void,
+  onDocumentUploaded: (result: StoreResult) => void,
 ) {
   const { t } = useTranslation();
   const documentsId = useDocumentsId();
-  const parentId = useParentFolderId(folderId);
+  const parentId = useParentFolderId(id);
   const navigate = useNavigate();
 
   const actionIcons = useMemo(() => {
     const icons = [];
-    if (parentId !== documentsId) {
+    if (id !== documentsId) {
       icons.push(
         <button
           key="back"
+          aria-label="back-button"
           className="circle transparent"
           onClick={() => navigate("/documents/" + parentId)}
         >
@@ -32,7 +35,7 @@ export function useFolderIcons(
       );
     }
 
-    if (folderKey) {
+    if (folder) {
       icons.push(
         <button
           key="add-menu"
@@ -46,8 +49,7 @@ export function useFolderIcons(
                 className="transparent"
                 multiple
                 asMenuItem
-                parentFolderId={folderId}
-                parentFolderKey={folderKey}
+                folder={folder}
                 onUploadComplete={onDocumentUploaded}
               >
                 {t("Upload Document")}
@@ -74,10 +76,10 @@ export function useFolderIcons(
     return icons;
   }, [
     t,
+    id,
     parentId,
-    folderId,
     documentsId,
-    folderKey,
+    folder,
     navigate,
     onCreateFolder,
     onDocumentUploaded,

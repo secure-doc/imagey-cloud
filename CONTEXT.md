@@ -4,6 +4,8 @@
 - **User**: Represents a registered user of the system, identified by an email address.
 - **Document**: The central entity representing any file, folder, or image stored in the system. All documents are end-to-end encrypted.
 - **Folder**: A special type of `Document` whose encrypted content is a JSON array of child `documentId`s.
+- **Chats Document**: A special type of `Document` (referenced from a user's Settings, like the root document folder and the profile) whose encrypted content is a `contacts` array of `{ userId, chatId }` pairs - contacts/chats are, like everything else, also just an encrypted Document.
+- **Contact**: One entry in a user's Chats Document: the other user's id plus the `chatId` of the (also encrypted) Document representing that chat.
 - **DocumentMetadata**: Non-encrypted (or partially encrypted) metadata associated with a Document, such as its ID, name, size, type, and references to image thumbnails.
 - **SharedKey**: An encrypted symmetric key (`AES-GCM`) used to decrypt a specific Document.
 

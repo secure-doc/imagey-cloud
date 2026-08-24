@@ -1,31 +1,67 @@
-import { Email } from "../contexts/AuthenticationContext";
 import { ResponseError } from "./ResponseError";
+
+export interface SharedKey {
+  issuer: string;
+  kid: string;
+  sharedKey: string;
+}
+
+// The scalar half of a registration request - serialized as the single JSON "metadata" multipart
+// part. Keys must match the server-side RegistrationMetadata record component names character for
+// character (see cloud.imagey.domain.user.RegistrationMetadata / AbstractRecordConverter).
+export interface RegistrationMetadata {
+  email: string;
+  deviceId: string;
+  devicePublicKey: JsonWebKey;
+  mainPublicKey: JsonWebKey;
+  encryptedPrivateKey: string;
+  settingsKey: SharedKey;
+  documentList: { id: string; key: SharedKey };
+  chatList: { id: string; key: SharedKey };
+  profile: { id: string; key: SharedKey };
+}
+
+// The four opaque encrypted document blobs, sent as their own binary parts alongside "metadata".
+export interface RegistrationContents {
+  settings: ArrayBuffer;
+  documentList: ArrayBuffer;
+  chatList: ArrayBuffer;
+  profile: ArrayBuffer;
+}
 
 export const authenticationRepository = {
   register: async (
-    email: Email,
-    deviceId: string,
-    publicMainKey: JsonWebKey,
-    encryptedPrivateMainKey: string,
-    publicDeviceKey: JsonWebKey,
-    settings: string,
-    settingsSharedKey: { issuer: string; kid: string; sharedKey: string },
+    metadata: RegistrationMetadata,
+    contents: RegistrationContents,
   ) => {
-    const response = await fetch("/users/", {
+    const formData = new FormData();
+    formData.append(
+      "metadata",
+      // The content type is mandatory - a plain Blob defaults to application/octet-stream, which
+      // CXF routes to the wrong MessageBodyReader and registration fails.
+      new Blob([JSON.stringify(metadata)], { type: "application/json" }),
+    );
+    formData.append(
+      "settings",
+      new Blob([contents.settings], { type: "application/octet-stream" }),
+    );
+    formData.append(
+      "documentList",
+      new Blob([contents.documentList], { type: "application/octet-stream" }),
+    );
+    formData.append(
+      "chatList",
+      new Blob([contents.chatList], { type: "application/octet-stream" }),
+    );
+    formData.append(
+      "profile",
+      new Blob([contents.profile], { type: "application/octet-stream" }),
+    );
+
+    const response = await fetch(`/users`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       credentials: "same-origin",
-      body: JSON.stringify({
-        email: email,
-        deviceId,
-        mainPublicKey: publicMainKey,
-        devicePublicKey: publicDeviceKey,
-        encryptedPrivateKey: encryptedPrivateMainKey,
-        settings,
-        settingsSharedKey,
-      }),
+      body: formData,
     });
 
     return response.status >= 200 && response.status < 300

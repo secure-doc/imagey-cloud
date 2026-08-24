@@ -1,14 +1,14 @@
 import { test, expect } from "./fixtures";
-import { MatchersV3 } from "@pact-foundation/pact";
-import * as fs from "fs";
 import * as path from "path";
 import {
   clearLocalStorage,
   loginAsMary,
   prepareMarysLogin,
   prepareMarysContactRequests,
-  prepareEmptyMarysDocuments,
-  provider,
+  prepareMarysEmptyDocumentsFolder,
+  prepareMarysEmptyProfile,
+  prepareMarysProfile,
+  prepareProfileSave,
   runningPactRequests,
   setupMockServer,
   TestData,
@@ -18,60 +18,16 @@ test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
 });
 
-export async function prepareProfileUpload() {
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to upload a profile picture")
-    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) =>
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=----WebKitFormBoundary",
-        ),
-      }),
-    )
-    .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          "/users/mary@imagey.cloud/documents/profile-pic-doc-id",
-        ),
-        "Access-Control-Expose-Headers": "Location",
-      }),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
-
-  return provider
-    .addInteraction()
-    .uponReceiving("a request of mary to update profile")
-    .withRequest("PUT", "/users/mary@imagey.cloud/profile", (r) =>
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=----WebKitFormBoundary",
-        ),
-      }),
-    )
-    .willRespondWith(200);
-}
-
 test("edit and save profile", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareEmptyMarysDocuments();
-  const profileUploadInteraction = await prepareProfileUpload();
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysEmptyProfile();
+  const saveInteraction = await prepareProfileSave();
 
   // When
-  await profileUploadInteraction.executeTest(async (mockServer) => {
+  await saveInteraction.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
 
     await loginAsMary(page);
@@ -104,7 +60,7 @@ test("edit and save profile", async ({ page }) => {
     await changePictureButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      path.join("tests", "images", TestData.mary.documents[0].name),
+      path.join("tests", "images", TestData.mary.documents[3].name),
     );
 
     const addEmailButton = page.getByText("Add Email");
@@ -133,7 +89,8 @@ test("edit and save profile", async ({ page }) => {
 
     const responsePromise = page.waitForResponse(
       (res) =>
-        res.request().method() === "PUT" && res.url().includes("/profile"),
+        res.request().method() === "PUT" &&
+        res.url().endsWith(`/documents/${TestData.mary.settings!.profile}`),
     );
     const saveButton = page.getByRole("button", { name: "Save" });
     await saveButton.click();
@@ -149,164 +106,12 @@ test("load existing profile with picture", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareEmptyMarysDocuments();
+  await prepareMarysEmptyDocumentsFolder();
+  const profileInteraction = await prepareMarysProfile();
 
-  const profileMockPath = path.join(
-    process.cwd(),
-    "tests",
-    "integration",
-    "profile_mock.json",
-  );
-  const profileMock = JSON.parse(fs.readFileSync(profileMockPath, "utf8"));
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get her profile")
-    .withRequest("GET", "/users/mary@imagey.cloud/profile", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(profileMock));
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get her profile picture metadata")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody({
-        documentId: "profile-pic-doc-id",
-        metadata:
-          "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
-        sharedKey: {
-          issuerType: "USER",
-          issuer: "mary@imagey.cloud",
-          kid: "0",
-          sharedKey: fs
-            .readFileSync(
-              "./tests/images/encrypted/profile-pic-doc-id/keys/mary@imagey.cloud/encrypted-shared.key",
-              "utf8",
-            )
-            .trim(),
-        },
-      }),
-    );
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get her profile picture")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/profile-pic-doc-id/files/profile-pic-doc-id",
-      ),
-    );
-
-  const profileContentInteraction = provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get her profile content")
-    .withRequest(
-      "GET",
-      "/users/mary@imagey.cloud/documents/profile/files/profile",
-      (r) =>
-        r.headers({
-          Accept: "application/octet-stream",
-        }),
-    )
-    .willRespondWith(200, (r) =>
-      r.binaryFile(
-        "application/octet-stream",
-        "./tests/images/encrypted/profile/files/profile",
-      ),
-    );
-
-  await profileContentInteraction.executeTest(async (mockServer) => {
-    page.on("console", (msg) => console.log("BROWSER CONSOLE:", msg.text()));
-    page.on("pageerror", (err) =>
-      console.log("BROWSER PAGEERROR:", err.message, err.stack),
-    );
-
-    // Use the mock server URLs but override the page routes
+  // When
+  await profileInteraction.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
-
-    // Explicitly override the default mocks from setupMockServer for /profile and document contents
-    await page.route("**/users/mary*imagey.cloud/profile", async (route) => {
-      if (route.request().method() === "GET") {
-        const response = await route.fetch({
-          url: mockServer.url + "/users/mary@imagey.cloud/profile",
-          headers: route.request().headers(),
-        });
-        await route.fulfill({ response });
-      } else {
-        await route.continue();
-      }
-    });
-
-    await page.route(
-      "**/users/mary*imagey.cloud/documents/profile/files/profile",
-      async (route) => {
-        if (route.request().method() === "GET") {
-          const response = await route.fetch({
-            url:
-              mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile/files/profile",
-            headers: route.request().headers(),
-          });
-          await route.fulfill({ response });
-        } else {
-          await route.continue();
-        }
-      },
-    );
-
-    await page.route(
-      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id",
-      async (route) => {
-        if (route.request().method() === "GET") {
-          const response = await route.fetch({
-            url:
-              mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile-pic-doc-id",
-            headers: route.request().headers(),
-          });
-          await route.fulfill({ response });
-        } else {
-          await route.continue();
-        }
-      },
-    );
-
-    await page.route(
-      "**/users/mary*imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
-      async (route) => {
-        if (route.request().method() === "GET") {
-          const response = await route.fetch({
-            url:
-              mockServer.url +
-              "/users/mary@imagey.cloud/documents/profile-pic-doc-id/files/profile-pic-doc-id",
-            headers: route.request().headers(),
-          });
-          await route.fulfill({ response });
-        } else {
-          await route.continue();
-        }
-      },
-    );
 
     await loginAsMary(page);
 
@@ -326,7 +131,6 @@ test("load existing profile with picture", async ({ page }) => {
     await expect(page.getByText("Mary Doe")).toBeVisible();
 
     // Verify the profile picture is loaded (vitalykobzun-frau-7385461.jpg)
-    // The profile picture panel should contain an image element
     const avatarImage = page.getByRole("img", { name: "Avatar" });
     await expect(avatarImage).toBeVisible();
 

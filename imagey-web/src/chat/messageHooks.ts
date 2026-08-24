@@ -4,23 +4,33 @@ import { messageService } from "./MessageService";
 
 export function usePolling(
   userEmail: string,
-  contactEmail: string,
+  ownerEmail: string | undefined,
+  chatId: string | undefined,
   sharedKey?: JsonWebKey,
 ) {
   const [messages, setMessages] = useState<Message[]>();
+
+  // Drop the previous chat's messages as soon as the chat identity changes.
+  // Polling restarts with sinceId=undefined and would otherwise merge the new
+  // chat's history onto the old one (message ids never collide across chats),
+  // leaking one contact's plaintext messages into another's thread.
+  useEffect(() => {
+    setMessages(undefined);
+  }, [ownerEmail, chatId]);
 
   useEffect(() => {
     let mounted = true;
 
     const pollMessages = async () => {
-      if (!sharedKey) return;
+      if (!sharedKey || !ownerEmail || !chatId) return;
       let sinceId: string | undefined = undefined;
 
       while (mounted) {
         try {
           const newMessages = await messageService.receiveDecryptedMessages(
             userEmail,
-            contactEmail,
+            ownerEmail,
+            chatId,
             sinceId,
             sharedKey,
             sinceId === undefined ? 0 : 30, // wait=0 for initial load, wait=30 for long polling
@@ -58,7 +68,7 @@ export function usePolling(
     return () => {
       mounted = false;
     };
-  }, [userEmail, contactEmail, sharedKey]);
+  }, [userEmail, ownerEmail, chatId, sharedKey]);
 
   return { messages, setMessages };
 }

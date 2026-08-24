@@ -3,13 +3,14 @@ import { Profile } from "./Profile";
 import { useContext, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import { AuthenticationContext } from "../contexts/AuthenticationContext";
-import { profileService } from "./ProfileService";
 
 export default function ProfileSaveButton({
+  id,
   profile,
   newPicture,
   onProfileChange,
 }: {
+  id: string;
   profile: Profile;
   newPicture?: File;
   onProfileChange: (profile: Profile) => void;
@@ -20,27 +21,39 @@ export default function ProfileSaveButton({
   const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
 
   const handleSave = async () => {
+    if (!profile.key) {
+      console.error("Cannot save profile without its document key");
+      return;
+    }
+
     setSaving(true);
     try {
-      const profileToSave = { ...profile };
+      const profileToSave: Profile = { ...profile };
 
       if (newPicture) {
-        // Upload the new picture document first
-        const docMeta = await documentService.storeDocument(
+        profileToSave.profilePictureId = await documentService.storeContent(
           auth.user,
+          id,
+          profile.key,
           newPicture,
-          auth.keyPairs.mainKeyPair.publicKey,
-          auth.keyPairs.mainKeyPair.privateKey,
         );
-        profileToSave.profilePictureId = docMeta.documentId;
       }
 
-      await profileService.saveProfile(
+      const newEtag = await documentService.updateDocumentMetadata(
         auth.user,
-        profileToSave,
-        auth.keyPairs.mainKeyPair.publicKey,
-        auth.keyPairs.mainKeyPair.privateKey,
+        id,
+        profile.key,
+        {
+          name: profileToSave.name,
+          emails: profileToSave.emails,
+          profilePictureId: profileToSave.profilePictureId,
+        },
+        profile.etag,
       );
+      // Adopt the ETag the server just assigned, otherwise a second save in the
+      // same session still sends the old If-Match and gets a 412.
+      profileToSave.etag = newEtag ?? undefined;
+
       onProfileChange(profileToSave);
       setShowSnackbar(true);
       setTimeout(() => setShowSnackbar(false), 3000);

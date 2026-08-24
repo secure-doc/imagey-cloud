@@ -2,8 +2,12 @@ import { test, expect } from "./fixtures";
 import * as path from "path";
 import {
   clearLocalStorage,
+  loginAsBill,
   loginAsMary,
-  prepareDocumentUpload,
+  prepareBillsDocuments,
+  prepareBillsDocumentUpload,
+  prepareBillsEmptyContactRequests,
+  prepareBillsLogin,
   prepareMarysContactRequests,
   prepareMarysDocuments,
   prepareMarysLogin,
@@ -44,19 +48,18 @@ test("display image activity in panel", async ({ page }) => {
 
 test("upload image from activity panel", async ({ page }) => {
   // Given
-  await prepareMarysLogin(page);
-  await (await import("./setup")).prepareMarysEmptyContactRequests();
+  await prepareBillsLogin(page);
+  await prepareBillsEmptyContactRequests();
 
-  const p = await prepareDocumentUpload(
-    TestData.mary.documents[0].name,
-    TestData.mary.documents[0].documentId,
+  const p = await prepareBillsDocumentUpload(
+    TestData.mary.documents[3].documentId,
   );
-  await (await import("./setup")).prepareEmptyMarysDocuments();
+  await prepareBillsDocuments();
 
   // When
   await p.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
-    await loginAsMary(page);
+    await loginAsBill(page);
 
     await page.getByRole("link", { name: "Home" }).click();
 
@@ -70,16 +73,16 @@ test("upload image from activity panel", async ({ page }) => {
 
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      path.join("tests", "images", TestData.mary.documents[0].name),
+      path.join("tests", "images", TestData.mary.documents[3].name),
     );
 
     // After upload, it should switch to ImagePanel and display the title/image
     const panelTitle = page.locator("h5", {
-      hasText: TestData.mary.documents[0].name,
+      hasText: TestData.mary.documents[3].name,
     });
     await expect(panelTitle).toBeVisible({ timeout: 10_000 });
 
-    const imageElement = page.getByAltText(TestData.mary.documents[0].name);
+    const imageElement = page.getByAltText(TestData.mary.documents[3].name);
     const errorElement = page.locator(".error-text").first();
     await expect(imageElement.or(errorElement)).toBeVisible();
 

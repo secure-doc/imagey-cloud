@@ -22,7 +22,3 @@ export function useDocumentsId(): string {
 export function useChatsId(): string {
   return useContext(SettingsContext).chatsId;
 }
-
-export function useProfileId(): string {
-  return useContext(SettingsContext).profileId;
-}

@@ -27,6 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.inject.Inject;
@@ -93,7 +97,13 @@ public class InvitationTest {
             .cookie(marysToken)
             .post(json("""
                 {
-                    "email": "luise@imagey.cloud"
+                    "inviter": "mary@imagey.cloud",
+                    "invitee": "luise@imagey.cloud",
+                    "publicKey": {
+                        "crv": "P-256", "ext": true, "key_ops": [], "kty": "EC",
+                        "x": "O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4",
+                        "y": "ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU"
+                    }
                 }
             """));
 
@@ -122,6 +132,23 @@ public class InvitationTest {
         assertThat(location).isNotNull();
         String query = location.getQuery();
         assertThat(query.split("&")).contains("inviter=mary@imagey.cloud");
+        // The inviter's public main key does NOT travel in the link (that would land in browser
+        // history / access logs). The invitee reads it off its own persisted contact-request
+        // entry when it accepts the request during registration.
+        Map<String, String> params = parseQuery(query);
+        assertThat(params).doesNotContainKey("inviterPublicKey");
+        assertThat(params.keySet()).containsExactlyInAnyOrder("email", "inviter");
+    }
+
+    private Map<String, String> parseQuery(String query) {
+        Map<String, String> params = new LinkedHashMap<>();
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            String key = eq < 0 ? pair : pair.substring(0, eq);
+            String value = eq < 0 ? "" : pair.substring(eq + 1);
+            params.put(key, URLDecoder.decode(value, StandardCharsets.UTF_8));
+        }
+        return params;
     }
 
     @Test

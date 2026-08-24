@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { useUser } from "../contexts/AuthenticationContext";
 import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
 import { FolderContext } from "../contexts/FolderContext";
@@ -10,8 +10,19 @@ export default function DocumentsPage() {
   const documentsId = useDocumentsId();
   const { registerParentFolder, registerKey } = useContext(FolderContext);
   const navigate = useNavigate();
-  registerParentFolder(documentsId, settingsId);
-  registerKey(settingsId, settingsKey);
-  navigate("/documents/" + documentsId);
+
+  useEffect(() => {
+    registerParentFolder(documentsId, settingsId);
+    registerKey(settingsId, settingsKey);
+    navigate("/documents/" + documentsId, { replace: true });
+  }, [
+    documentsId,
+    settingsId,
+    settingsKey,
+    registerParentFolder,
+    registerKey,
+    navigate,
+  ]);
+
   return null;
 }

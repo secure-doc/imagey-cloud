@@ -16,6 +16,7 @@ export interface TestDocument {
   name: string;
   metadata?: string;
   key?: JsonWebKey;
+  contentId?: string;
 }
 
 export interface TestUser<
@@ -36,7 +37,6 @@ export interface TestDataStructure {
   mary: TestUser<
     [TestDevice, TestDevice],
     [
-      TestDocument,
       TestDocument,
       TestDocument,
       TestDocument,
@@ -176,16 +176,16 @@ export const TestData: TestDataStructure = {
           "qvLFOjMio9UXlH15L4G//nDgtZiCRmOirewJIKlLvCfvwKSRJUOOsU1aU/PjuQ2LfN2qkUVerEthue3531l2oiB2U08PfHTp6INL8SiAbCcuYVxajjuXWL+BhQX24LYK8EVpLSW/jQRneclFmDEoUETJ8kLllnyISL/FADoZbd46SfIVrf/U9ijxemJZQrQ6y6D3/wAoNyn2lOC93bO7m8ZyIWYQ4z264o98ykNsD5n+Kpq4IoOuw0YZHIBfYRp/dlm1Xo9TedKs14F1h02DgN0QKeA7Fdl2P8nPshB2R61lHUQpNYV12DV27KBvefdPtRXAS73ACmhxbtgg+PVZkQ==",
       },
       {
-        documentId: "profile",
+        documentId: "9b71fa98-8616-4222-b03e-d189289ccbd0",
         name: "profile.json",
-        metadata:
-          "xClE2qirS+J/0WwxlwX6wjxIIhhjC72ezWzTHkPlkYHOTJDIQuWp5TKuu9cgwkzbZqD63Jc+Ao7fKcKhDYNsJI81WU8FRwoN/8uuxnqKpLc+B30RNc/e",
-      },
-      {
-        documentId: "profile-pic-doc-id",
-        name: "profile.jpg",
-        metadata:
-          "QIJNho2eMgtb/C1BukR6F8OXQY2v6/9WUKQ7bIko5WqhAI52uJmXTuIYIQEV+eLwLykoFwoO9VoYzvjPaUJ6P7iMuBEdok7GmTzINz182BYeZBms",
+        contentId: "1f6386d5-cbed-48c3-9ed1-f8e4c1445223",
+        key: {
+          alg: "A256GCM",
+          ext: true,
+          k: "02LQHQ1MK8M9t-8too48rFeZNi1knRvZffpdziH2ZjQ",
+          key_ops: ["encrypt", "decrypt"],
+          kty: "oct",
+        },
       },
     ],
     chats: [
@@ -346,6 +346,15 @@ export const TestData: TestDataStructure = {
       x: "nwGwyL6D7-mpGv3ahjdgFz7-FxEFSZZqWio5TvGEHWc",
       y: "ubcX2RHk7odTGx6g7dgJpkhEBjzJ8YQ5q0wqtQc9Umc",
     },
+    privateMainKey: {
+      crv: "P-256",
+      d: "OwtjjrDv6pxwQCbgwkdArW7ztRBXGMHgzCtrS6xCYDk",
+      ext: true,
+      key_ops: ["deriveKey"],
+      kty: "EC",
+      x: "nwGwyL6D7-mpGv3ahjdgFz7-FxEFSZZqWio5TvGEHWc",
+      y: "ubcX2RHk7odTGx6g7dgJpkhEBjzJ8YQ5q0wqtQc9Umc",
+    },
     devices: [
       {
         deviceId: "ea87fc9d-c670-4809-8536-4e379e54d6c0",
@@ -363,6 +372,18 @@ export const TestData: TestDataStructure = {
         },
       },
     ],
+    settings: {
+      documents: "31e3569a-d2a7-493d-8d45-06370ebd2705",
+      chats: "d8a54c36-a42e-4f8c-bbaa-ceab5821c88c",
+      profile: "bc98481e-9e87-4a7a-9317-840f0aa47bd9",
+    },
+    settingsKey: {
+      key_ops: ["encrypt", "decrypt"],
+      ext: true,
+      alg: "A256GCM",
+      kty: "oct",
+      k: "ugHZGqxV9gcjgDzPPJAvgJoJqjV0PL-2l8GrkA9RGGQ",
+    },
     documents: [],
   },
   joe: {

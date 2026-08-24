@@ -1,52 +1,111 @@
-import { authenticationRepository } from "../authentication/AuthenticationRepository";
 import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
-import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
-import { ContactKeys } from "./Contact";
+import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
+import { Contact } from "./Contact";
+import { ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
+import { documentRepository } from "../document/DocumentRepository";
+import { documentService } from "../document/DocumentService";
 
 export const contactService = {
+  // Invitee side: accept an INVITED request. The chat is - like everything
+  // else - its own encrypted Document, created here as a child of the
+  // user's "chats" document; its Document key doubles as the chat's shared
+  // key (messages, documents shared in-chat, ...). We keep our own access
+  // to it the normal way (self-issued, wrapped under the chats document's
+  // key), and hand the inviter their own access by ECDH-wrapping the same
+  // key with their public key and our private key.
   acceptContactRequest: async (
     userId: UserId,
     contactId: UserId,
+    inviterPublicKey: JsonWebKey,
+    settings: Settings,
     mainKeyPair: JsonWebKeyPair,
-  ): Promise<void> => {
+  ): Promise<Contact> => {
     try {
-      const contactPublicKey =
-        await authenticationRepository.loadPublicMainKey(contactId);
-      const sharedKey = await cryptoService.generateSymmetricKey();
-
-      const contactEncryptedSharedKey = await cryptoService.encryptKey(
-        sharedKey,
-        contactPublicKey,
-        mainKeyPair.privateKey,
+      const chatsDocument = await documentService.loadDocument(
+        userId,
+        settings.chats,
+        userId,
+        settings.settingsKey,
       );
-      const myEncryptedSharedKey = await cryptoService.encryptKey(
-        sharedKey,
-        mainKeyPair.publicKey,
-        mainKeyPair.privateKey,
+      // A failed load returns a key-less placeholder, so this also guards
+      // against rebuilding the contacts list off a placeholder (which would
+      // persist an empty list and drop every existing contact).
+      if (!chatsDocument.key) {
+        throw new Error("Chats document key not found");
+      }
+
+      const chatId = cryptoService.generateUuid();
+      const chatDocumentKey = await cryptoService.generateSymmetricKey();
+      const [encryptedChatContent] = await cryptoService.encryptDocument(
+        chatDocumentKey,
+        [
+          new TextEncoder().encode(
+            JSON.stringify({
+              documentId: chatId,
+              name: contactId,
+              type: "Chat",
+            }),
+          ).buffer,
+        ],
+      );
+      const encryptedChatKey = await cryptoService.encryptKey(
+        chatDocumentKey,
+        chatsDocument.key,
       );
 
-      const contactKeys: ContactKeys = {
-        userKey: {
-          issuerType: "USER",
+      const contact: Contact = { userId: contactId, chatId, owner: userId };
+      const updatedContacts = [...(chatsDocument.contacts ?? []), contact];
+      const [encryptedChatsContent] = await cryptoService.encryptDocument(
+        chatsDocument.key,
+        [
+          new TextEncoder().encode(
+            JSON.stringify({
+              name: chatsDocument.name,
+              type: chatsDocument.type,
+              contacts: updatedContacts,
+            }),
+          ).buffer,
+        ],
+      );
+
+      await documentRepository.uploadDocument(
+        userId,
+        userId, // the chat is created under the invitee's own "chats" document
+        settings.chats,
+        encryptedChatsContent,
+        // Reject (rather than silently clobber) if the "chats" document changed
+        // since we loaded it - another accepted request would otherwise be lost.
+        chatsDocument.etag ?? null,
+        chatId,
+        encryptedChatContent,
+        {
           issuer: userId,
-          kid: "0",
-          sharedKey: myEncryptedSharedKey,
+          kid: settings.chats,
+          sharedKey: encryptedChatKey,
         },
-        contactKey: {
-          issuerType: "USER",
-          issuer: contactId,
-          kid: "0",
-          sharedKey: contactEncryptedSharedKey,
-        },
-      };
+        [],
+      );
 
+      // Hand the inviter their own copy of the chat's Document key, ECDH-
+      // wrapped so only they (and we) can decrypt it. Their public key is
+      // already known - it was sent along with the original request - so
+      // no extra fetch is needed here.
+      const sharedKeyForInviter = await cryptoService.encryptKey(
+        chatDocumentKey,
+        inviterPublicKey,
+        mainKeyPair.privateKey,
+      );
       await contactRepository.acceptContactRequest(
         userId,
         contactId,
-        contactKeys,
+        mainKeyPair.publicKey,
+        chatId,
+        sharedKeyForInviter,
       );
+
+      return contact;
     } catch (e) {
       console.error(
         "Error in acceptContactRequest",
@@ -57,76 +116,110 @@ export const contactService = {
       throw e;
     }
   },
-  loadSharedKey: async (
-    userEmail: string,
-    contactEmail: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
-  ): Promise<JsonWebKey> => {
-    const myKeyEntry = await contactRepository.getSharedContactKey(
-      userEmail,
-      contactEmail,
+
+  // Inviter side: pick up a request the invitee has ACCEPTED. Decrypts the
+  // chat Document key (to make sure it's actually usable before we tell
+  // the server we're done with this request), records the contact in our
+  // own "chats" document, and confirms receipt so the server can delete
+  // the now-redundant request.
+  receiveContactRequest: async (
+    userId: UserId,
+    request: ContactRequest,
+    settings: Settings,
+    mainKeyPair: JsonWebKeyPair,
+  ): Promise<Contact> => {
+    if (!request.chatId || !request.sharedKey) {
+      throw new Error("Accepted contact request is missing chatId/sharedKey");
+    }
+
+    const chatsDocument = await documentService.loadDocument(
+      userId,
+      settings.chats,
+      userId,
+      settings.settingsKey,
     );
-    if (!myKeyEntry) {
-      throw new Error("Shared key not found");
+    // A failed load returns a key-less placeholder, so this also guards
+    // against rebuilding the contacts list off one.
+    if (!chatsDocument.key) {
+      throw new Error("Chats document key not found");
     }
 
-    try {
-      return await cryptoService.decryptKey(
-        myKeyEntry.sharedKey,
-        publicKey,
-        privateKey,
-      );
-    } catch (e) {
-      console.warn("Decryption failed, attempting fallback", e);
-      try {
-        const contactPublicKey =
-          await authenticationRepository.loadPublicMainKey(contactEmail);
-        return await cryptoService.decryptKey(
-          myKeyEntry.sharedKey,
-          contactPublicKey,
-          privateKey,
-        );
-      } catch (fallbackError) {
-        console.error("Fallback decryption failed", fallbackError);
-      }
-    }
+    // Decrypt the ECDH-wrapped chat Document key from the invitee, then
+    // re-wrap it symmetrically under our own chats-document key. The server
+    // files that entry under the chat Document in the invitee's tree
+    // (issuer = us), which is what grants us the "member" role on the chat
+    // from now on - we no longer keep an ECDH-wrapped copy.
+    const chatDocumentKey = await cryptoService.decryptKey(
+      request.sharedKey,
+      request.publicKey,
+      mainKeyPair.privateKey,
+    );
+    const rewrappedChatKey = await cryptoService.encryptKey(
+      chatDocumentKey,
+      chatsDocument.key,
+    );
 
-    throw new Error("Could not decrypt shared key");
+    const contact: Contact = {
+      userId: request.invitee,
+      chatId: request.chatId,
+      owner: request.invitee,
+    };
+    const updatedContacts = [...(chatsDocument.contacts ?? []), contact];
+    await documentService.updateDocumentMetadata(
+      userId,
+      settings.chats,
+      chatsDocument.key,
+      {
+        name: chatsDocument.name,
+        type: chatsDocument.type,
+        contacts: updatedContacts,
+      },
+      chatsDocument.etag,
+    );
+
+    await contactRepository.confirmContactRequestReceived(
+      userId,
+      request.invitee,
+      {
+        issuer: userId,
+        kid: settings.chats,
+        sharedKey: rewrappedChatKey,
+      },
+    );
+
+    return contact;
   },
-  reissueKey: async (
-    userEmail: string,
-    contactEmail: string,
-    publicKey: JsonWebKey,
-    privateKey: JsonWebKey,
+
+  // Loads the symmetric key of a chat's Document. Both parties keep their
+  // own key entry wrapped symmetrically under their own "chats" document's
+  // key: the owner (whoever accepted the original request) filed theirs
+  // when creating the chat Document; the other party's copy was synced into
+  // the chat Document (in the owner's tree, under their own email) by the
+  // server during the receipt-confirmation step. Either way it unwraps with
+  // our own chats-document key.
+  loadChatKey: async (
+    user: UserId,
+    contact: Contact,
+    chatsId: string,
+    chatsDocumentKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
-    const contactPublicKey =
-      await authenticationRepository.loadPublicMainKey(contactEmail);
-    const sharedKey = await cryptoService.generateSymmetricKey();
-    const contactEncryptedSharedKey = await cryptoService.encryptKey(
-      sharedKey,
-      contactPublicKey,
-      privateKey,
-    );
-    const myEncryptedSharedKey = await cryptoService.encryptKey(
-      sharedKey,
-      publicKey,
-      privateKey,
-    );
-    await contactRepository.reissueContactKey(userEmail, contactEmail, {
-      userKey: {
-        issuerType: "USER",
-        issuer: userEmail,
-        kid: "0",
-        sharedKey: myEncryptedSharedKey,
-      },
-      contactKey: {
-        issuerType: "USER",
-        issuer: contactEmail,
-        kid: "0",
-        sharedKey: contactEncryptedSharedKey,
-      },
-    });
-    return sharedKey;
+    const document =
+      contact.owner === user
+        ? await documentService.loadDocument(
+            user,
+            contact.chatId,
+            chatsId,
+            chatsDocumentKey,
+          )
+        : await documentService.loadDocument(
+            contact.owner,
+            contact.chatId,
+            user,
+            chatsDocumentKey,
+          );
+    if (!document.key) {
+      throw new Error("Chat document key not found");
+    }
+    return document.key;
   },
 };

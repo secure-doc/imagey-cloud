@@ -26,10 +26,13 @@ import java.util.List;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
+import jakarta.json.bind.annotation.JsonbTypeDeserializer;
+import jakarta.json.bind.annotation.JsonbTypeSerializer;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -43,10 +46,17 @@ import jakarta.ws.rs.core.UriInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.chat.ContactKeys;
-import cloud.imagey.domain.chat.ContactRepository;
-import cloud.imagey.domain.chat.ContactService;
+import cloud.imagey.domain.contact.ContactExchange;
+import cloud.imagey.domain.contact.ContactRepository;
+import cloud.imagey.domain.contact.ContactService;
+import cloud.imagey.domain.contact.ContactStatus;
+import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
+import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.encryption.PublicKey.Deserializer;
+import cloud.imagey.domain.encryption.PublicKey.Serializer;
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 @Path("/")
@@ -64,11 +74,11 @@ public class ContactResource {
     @RolesAllowed("owner")
     @Path("{email}/contact-requests")
     @Consumes(APPLICATION_JSON)
-    public Response requestContact(@PathParam("email") User sender, User recipient, @Context UriInfo uriInfo) throws IOException {
-        boolean created = contactService.invite(sender, recipient);
+    public Response requestContact(@PathParam("email") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
+        boolean created = contactService.invite(inviter, request.invitee(), request.publicKey());
         if (created) {
             UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
-            contactRequest.path(recipient.email().address());
+            contactRequest.path(request.invitee().address());
             return created(contactRequest.build()).build();
         } else {
             return noContent().build();
@@ -78,7 +88,8 @@ public class ContactResource {
     @GET
     @RolesAllowed("owner")
     @Path("{email}/contact-requests")
-    public List<User> getContactRequests(@PathParam("email") User user) {
+    @Produces(APPLICATION_JSON)
+    public List<ContactExchange> getContactRequests(@PathParam("email") User user) {
         return contactRepository.findContactRequests(user);
     }
 
@@ -89,43 +100,37 @@ public class ContactResource {
         contactService.declineInvitation(user, contact);
     }
 
-    @GET
-    @RolesAllowed("owner")
-    @Path("{email}/contacts")
-    @Produces(APPLICATION_JSON)
-    public List<User> getContacts(@PathParam("email") User user) {
-        return contactRepository.findContacts(user);
-    }
-
     @PUT
     @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}")
+    @Path("{email}/contact-requests/{contact}")
     @Consumes(APPLICATION_JSON)
-    public void acceptInvitation(@PathParam("email") User user, @PathParam("contact") User contact, ContactKeys keys)
-            throws IOException {
-
-        contactService.acceptInvitation(user, contact, keys);
-    }
-
-    @GET
-    @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
-    @Produces(APPLICATION_JSON)
-    public EncryptedSharedKey getContactKey(@PathParam("email") User user, @PathParam("contact") User contact) {
-        return contactRepository.getContactKey(user, contact).orElseThrow(NotFoundException::new);
-    }
-
-
-
-    @PUT
-    @RolesAllowed("owner")
-    @Path("{email}/contacts/{contact}/key")
-    @Consumes(APPLICATION_JSON)
-    public void reissueContactKey(
+    public void updateContactRequest(
         @PathParam("email") User user,
         @PathParam("contact") User contact,
-        ContactKeys keys) throws IOException {
+        ContactRequestUpdate update) throws IOException {
 
-        contactService.reissueKey(user, contact, keys);
+        if (update.status() == ContactStatus.RECEIVED) {
+            contactService.confirmReceipt(user, contact, update.chatKey());
+        } else if (update.status() == ContactStatus.ACCEPTED) {
+            contactService.acceptInvitation(user, contact, update.publicKey(), update.chatId(), update.sharedKey());
+        } else {
+            // TODO move to Bean Validation
+            throw new BadRequestException("Status " + update.status() + " not allowed");
+        }
+    }
+
+    public record ContactRequest(
+        @JsonbTypeAdapter(Email.Adapter.class) Email invitee,
+        @JsonbTypeSerializer(Serializer.class)
+        @JsonbTypeDeserializer(Deserializer.class) PublicKey publicKey) {
+    }
+
+    public record ContactRequestUpdate(
+        ContactStatus status,
+        DocumentId chatId,
+        @JsonbTypeSerializer(Serializer.class)
+        @JsonbTypeDeserializer(Deserializer.class) PublicKey publicKey,
+        EncryptedSymmetricKey sharedKey,
+        EncryptedSharedKey chatKey) {
     }
 }

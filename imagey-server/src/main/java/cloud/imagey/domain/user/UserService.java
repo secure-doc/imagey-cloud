@@ -17,7 +17,6 @@
 package cloud.imagey.domain.user;
 
 import static cloud.imagey.domain.token.TokenService.ONE_DAY;
-import static java.util.Base64.getDecoder;
 
 import java.io.IOException;
 import java.util.List;
@@ -34,6 +33,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.mail.EmailBody;
@@ -84,7 +84,7 @@ public class UserService {
         }
 
         Token token = tokenService.generateToken(user, ONE_DAY);
-        if (userRepository.exists(user)) {
+        if (userRepository.isRegistered(user)) {
             LOG.info("User exists");
             String link = domain.value() + "/authentications/" + token.token();
             mailService.send(user.email(), new EmailTemplate(
@@ -106,7 +106,12 @@ public class UserService {
     }
 
     public void create(User user) {
-        userRepository.persist(user);
+        // The user's home directory may already exist when an inviter sent them a contact request
+        // before they registered (ContactRepository.persist writes into the invitee's home), so
+        // creating an account on top of that pending invitation must not fail.
+        if (!userRepository.exists(user)) {
+            userRepository.persist(user);
+        }
     }
 
     public void register(UserRegistration registration) throws IOException {
@@ -118,11 +123,22 @@ public class UserService {
             registration.deviceId(),
             new PrivateKeyMetadata(new Kid("0"), registration.deviceId(), registration.encryptedPrivateKey()));
 
-        DocumentId settingsId = new DocumentId(user.email().address());
-        EncryptedContent settings = new EncryptedContent(getDecoder().decode(registration.settings().content()));
-        documentRepository.persist(user, settingsId, settings);
-        EncryptedContent settingsKey = new EncryptedContent(getDecoder().decode(registration.settingsSharedKey().sharedKey()));
-        documentRepository.persist(user, settingsId, user.email(), settingsKey);
+        // Settings always lives under the user's own email as document id (see DocumentResource
+        // path conventions elsewhere); documentList/chatList/profile get their ids from the client
+        // (see AuthenticationService.ts), which generates them up front so it can wire up
+        // cross-references before the account exists server-side.
+        persistDocument(user, new DocumentId(user.email().address()), registration.settings(), registration.settingsSharedKey());
+        persistDocument(user, registration.documentListId(), registration.documentList(), registration.documentListSharedKey());
+        persistDocument(user, registration.chatListId(), registration.chatList(), registration.chatListSharedKey());
+        persistDocument(user, registration.profileId(), registration.profile(), registration.profileSharedKey());
+    }
+
+    // The key's own kid (chosen by the client - "0" for settings, the user's own email for
+    // documentList/chatList/profile, see AuthenticationRepository.ts) is used as-is as the lookup
+    // file name, matching how DocumentRepository.findDocumentKey/persist are keyed everywhere else.
+    private void persistDocument(User user, DocumentId documentId, EncryptedContent metadata, EncryptedSharedKey key) {
+        documentRepository.persist(user, documentId, metadata);
+        documentRepository.create(user, documentId, key);
     }
 
     public enum AuthenticationStatus {

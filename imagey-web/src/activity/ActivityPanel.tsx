@@ -35,7 +35,7 @@ export default function ActivityPanel({
       return (
         <UploadPanel
           className={className}
-          onUploadComplete={(document) =>
+          onUploadComplete={({ document }) =>
             setActivity({
               id: `image-${document.documentId}`,
               type: ActivityType.IMAGE,

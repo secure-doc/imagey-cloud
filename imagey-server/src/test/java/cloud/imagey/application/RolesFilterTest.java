@@ -17,7 +17,16 @@
 package cloud.imagey.application;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
+import static jakarta.ws.rs.core.Response.Status.OK;
+import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
+import static java.lang.Integer.MAX_VALUE;
+import static org.apache.commons.io.FileUtils.copyDirectory;
+import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.UUID;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Cookie;
@@ -26,39 +35,139 @@ import jakarta.ws.rs.core.Response;
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
 
+// Drives RolesFilter#hasRole through the "member" branch (direct key issuer + recursive folder
+// chain), the negative case, the now owner-only public-key endpoint, and the anonymous short-circuit.
+// "owner" is exercised throughout the rest of the suite.
 @GreenMail
 @MonoMeecrowaveConfig
 public class RolesFilterTest {
 
+    private static final File TEST_DATA_DIRECTORY = new File("src/test/resources/data");
+
     @ConfigurationInject
     private static Meecrowave.Builder config;
-
+    @Inject
+    @ConfigProperty(name = "root.path")
+    private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private DocumentRepository documentRepository;
+
+    private final User mary = new User(new Email("mary@imagey.cloud"));
+    private final User laura = new User(new Email("laura@imagey.cloud"));
+
+    @BeforeEach
+    void initializeState() throws IOException {
+        File data = new File(rootPath);
+        deleteQuietly(data);
+        copyDirectory(TEST_DATA_DIRECTORY, data);
+        deleteQuietly(new File(data, mary.email().address() + "/contact-requests"));
+        deleteQuietly(new File(data, laura.email().address() + "/contact-requests"));
+    }
 
     @Test
-    void testEmptySegmentsBranch() {
-        User mary = new User(new Email("mary@imagey.cloud"));
-        Cookie tokenCookie = new Cookie.Builder("token")
-            .value(tokenService.generateToken(mary, Integer.MAX_VALUE).token())
-            .build();
+    @DisplayName("A user who issued a key filed under a document has the member role")
+    void keyIssuerHasMemberRole() {
+        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
+        documentRepository.persist(mary, documentId, new EncryptedContent("{}".getBytes()));
+        documentRepository.create(mary, documentId, sharedKey(laura, laura.email().address()));
 
-        // 1. Request to root "/" to cover empty segments branch in extractUser
-        Response rootResponse = newClient()
+        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A member of a folder reaches a document nested in it")
+    void memberOfFolderReachesNestedDocument() {
+        DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
+        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
+        documentRepository.persist(mary, folder, new EncryptedContent("folder".getBytes()));
+        documentRepository.create(mary, folder, sharedKey(laura, laura.email().address()));
+        documentRepository.persist(mary, documentId, new EncryptedContent("doc".getBytes()));
+        documentRepository.create(mary, documentId, sharedKey(mary, folder.id()));
+
+        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A user without a key in the document's chain is denied the member role")
+    void nonMemberIsDenied() {
+        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
+        documentRepository.persist(mary, documentId, new EncryptedContent("{}".getBytes()));
+
+        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A previously denied user is allowed once a key for them is added (negatives are not cached)")
+    void deniedThenGrantedAfterKeyIsAdded() {
+        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
+        documentRepository.persist(mary, documentId, new EncryptedContent("{}".getBytes()));
+
+        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+
+        documentRepository.create(mary, documentId, sharedKey(laura, laura.email().address()));
+
+        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Another user cannot read the owner's public key")
+    void publicKeyIsOwnerOnly() {
+        assertThat(marysPublicKeyAs(laura).getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("An anonymous request (no token) is rejected from a secured resource")
+    void anonymousRequestIsRejected() {
+        Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users")
+            .path("users").path(mary.email().address()).path("public-keys").path("0")
             .request()
-            .cookie(tokenCookie)
-            .post(null);
-        // It might be 400 or something because of missing payload, but RolesFilter will process it with empty segments
+            .get();
 
-        assertThat(rootResponse).isNotNull();
+        assertThat(response.getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    private Response getDocumentAs(User owner, DocumentId documentId, User caller) {
+        return newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path(owner.email().address()).path("documents").path(documentId.id())
+            .request()
+            .cookie(tokenCookie(caller))
+            .get();
+    }
+
+    private Response marysPublicKeyAs(User caller) {
+        return newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path(mary.email().address()).path("public-keys").path("0")
+            .request()
+            .cookie(tokenCookie(caller))
+            .get();
+    }
+
+    private Cookie tokenCookie(User user) {
+        return new Cookie.Builder("token").value(tokenService.generateToken(user, MAX_VALUE).token()).build();
+    }
+
+    private static EncryptedSharedKey sharedKey(User issuer, String kid) {
+        return new EncryptedSharedKey(issuer, new Kid(kid), new EncryptedSymmetricKey("d3JhcHBlZA=="));
     }
 }

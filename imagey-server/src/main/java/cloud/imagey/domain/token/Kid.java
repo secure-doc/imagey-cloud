@@ -18,8 +18,19 @@ package cloud.imagey.domain.token;
 
 import static java.util.Objects.requireNonNull;
 
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
+
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+// Over the wire a Kid is a bare path segment (RecordParamConverterProvider) or a plain string field
+// of a record handled by the reflective Record message body reader/writer. The adapter is only for
+// JSON-B, which DocumentRepository uses to store an EncryptedSharedKey (kid included) on disk.
+@JsonbTypeAdapter(Kid.Adapter.class)
 public record Kid(String id) {
     public Kid {
         requireNonNull(id);
+    }
+
+    public static class Adapter extends AbstractSimpleRecordAdapter<Kid, String> {
     }
 }

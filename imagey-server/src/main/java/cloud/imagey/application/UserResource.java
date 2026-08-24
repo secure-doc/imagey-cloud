@@ -18,6 +18,7 @@ package cloud.imagey.application;
 
 import static cloud.imagey.domain.user.UserService.AuthenticationStatus.REGISTRATION_STARTED;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
+import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA;
 import static jakarta.ws.rs.core.Response.Status.ACCEPTED;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
 
@@ -39,10 +40,13 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Response;
 
+import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.token.Kid;
+import cloud.imagey.domain.user.RegistrationMetadata;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserRegistration;
 import cloud.imagey.domain.user.UserRepository;
@@ -64,18 +68,51 @@ public class UserResource {
 
     @POST
     @PermitAll
-    @Consumes(APPLICATION_JSON)
-    public Response registerUser(UserRegistration registration) throws IOException {
-        if (!registration.email().address().equals(currentPrincipal.get().getName())) {
+    @Consumes(MULTIPART_FORM_DATA)
+    public Response registerUser(
+        @Multipart("metadata") RegistrationMetadata metadata,
+        @Multipart("settings") EncryptedContent settings,
+        @Multipart("documentList") EncryptedContent documentList,
+        @Multipart("chatList") EncryptedContent chatList,
+        @Multipart("profile") EncryptedContent profile) throws IOException {
+
+        if (!metadata.email().address().equals(currentPrincipal.get().getName())) {
             LOG.warn("Current user is trying to register another user.");
             throw new ForbiddenException("User is only allowed to register itself.");
         }
-        userService.register(registration);
+
+        userService.register(toRegistration(metadata, settings, documentList, chatList, profile));
         return Response.ok().build();
     }
 
+    private static UserRegistration toRegistration(
+        RegistrationMetadata metadata,
+        EncryptedContent settings,
+        EncryptedContent documentList,
+        EncryptedContent chatList,
+        EncryptedContent profile) {
+
+        return new UserRegistration(
+            metadata.deviceId(),
+            metadata.email(),
+            metadata.encryptedPrivateKey(),
+            metadata.mainPublicKey(),
+            metadata.devicePublicKey(),
+            settings,
+            metadata.settingsKey(),
+            metadata.documentList().id(),
+            documentList,
+            metadata.documentList().key(),
+            metadata.chatList().id(),
+            chatList,
+            metadata.chatList().key(),
+            metadata.profile().id(),
+            profile,
+            metadata.profile().key());
+    }
+
     @GET
-    @RolesAllowed({"owner", "contact", "contact-request"})
+    @RolesAllowed("owner")
     @Path("{email}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {

@@ -25,9 +25,17 @@ export function useKey(folderId: string): JsonWebKey | undefined {
   const folderContext = useContext(FolderContext);
   const cachedKey = folderContext.folders[folderId]?.key;
   const parentId = useParentFolderId(folderId);
-  const parentKey = useKey(parentId);
+  const parentKey = folderContext.folders[parentId]?.key;
+
   const user = useUser();
   const [key, setKey] = useState<JsonWebKey>();
+  // Drop the previously resolved key the moment the folder id changes, so a
+  // consumer never briefly sees the old folder's key paired with the new id
+  // (which would make it load children with the wrong key - broken-item flashes
+  // and spurious "loadDocument failed" logs until this hook re-resolves).
+  useEffect(() => {
+    setKey(undefined);
+  }, [folderId]);
   useEffect(() => {
     if (cachedKey || !parentKey) {
       return;

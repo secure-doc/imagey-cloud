@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useObjectUrl } from "../hooks/useObjectUrl";
 
 export default function ProfilePicturePanel({
   picture,
@@ -9,14 +10,16 @@ export default function ProfilePicturePanel({
   onPictureChange: (file: File) => void;
 }) {
   const { t } = useTranslation();
-  const initialUrl = picture ? URL.createObjectURL(picture) : undefined;
-  const [pictureUrl, setPictureUrl] = useState(initialUrl);
+  // A freshly picked file is shown immediately, before it is saved and comes
+  // back as `picture`.
+  const [pickedFile, setPickedFile] = useState<File | undefined>();
+  const pictureUrl = useObjectUrl(pickedFile ?? picture);
 
   const handlePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      setPickedFile(file);
       onPictureChange(file);
-      setPictureUrl(URL.createObjectURL(file));
     }
   };
 

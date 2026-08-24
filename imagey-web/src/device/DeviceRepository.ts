@@ -41,7 +41,4 @@ export const deviceRepository = {
       encryptedRecoveryKey,
     );
   },
-  removeRecoveryKey: (deviceId: string) => {
-    localStorage.removeItem(`imagey.devices[${deviceId}].recovery-key`);
-  },
 };

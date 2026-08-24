@@ -20,9 +20,12 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
+import jakarta.inject.Inject;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.infrastructure.IoProblemException;
 import cloud.imagey.infrastructure.ResourceConflictException;
@@ -31,6 +34,24 @@ public class AbstractFileRepository {
 
     public static final Charset UTF_8 = Charset.forName("UTF-8");
     private static final Logger LOG = LogManager.getLogger(AbstractFileRepository.class);
+
+    @Inject
+    @ConfigProperty(name = "root.path")
+    private String rootPath;
+
+    /** The configured storage root ({@code root.path}). */
+    protected File rootPath() {
+        return new File(rootPath);
+    }
+
+    /**
+     * The storage tree of a single account, {@code <root.path>/<email>}. Takes the raw address
+     * rather than a {@code cloud.imagey.domain.user.User} on purpose: the infrastructure layer
+     * must not depend on domain types (see {@code ArchitectureTest#noCycles}).
+     */
+    protected File getUserHome(String emailAddress) {
+        return new File(rootPath, emailAddress);
+    }
 
     protected File createNewFile(File folder, String filename) {
         File file = new File(folder, filename);
@@ -101,6 +122,10 @@ public class AbstractFileRepository {
         } catch (IOException e) {
             throw new IoProblemException(e);
         }
+    }
+
+    protected void writeStringToFile(File file, String data) {
+        writeStringToFile(file, data, UTF_8);
     }
 
     protected void writeStringToFile(File file, String data, Charset charset) {

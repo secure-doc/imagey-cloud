@@ -21,6 +21,7 @@ import static java.util.Optional.empty;
 
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -57,11 +58,17 @@ public class TokenService {
     private String sharedSecret;
 
     public Token generateToken(User user, long validityInMilliseconds) {
+        return generateToken(user, validityInMilliseconds, Map.of());
+    }
+
+    public Token generateToken(User user, long validityInMilliseconds, Map<String, ?> additionalClaims) {
         LOG.info("Generate token with validity {}", validityInMilliseconds);
         try {
             JWSSigner signer = new MACSigner(Base64.getDecoder().decode(sharedSecret));
-            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder().subject(user.email().address()).issuer(ISSUER)
-                .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds)).build();
+            JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder().subject(user.email().address()).issuer(ISSUER)
+                .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds));
+            additionalClaims.forEach(claims::claim);
+            JWTClaimsSet claimsSet = claims.build();
             SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
             signedJWT.sign(signer);
             LOG.info("Token generated.");

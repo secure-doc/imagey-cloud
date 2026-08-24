@@ -2,9 +2,13 @@ import { test, expect } from "./fixtures";
 import * as path from "path";
 import {
   clearLocalStorage,
+  loginAsBill,
   loginAsMary,
+  prepareBillsDocuments,
+  prepareBillsDocumentUpload,
+  prepareBillsEmptyContactRequests,
+  prepareBillsLogin,
   prepareDocumentUpload,
-  prepareEmptyMarysDocuments,
   prepareMarysContactRequests,
   prepareMarysDocuments,
   prepareMarysLogin,
@@ -21,10 +25,7 @@ test("upload image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareDocumentUpload(
-    TestData.mary.documents[0].name,
-    TestData.mary.documents[0].documentId,
-  );
+  await prepareDocumentUpload(TestData.mary.documents[3].documentId);
   const provider = await prepareMarysDocuments();
 
   // When
@@ -49,15 +50,15 @@ test("upload image", async ({ page }) => {
     await uploadDocumentButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      path.join("tests", "images", TestData.mary.documents[0].name),
+      path.join("tests", "images", TestData.mary.documents[3].name),
     );
 
     // Then
     await expect(
       page
-        .getByAltText(TestData.mary.documents[0].name)
+        .getByAltText(TestData.mary.documents[3].name)
         .or(
-          page.locator(`text=Error loading ${TestData.mary.documents[0].name}`),
+          page.locator(`text=Error loading ${TestData.mary.documents[3].name}`),
         ),
     ).toBeAttached();
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -68,10 +69,7 @@ test("upload portrait", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareDocumentUpload(
-    TestData.mary.documents[0].name,
-    TestData.mary.documents[0].documentId,
-  );
+  await prepareDocumentUpload(TestData.mary.documents[3].documentId);
   const provider = await prepareMarysDocuments();
 
   // When
@@ -111,10 +109,7 @@ test("upload small image", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
-  await prepareDocumentUpload(
-    TestData.mary.documents[1].name,
-    TestData.mary.documents[1].documentId,
-  );
+  await prepareDocumentUpload(TestData.mary.documents[4].documentId);
   const provider = await prepareMarysDocuments();
 
   // When
@@ -138,15 +133,15 @@ test("upload small image", async ({ page }) => {
     await uploadDocumentButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      path.join("tests", "images", TestData.mary.documents[1].name),
+      path.join("tests", "images", TestData.mary.documents[4].name),
     );
 
     // Then
     await expect(
       page
-        .getByAltText(TestData.mary.documents[1].name)
+        .getByAltText(TestData.mary.documents[4].name)
         .or(
-          page.locator(`text=Error loading ${TestData.mary.documents[1].name}`),
+          page.locator(`text=Error loading ${TestData.mary.documents[4].name}`),
         ),
     ).toBeAttached();
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -155,21 +150,19 @@ test("upload small image", async ({ page }) => {
 
 test("upload image from empty state", async ({ page }) => {
   // Given
-  await prepareMarysLogin(page);
-  await prepareMarysContactRequests();
+  // Bill has no documents yet, so he already starts from an empty state.
+  await prepareBillsLogin(page);
+  await prepareBillsEmptyContactRequests();
 
-  // Custom prepare for empty documents
-  await prepareEmptyMarysDocuments();
-
-  const p = await prepareDocumentUpload(
-    TestData.mary.documents[0].name,
-    TestData.mary.documents[0].documentId,
+  const p = await prepareBillsDocumentUpload(
+    TestData.mary.documents[3].documentId,
   );
+  await prepareBillsDocuments();
 
   // When
   await p.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
-    await loginAsMary(page);
+    await loginAsBill(page);
 
     expect(await page.getByRole("link", { name: "Images" }).isVisible());
     await page.getByRole("link", { name: "Images" }).click();
@@ -184,15 +177,15 @@ test("upload image from empty state", async ({ page }) => {
 
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(
-      path.join("tests", "images", TestData.mary.documents[0].name),
+      path.join("tests", "images", TestData.mary.documents[3].name),
     );
 
     // Then
     await expect(
       page
-        .getByAltText(TestData.mary.documents[0].name)
+        .getByAltText(TestData.mary.documents[3].name)
         .or(
-          page.locator(`text=Error loading ${TestData.mary.documents[0].name}`),
+          page.locator(`text=Error loading ${TestData.mary.documents[3].name}`),
         ),
     ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);

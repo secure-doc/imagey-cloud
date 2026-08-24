@@ -1,58 +1,77 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { contactService } from "../contact/ContactService";
+import { Contact } from "../contact/Contact";
 import { SendMessageForm } from "../chat/SendMessageForm";
 import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
+import { useChatsId } from "../contexts/SettingsContext";
 
 export default function Chat({ contactEmail }: { contactEmail: string }) {
   const authentication = useAuthentication();
   const user = authentication.user;
-  const publicKey = authentication.keyPairs?.mainKeyPair.publicKey;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
+  const chatsId = useChatsId();
 
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
+  const [chat, setChat] = useState<{ ownerEmail: string; chatId: string }>();
   const [keyError, setKeyError] = useState(false);
-  const { messages, setMessages } = usePolling(user, contactEmail, sharedKey);
+  const [chatsLoadFailed, setChatsLoadFailed] = useState(false);
+  // Populated once the sidebar ChatsList has loaded the "chats" document -
+  // reused here instead of loading that same document a second time (see
+  // Chats.tsx's ChatsList onLoaded prop).
+  const [chatsDocumentInfo, setChatsDocumentInfo] = useState<{
+    contacts: Contact[];
+    chatsDocumentKey: JsonWebKey;
+  }>();
+  const { messages, setMessages } = usePolling(
+    user,
+    chat?.ownerEmail,
+    chat?.chatId,
+    sharedKey,
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useBackButton();
   useTitle(contactEmail);
 
-  useEffect(() => {
-    if (contactEmail && publicKey && privateKey) {
-      contactService
-        .loadSharedKey(user, contactEmail, publicKey, privateKey)
-        .then((decryptedKey) => {
-          setSharedKey(decryptedKey);
-          setKeyError(false);
-        })
-        .catch((e) => {
-          console.error(e);
-          setKeyError(true);
-        });
-    }
-  }, [user, contactEmail, publicKey, privateKey]);
+  const handleChatsListLoaded = useCallback(
+    (contacts: Contact[], chatsDocumentKey: JsonWebKey) =>
+      setChatsDocumentInfo({ contacts, chatsDocumentKey }),
+    [],
+  );
 
-  const handleReissue = async () => {
-    if (contactEmail && publicKey && privateKey) {
-      try {
-        const newSharedKey = await contactService.reissueKey(
-          user,
-          contactEmail,
-          publicKey,
-          privateKey,
-        );
-        setSharedKey(newSharedKey);
-        setKeyError(false);
-      } catch (e) {
-        console.error("Failed to reissue key:", e);
-      }
+  useEffect(() => {
+    if (!contactEmail || !privateKey || !chatsDocumentInfo) {
+      return;
     }
-  };
+    setSharedKey(undefined);
+    setChat(undefined);
+    setKeyError(false);
+    // The chat's shared key is the chat Document's own Document key - look
+    // up the matching Contact in the "chats" document, then let
+    // ContactService figure out whether it's ours (self-issued) or the
+    // other party's (ECDH-wrapped for us).
+    const contact = chatsDocumentInfo.contacts.find(
+      (c) => c.userId === contactEmail,
+    );
+    if (!contact) {
+      console.error(`No chat found for contact ${contactEmail}`);
+      setKeyError(true);
+      return;
+    }
+    setChat({ ownerEmail: contact.owner, chatId: contact.chatId });
+    contactService
+      .loadChatKey(user, contact, chatsId, chatsDocumentInfo.chatsDocumentKey)
+      .then((decryptedKey) => setSharedKey(decryptedKey))
+      .catch((e) => {
+        console.error(e);
+        setKeyError(true);
+      });
+  }, [user, contactEmail, chatsId, chatsDocumentInfo, privateKey]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -60,30 +79,29 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
 
   return (
     <main className="grid no-margin no-space no-padding">
-      <ChatsList className="m l" activeContactEmail={contactEmail} />
+      <ChatsList
+        id={chatsId}
+        className="m l"
+        activeContactEmail={contactEmail}
+        onLoaded={handleChatsListLoaded}
+        onLoadError={setChatsLoadFailed}
+      />
       <div
         className="col s12 m8 l8 vertical"
         style={{
           height: "calc(100vh - 64px)",
         }}
       >
-        {keyError && (
-          <dialog className="modal active" open>
-            <h5>Decryption Error</h5>
-            <div>
-              There was an error decrypting the messages. This may be because
-              the keys have changed. You can try to re-issue the keys, but all
-              previous messages will be lost. Do you want to proceed?
-            </div>
-            <nav className="right-align">
-              <button className="border" onClick={() => setKeyError(false)}>
-                Abbrechen
-              </button>
-              <button onClick={handleReissue}>Re-Issue</button>
-            </nav>
-          </dialog>
-        )}
-        {messages === undefined || sharedKey === undefined ? (
+        {chatsLoadFailed ? (
+          <div className="padding">
+            Could not load your chats right now. Retrying...
+          </div>
+        ) : keyError ? (
+          <div className="padding">
+            There was an error decrypting the messages. This may be because the
+            keys have changed.
+          </div>
+        ) : messages === undefined || sharedKey === undefined ? (
           <div className="max flex center-align middle-align">
             <progress className="circle"></progress>
           </div>
@@ -131,12 +149,14 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
               ))}
               <div ref={messagesEndRef} />
             </div>
-            {user && contactEmail && (
+            {user && contactEmail && chat && (
               <>
                 <hr className="divider" />
                 <SendMessageForm
                   userEmail={user}
                   contactEmail={contactEmail}
+                  ownerEmail={chat.ownerEmail}
+                  chatId={chat.chatId}
                   sharedKey={sharedKey}
                   onMessageSent={(newMessage) =>
                     setMessages((prev) => [...(prev ?? []), newMessage])

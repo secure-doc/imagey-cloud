@@ -3,12 +3,14 @@ import {
   clearLocalStorage,
   loginAsMary,
   prepareMarysLogin,
-  prepareEmptyMarysDocuments,
+  prepareMarysEmptyDocumentsFolder,
+  prepareMarysChatsDocument,
   setupMockServer,
   provider,
   prepareMarysContactRequests,
   runningPactRequests,
   prepareMarysEmptyContactRequests,
+  TestData,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -18,7 +20,7 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 test("wrong contact email", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  const builder = await prepareEmptyMarysDocuments();
+  const builder = await prepareMarysEmptyDocumentsFolder();
   await prepareMarysContactRequests();
 
   await builder.executeTest(async (mockServer) => {
@@ -67,7 +69,7 @@ test("wrong contact email", async ({ page }) => {
 test("send contact request", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
+  await prepareMarysEmptyDocumentsFolder();
   await prepareMarysContactRequests();
 
   const builder = provider
@@ -76,7 +78,11 @@ test("send contact request", async ({ page }) => {
     .withRequest("POST", "/users/mary@imagey.cloud/contact-requests", (r) => {
       r.headers({
         "Content-Type": "application/json",
-      }).jsonBody({ email: "alice@imagey.cloud" });
+      }).jsonBody({
+        inviter: "mary@imagey.cloud",
+        invitee: "alice@imagey.cloud",
+        publicKey: TestData.mary.publicMainKey,
+      });
     })
     .willRespondWith(201);
 
@@ -122,16 +128,7 @@ test("invite contact from empty panel", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
 
-  provider
-    .addInteraction()
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts returning empty")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareMarysChatsDocument([], "mary has no contacts");
 
   provider
     .addInteraction()
@@ -143,7 +140,7 @@ test("invite contact from empty panel", async ({ page }) => {
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
-  const addContactInteraction = await prepareEmptyMarysDocuments();
+  const addContactInteraction = await prepareMarysEmptyDocumentsFolder();
   provider
     .addInteraction()
     .uponReceiving(
@@ -152,7 +149,11 @@ test("invite contact from empty panel", async ({ page }) => {
     .withRequest("POST", "/users/mary@imagey.cloud/contact-requests", (r) => {
       r.headers({
         "Content-Type": "application/json",
-      }).jsonBody({ email: "alice@imagey.cloud" });
+      }).jsonBody({
+        inviter: "mary@imagey.cloud",
+        invitee: "alice@imagey.cloud",
+        publicKey: TestData.mary.publicMainKey,
+      });
     })
     .willRespondWith(201);
 
@@ -195,7 +196,7 @@ test("invite contact from empty panel", async ({ page }) => {
 test("cancel invite contact from empty panel", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
+  await prepareMarysEmptyDocumentsFolder();
   const provider = await prepareMarysEmptyContactRequests();
 
   await provider.executeTest(async (mockServer) => {

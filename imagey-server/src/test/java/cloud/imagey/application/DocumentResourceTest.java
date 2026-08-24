@@ -18,29 +18,19 @@ package cloud.imagey.application;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.entity;
-import static jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA_TYPE;
-import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
-import static jakarta.ws.rs.core.Response.Status.CREATED;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Optional.empty;
+import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
+import static java.util.UUID.randomUUID;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.List;
 
 import jakarta.inject.Inject;
-import jakarta.ws.rs.client.Invocation.Builder;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.Response;
 
-import org.apache.cxf.jaxrs.ext.multipart.Attachment;
-import org.apache.cxf.jaxrs.ext.multipart.ContentDisposition;
-import org.apache.cxf.jaxrs.ext.multipart.MultipartBody;
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
@@ -50,13 +40,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import cloud.imagey.domain.document.DocumentId;
-import cloud.imagey.domain.document.DocumentMetadata;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
 
+// Covers the metadata GET/PUT of DocumentResource. The multipart upload contract lives in
+// DocumentUploadTest.
 @GreenMail
 @MonoMeecrowaveConfig
 public class DocumentResourceTest {
@@ -86,162 +78,39 @@ public class DocumentResourceTest {
         userCookie = new Cookie.Builder("token").value(tokenService.generateToken(user, Integer.MAX_VALUE).token()).build();
     }
 
-    private Builder client() {
-        return newClient()
-                .target("http://localhost:" + config.getHttpPort())
-                .path("users").path(user.email().address()).path("documents")
-                .request()
-                .cookie(userCookie);
-    }
-
-    @Test
-    @DisplayName("Missing metadata leads to 400")
-    void missingMetadata() {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
-    }
-
-    @Test
-    @DisplayName("Missing issuer leads to 400")
-    void missingIssuer() {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
-    }
-
     @Test
     @DisplayName("Metadata can be updated")
-    void updateMetadata() throws IOException {
-        metadataWithoutFiles();
+    void updateMetadata() {
+        DocumentId documentId = givenDocument();
 
-        DocumentId documentId = documentRepository.findMetadata(user, empty()).iterator().next().documentId();
+        Response response = document(documentId)
+            .put(entity(new byte[]{1, 2, 3}, APPLICATION_OCTET_STREAM));
 
-        Response response = newClient().target("http://localhost:" + config.getHttpPort())
-            .path("users").path(user.email().address()).path("documents").path(documentId.id())
-            .request()
-            .cookie(userCookie)
-            .put(entity(new byte[]{1, 2, 3}, jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM));
-
-        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.OK);
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.NO_CONTENT);
     }
 
     @Test
     @DisplayName("Metadata update fails with wrong ETag")
-    void updateMetadataWrongEtag() throws IOException {
-        metadataWithoutFiles();
+    void updateMetadataWrongEtag() {
+        DocumentId documentId = givenDocument();
 
-        DocumentId documentId = documentRepository.findMetadata(user, empty()).iterator().next().documentId();
-
-        Response response = newClient().target("http://localhost:" + config.getHttpPort())
-            .path("users").path(user.email().address()).path("documents").path(documentId.id())
-            .request()
-            .cookie(userCookie)
+        Response response = document(documentId)
             .header("If-Match", "\"wrong\"")
-            .put(entity(new byte[]{1, 2, 3}, jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM));
+            .put(entity(new byte[]{1, 2, 3}, APPLICATION_OCTET_STREAM));
 
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.PRECONDITION_FAILED);
     }
 
-    @Test
-    @DisplayName("Missing key leads to 400")
-    void missingKey() {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createIssuerAttachment());
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+    private DocumentId givenDocument() {
+        DocumentId documentId = new DocumentId(randomUUID().toString());
+        documentRepository.persist(user, documentId, new EncryptedContent("metadata".getBytes()));
+        return documentId;
     }
 
-    @Test
-    @DisplayName("Metadata without files is stored correctly")
-    void metadataWithoutFiles() throws IOException {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("Metadata with one file is stored correctly")
-    void metadataWithOneFile() throws IOException {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-        attachments.add(createFileAttachment("file1.txt", "content1"));
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-        DocumentId docId = metadataList.get(0).documentId();
-
-        File filesDir = new File(new File(new File(rootPath, user.email().address()), "documents/" + docId.id()), "files");
-        assertThat(filesDir).exists();
-        assertThat(filesDir.listFiles()).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("Metadata with three files is stored correctly")
-    void metadataWithThreeFiles() throws IOException {
-        List<Attachment> attachments = new ArrayList<>();
-        attachments.add(createMetadataAttachment());
-        attachments.add(createKeyAttachment());
-        attachments.add(createIssuerAttachment());
-        attachments.add(createFileAttachment("file1.txt", "content1"));
-        attachments.add(createFileAttachment("file2.txt", "content2"));
-        attachments.add(createFileAttachment("file3.txt", "content3"));
-
-        Response response = client().post(entity(new MultipartBody(attachments), MULTIPART_FORM_DATA_TYPE));
-
-        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-
-        List<DocumentMetadata> metadataList = documentRepository.findMetadata(user, empty());
-        assertThat(metadataList).hasSize(1);
-        DocumentId docId = metadataList.get(0).documentId();
-
-        File filesDir = new File(new File(new File(rootPath, user.email().address()), "documents/" + docId.id()), "files");
-        assertThat(filesDir).exists();
-        assertThat(filesDir.listFiles()).hasSize(3);
-    }
-
-    private Attachment createMetadataAttachment() {
-        return new Attachment("metadata", new ByteArrayInputStream("{\"name\":\"test\"}".getBytes(UTF_8)),
-            new ContentDisposition("form-data; name=\"metadata\""));
-    }
-
-    private Attachment createKeyAttachment() {
-        return new Attachment("key", new ByteArrayInputStream("dummy-key".getBytes(UTF_8)),
-            new ContentDisposition("form-data; name=\"key\""));
-    }
-
-    private Attachment createIssuerAttachment() {
-        return new Attachment("issuer", new ByteArrayInputStream("owner@example.com".getBytes(UTF_8)),
-            new ContentDisposition("form-data; name=\"issuer\""));
-    }
-
-    private Attachment createFileAttachment(String filename, String content) {
-        return new Attachment("files", new ByteArrayInputStream(content.getBytes(UTF_8)),
-            new ContentDisposition("form-data; name=\"files\"; filename=\"" + filename + "\""));
+    private jakarta.ws.rs.client.Invocation.Builder document(DocumentId documentId) {
+        return newClient().target("http://localhost:" + config.getHttpPort())
+            .path("users").path(user.email().address()).path("documents").path(documentId.id())
+            .request()
+            .cookie(userCookie);
     }
 }

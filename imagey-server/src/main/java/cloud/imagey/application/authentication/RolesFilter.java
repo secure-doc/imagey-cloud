@@ -17,14 +17,11 @@
 package cloud.imagey.application.authentication;
 
 import static cloud.imagey.application.authentication.DefaultSecurityContext.forPrincipal;
-import static cloud.imagey.domain.chat.ContactStatus.INVITATION_RECEIVED;
-import static cloud.imagey.domain.chat.ContactStatus.INVITATION_SENT;
 import static jakarta.ws.rs.Priorities.AUTHENTICATION;
 import static java.util.Optional.ofNullable;
 
 import java.io.IOException;
 import java.security.Principal;
-import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -44,7 +41,6 @@ import jakarta.ws.rs.ext.Provider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import cloud.imagey.domain.chat.ContactRepository;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.mail.Email;
@@ -52,6 +48,7 @@ import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.infrastructure.common.BoundedLruCache;
 
 @Provider
 @ApplicationScoped
@@ -59,11 +56,19 @@ import cloud.imagey.domain.user.User;
 public class RolesFilter implements ContainerRequestFilter {
 
     private static final Logger LOG = LogManager.getLogger(RolesFilter.class);
+    private static final int MEMBERSHIP_CACHE_SIZE = 10_000;
+
+    // Positive member decisions per (owner, document, caller). Negatives are never cached - a
+    // well-behaved client only asks for documents it can see, so denials are rare, and not caching
+    // them means a newly granted key is picked up on the next request. No invalidation is needed:
+    // key slots are write-once (see DocumentRepository.persist), so a key add can only *grant* a
+    // path, never take one away. A future key/document deletion would break that and need the
+    // cache cleared.
+    private final BoundedLruCache<User, DocumentId, User, Boolean> membershipCache =
+        new BoundedLruCache<>(MEMBERSHIP_CACHE_SIZE);
 
     @Inject
     private TokenService tokenService;
-    @Inject
-    private ContactRepository contactRepository;
     @Inject
     private DocumentRepository documentRepository;
     @Inject
@@ -116,17 +121,25 @@ public class RolesFilter implements ContainerRequestFilter {
     private boolean hasRole(User currentPrincipal, User contextUser, UriInfo uriInfo, String role) {
         if ("owner".equals(role)) {
             return currentPrincipal.equals(contextUser);
-        } else if ("contact".equals(role)) {
-            return contactRepository.isContact(contextUser, currentPrincipal);
-        } else if ("contact-request".equals(role)) {
-            return contactRepository.getContactStatus(contextUser, currentPrincipal)
-                .filter(status -> EnumSet.of(INVITATION_SENT, INVITATION_RECEIVED).contains(status))
-                .isPresent();
-        } else if ("recipient".equals(role)) {
-            return extractDocumentId(uriInfo)
-                .map(docId -> documentRepository.hasSharedKey(contextUser, docId, currentPrincipal.email()))
+        } else if ("member".equals(role)) {
+            return contextUser != null && extractDocumentId(uriInfo)
+                .map(documentId -> isMember(contextUser, documentId, currentPrincipal))
                 .orElse(false);
+        } else {
+            LOG.warn("Unknown role {} requested - denying access", role);
+            return false;
         }
-        return false;
+    }
+
+    private boolean isMember(User owner, DocumentId documentId, User member) {
+        Boolean cached = membershipCache.get(owner, documentId, member);
+        if (cached != null) {
+            return cached;
+        }
+        boolean result = documentRepository.isIssuerInKeyChain(owner, documentId, member);
+        if (result) {
+            membershipCache.put(owner, documentId, member, true);
+        }
+        return result;
     }
 }

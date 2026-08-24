@@ -1,18 +1,23 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { documentService } from "../document/DocumentService";
+import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import DocumentMetadata from "../document/DocumentMetadata";
+import Document from "../document/Document";
 
 interface CreateFolderDialogProps {
-  parentFolderId?: string;
+  // The already-loaded parent folder Document (name, type, its existing
+  // `documents` list, ...) - storeFolder() re-uploads this whole object
+  // (with the new child id appended) as the parent's updated metadata, so
+  // a stub carrying only documentId/documents would silently wipe out the
+  // parent's real name/type on every subfolder creation.
+  parentFolder?: Document;
   parentFolderKey?: JsonWebKey;
   onClose: () => void;
-  onCreated: (folder: DocumentMetadata) => void;
+  onCreated: (result: StoreResult) => void;
 }
 
 export default function CreateFolderDialog({
-  parentFolderId,
+  parentFolder,
   parentFolderKey,
   onClose,
   onCreated,
@@ -22,23 +27,19 @@ export default function CreateFolderDialog({
   const [isCreating, setIsCreating] = useState(false);
   const authentication = useAuthentication();
   const user = authentication.user;
-  const mainKeyPair = authentication.keyPairs.mainKeyPair;
 
   const handleCreate = async () => {
-    if (!folderName.trim() || !user || !mainKeyPair) return;
+    if (!folderName.trim() || !user || !parentFolder || !parentFolderKey)
+      return;
     setIsCreating(true);
     try {
-      const publicMainKey = mainKeyPair.publicKey;
-      const privateMainKey = mainKeyPair.privateKey;
-      const metadata = await documentService.storeFolder(
+      const result = await documentService.storeFolder(
         user,
         folderName.trim(),
-        publicMainKey,
-        privateMainKey,
-        parentFolderId,
+        parentFolder,
         parentFolderKey,
       );
-      onCreated(metadata);
+      onCreated(result);
     } catch (e) {
       console.error(e);
     } finally {

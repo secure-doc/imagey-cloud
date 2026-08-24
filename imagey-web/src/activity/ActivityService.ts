@@ -16,38 +16,32 @@ export const activityService = {
     documentsId: string,
   ): Promise<Activity[]> => {
     const contactRequests = await contactRepository.getContactRequests(user);
-    const rootFolder = await documentService.loadDocument(
-      user,
-      documentsId,
-      user,
-      settingsKey,
-    );
-    let documents: DocumentMetadata[] = [];
-    if (rootFolder.documents && rootFolder.key) {
-      const rootFolderKey = rootFolder.key;
-      documents = await Promise.all(
-        rootFolder.documents.map(async (documentId) => {
-          const doc = await documentService.loadDocument(
-            user,
-            documentId,
-            documentsId,
-            rootFolderKey,
-          );
-          console.log(
-            "key in activityService.getActivities: " + JSON.stringify(doc.key),
-          );
-          return doc;
-        }),
+    // Folders have no file content to show as an image activity (and no
+    // previewImageId to load it from), and a failed-load placeholder has no
+    // `type` - loadFolderChildren drops both, leaving only actual images.
+    const documents: DocumentMetadata[] =
+      await documentService.loadFolderChildren(
+        user,
+        documentsId,
+        user,
+        settingsKey,
       );
-    }
+    // Only invitations addressed to us that we haven't acted on yet are
+    // shown here - a request we've ACCEPTED (or that's since moved to
+    // RECEIVED) is no longer ours to decide on.
     const activities: Activity[] = [
-      ...contactRequests.map(
-        (request): InvitationActivity => ({
-          id: `invitation-${request.userId}`,
-          type: ActivityType.INVITATION,
-          userId: request.userId,
-        }),
-      ),
+      ...contactRequests
+        .filter(
+          (request) => request.invitee === user && request.status === "INVITED",
+        )
+        .map(
+          (request): InvitationActivity => ({
+            id: `invitation-${request.inviter}`,
+            type: ActivityType.INVITATION,
+            userId: request.inviter,
+            publicKey: request.publicKey,
+          }),
+        ),
       ...documents.map(
         (image): ImageActivity => ({
           id: `image-${image.documentId}`,
