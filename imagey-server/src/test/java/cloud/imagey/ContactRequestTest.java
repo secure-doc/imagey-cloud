@@ -18,33 +18,26 @@ package cloud.imagey;
 
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.CONFLICT;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
-import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
-import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static java.lang.Integer.MAX_VALUE;
-import static java.util.Map.entry;
-import static java.util.Map.of;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.io.FileUtils.copyDirectory;
-import static org.apache.commons.io.FileUtils.forceDelete;
+import static org.apache.commons.io.FileUtils.deleteQuietly;
+import static org.apache.commons.io.FileUtils.writeStringToFile;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.util.List;
-import java.util.Map;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.client.Invocation.Builder;
-import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Cookie;
-import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.Response.Status.Family;
 
 import org.apache.meecrowave.Meecrowave;
 import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
@@ -54,18 +47,29 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import cloud.imagey.domain.chat.ContactKeys;
-import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.contact.ContactExchange;
+import cloud.imagey.domain.contact.ContactRepository;
+import cloud.imagey.domain.contact.ContactStatus;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
 
+// Full-stack integration test for the whole contact-request lifecycle over HTTP: the
+// invite -> accept -> confirm-receipt handshake plus every off-happy-path branch the Pact
+// contract does not exercise (disallowed origin, decline of an existing vs. a never-received
+// invitation, re-invite/accept after a decline, confirm-receipt out of order). Also drives
+// GET contact-requests through ContactRepository.isActionableFor at each handshake step.
 @GreenMail
 @MonoMeecrowaveConfig
 public class ContactRequestTest {
 
     private static final File TEST_DATA_DIRECTORY = new File("src/test/resources/data");
+    private static final String ORIGIN = "https://secure-doc.store";
+    private static final String PUBLIC_KEY
+        = "{\"crv\": \"P-256\", \"ext\": true, \"key_ops\": [], \"kty\": \"EC\","
+        + " \"x\": \"O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4\","
+        + " \"y\": \"ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU\"}";
 
     @ConfigurationInject
     private static Meecrowave.Builder config;
@@ -74,418 +78,239 @@ public class ContactRequestTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
-    private Cookie laurasCookie;
-    private TestClient marysClient;
-    private TestClient laurasClient;
+    @Inject
+    private ContactRepository contactRepository;
+
+    private final User mary = new User(new Email("mary@imagey.cloud"));
+    private final User laura = new User(new Email("laura@imagey.cloud"));
 
     @BeforeEach
-    void initializeState() throws URISyntaxException, IOException {
+    void initializeState() throws IOException {
         File data = new File(rootPath);
-        if (data.exists()) {
-            forceDelete(data);
-        }
+        deleteQuietly(data);
         copyDirectory(TEST_DATA_DIRECTORY, data);
-        File marysInvitations = getMarysContactRequests();
-        if (marysInvitations.exists()) {
-            forceDelete(marysInvitations);
-        }
-        File laurasInvitations = getLaurasContactRequests();
-        if (laurasInvitations.exists()) {
-            forceDelete(laurasInvitations);
-        }
-        File marysContacts = new File(getMarysData(), "contacts");
-        if (marysContacts.exists()) {
-            forceDelete(marysContacts);
-        }
-        File laurasContacts = new File(getLaurasData(), "contacts");
-        if (laurasContacts.exists()) {
-            forceDelete(laurasContacts);
-        }
-        User mary = getMary();
-        User laura = new User(new Email("laura@imagey.cloud"));
-        marysClient = path -> newClient()
-                .target("http://localhost:" + config.getHttpPort())
-                .path("users").path(mary.email().address()).path(path)
-                .request()
-                .header("Origin", "https://secure-doc.store")
-                .cookie(new Cookie.Builder("token")
-                    .value(tokenService.generateToken(mary, MAX_VALUE).token())
-                    .build());
-        laurasCookie = new Cookie.Builder("token")
-                .value(tokenService.generateToken(laura, MAX_VALUE).token())
-                .build();
-        laurasClient = path -> newClient()
-                .target("http://localhost:" + config.getHttpPort())
-                .path("users").path(laura.email().address()).path(path)
-                .request().header("Origin", "https://secure-doc.store")
-                .cookie(laurasCookie);
+        deleteQuietly(new File(data, mary.email().address() + "/contact-requests"));
+        deleteQuietly(new File(data, laura.email().address() + "/contact-requests"));
     }
 
     @Test
-    @DisplayName("Contact request is can be accepted")
-    public void acceptContactRequest() throws IOException {
-        // Given
-        List<String> marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        List<String> laurasContactRequests = laurasClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        List<String> marysContacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
-        List<String> laurasContacts = laurasClient.path("contacts").get(new GenericType<List<String>>() { });
-        assertThat(marysContactRequests).isEmpty();
-        assertThat(marysContacts).isEmpty();
-        assertThat(laurasContactRequests).isEmpty();
-        assertThat(laurasContacts).isEmpty();
-        WebTarget marysPublicKey = newClient()
-            .target("http://localhost:" + config.getHttpPort())
-            .path("users/mary@imagey.cloud/public-keys/0");
-        Response marysPublicKeyResponse = marysPublicKey
-            .request().header("Origin", "https://secure-doc.store")
-            .cookie(laurasCookie)
-            .get();
-        assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    @DisplayName("Inviting an existing user creates a pending contact request")
+    public void inviteExistingUser() {
+        Response response = contactRequests(mary, mary, "https://secure-doc.store").post(json(invitation(laura)));
 
-        // mary sends a contact request to laura
-        Response requestResponse = marysClient.path("contact-requests")
-            .post(json(of("email", "laura@imagey.cloud")));
-        assertThat(requestResponse.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
-
-        // laura can see the contact request
-        laurasContactRequests = laurasClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        assertThat(laurasContactRequests).containsExactly("mary@imagey.cloud");
-        marysPublicKeyResponse = marysPublicKey.request().header("Origin", "https://secure-doc.store").cookie(laurasCookie).get();
-        assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(OK.getStatusCode());
-        // mary cannot see her own contact requests
-        marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        assertThat(marysContactRequests).isEmpty();
-        // mary cannot accept the request
-        Response contactRequestNotAccepted = marysClient.path("contacts/laura@imagey.cloud").put(json("""
-                {
-                    "userKey": {
-                        "issuer": "mary@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    },
-                    "contactKey": {
-                        "issuer": "mary@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    }
-                }
-            """));
-        assertThat(contactRequestNotAccepted.getStatus()).isEqualTo(CONFLICT.getStatusCode());
-
-        // When
-        // laura accepts the contact request
-        Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
-                {
-                    "userKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    },
-                    "contactKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    }
-                }
-            """));
-        assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
-
-        // Then
-        marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        laurasContactRequests = laurasClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        marysContacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
-        laurasContacts = laurasClient.path("contacts").get(new GenericType<List<String>>() { });
-        assertThat(marysContactRequests).isEmpty();
-        assertThat(marysContacts).contains("laura@imagey.cloud");
-        assertThat(laurasContactRequests).isEmpty();
-        assertThat(laurasContacts).contains("mary@imagey.cloud");
-        marysPublicKeyResponse = marysPublicKey.request().header("Origin", "https://secure-doc.store").cookie(laurasCookie).get();
-        assertThat(marysPublicKeyResponse.getStatus()).isEqualTo(OK.getStatusCode());
-
-        // Verify getContactKeys endpoint
-        Response keysResponse = laurasClient.path("contacts/mary@imagey.cloud/key").get();
-        Map<String, Object> key = keysResponse.readEntity(new GenericType<Map<String, Object>>() { });
-        assertThat(key).contains(entry("sharedKey", "public-shared-key"));
-
-
-
-        File marysContactRequestsFolder = getMarysContactRequests();
-        assertThat(marysContactRequestsFolder).isDirectory();
-        assertThat(marysContactRequestsFolder.listFiles()).isEmpty();
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.INVITED);
     }
 
     @Test
-    @DisplayName("The recipient can send contact request after decline")
-    public void contactRequestAfterDecline() throws IOException {
-        // Given
-        List<String> marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        List<String> laurasContactRequests = laurasClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        List<String> marysContacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
-        List<String> laurasContacts = laurasClient.path("contacts").get(new GenericType<List<String>>() { });
-        assertThat(marysContactRequests).isEmpty();
-        assertThat(marysContacts).isEmpty();
-        assertThat(laurasContactRequests).isEmpty();
-        assertThat(laurasContacts).isEmpty();
+    @DisplayName("Re-inviting an already invited user is a no-op")
+    public void inviteAlreadyInvitedUser() {
+        contactRequests(mary, mary, "https://secure-doc.store").post(json(invitation(laura)));
 
-        // mary sends a contact request to laura
-        Response requestResponse = marysClient.path("contact-requests")
-            .post(json(of("email", "laura@imagey.cloud")));
-        assertThat(requestResponse.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+        Response response = contactRequests(mary, mary, "https://secure-doc.store").post(json(invitation(laura)));
 
-        // When
-        // laura declines the contact request
-        Response contactRequestAccepted = laurasClient.path("contact-requests/mary@imagey.cloud").delete();
-        assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
-
-        // Then
-        requestResponse = marysClient.path("contact-requests")
-                .post(json(of("email", "laura@imagey.cloud")));
-        assertThat(requestResponse.getStatus()).isEqualTo(CONFLICT.getStatusCode());
-
-        requestResponse = laurasClient.path("contact-requests")
-                .post(json(of("email", "mary@imagey.cloud")));
-        assertThat(requestResponse.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
-        marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() {
-        });
-        assertThat(marysContactRequests).contains("laura@imagey.cloud");
-    }
-
-    @Test
-    @DisplayName("When both send request either can accept")
-    public void bothSendRequest() throws IOException {
-        // Given
-        List<String> marysContactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        List<String> laurasContactRequests = laurasClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        List<String> marysContacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
-        List<String> laurasContacts = laurasClient.path("contacts").get(new GenericType<List<String>>() { });
-        assertThat(marysContactRequests).isEmpty();
-        assertThat(marysContacts).isEmpty();
-        assertThat(laurasContactRequests).isEmpty();
-        assertThat(laurasContacts).isEmpty();
-        // mary sends a contact request to laura
-        Response marysRequestResponse = marysClient.path("contact-requests")
-            .post(json(of("email", "laura@imagey.cloud")));
-        assertThat(marysRequestResponse.getStatus()).isEqualTo(CREATED.getStatusCode());
-        // laura sends a contact request to mary
-        Response laurasRequestResponse = laurasClient.path("contact-requests")
-            .post(json(of("email", "mary@imagey.cloud")));
-        assertThat(laurasRequestResponse.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
-        // When
-        // laura accepts the contact request
-        Response contactRequestAccepted = laurasClient.path("contacts/mary@imagey.cloud").put(json("""
-                {
-                    "userKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    },
-                    "contactKey": {
-                        "issuer": "laura@imagey.cloud",
-                        "kid": "0",
-                        "sharedKey": "public-shared-key"
-                    }
-                }
-            """));
-        assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
-
-        // Then
-        marysContacts = marysClient.path("contacts").get(new GenericType<List<String>>() {
-        });
-        laurasContacts = laurasClient.path("contacts").get(new GenericType<List<String>>() {
-        });
-        assertThat(marysContacts).contains("laura@imagey.cloud");
-        assertThat(laurasContacts).contains("mary@imagey.cloud");
-        File marysContactRequestsFolder = getMarysContactRequests();
-        assertThat(marysContactRequestsFolder).isDirectory();
-        assertThat(marysContactRequestsFolder.listFiles()).isEmpty();
-        File laurasContactRequestsFolder = getLaurasContactRequests();
-        assertThat(laurasContactRequestsFolder).isDirectory();
-        assertThat(laurasContactRequestsFolder.listFiles()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("Handle missing directories gracefully")
-    public void testMissingContactDirectories() throws IOException {
-        // Given that all directories are deleted
-        File marysContactRequests = getMarysContactRequests();
-        if (marysContactRequests.exists()) {
-            org.apache.commons.io.FileUtils.deleteDirectory(marysContactRequests);
-        }
-        File marysContacts = new File(getMarysData(), "contacts");
-        if (marysContacts.exists()) {
-            org.apache.commons.io.FileUtils.deleteDirectory(marysContacts);
-        }
-
-        // When fetching contact requests with no directory
-        List<String> contactRequests = marysClient.path("contact-requests").get(new GenericType<List<String>>() { });
-        assertThat(contactRequests).isEmpty();
-
-        // When fetching contacts with no directory
-        List<String> contacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
-        assertThat(contacts).isEmpty();
-
-        // When fetching a specific contact status with no file
-        Response response = marysClient.path("contact-requests/laura@imagey.cloud").get();
-        assertThat(response.getStatusInfo().getFamily()).isEqualTo(Family.CLIENT_ERROR);
-    }
-
-    @Test
-    @DisplayName("Invalid JSON in key file returns NOT_FOUND")
-    void testGetContactKeyWithInvalidJson() throws IOException {
-        File contactFolder = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
-        contactFolder.mkdirs();
-        java.nio.file.Files.writeString(new File(contactFolder, "key.json").toPath(), "{invalid json");
-
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key").get();
-
-        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
-    }
-
-    @Test
-    @DisplayName("Reissue key creates directory if it doesn't exist")
-    void testReissueKeyCreatesDirectory() throws IOException {
-        File marysContacts = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
-        marysContacts.mkdirs();
-
-        ContactKeys keys = new ContactKeys(
-            new EncryptedSharedKey("USER", "m", "1", "k1"),
-            new EncryptedSharedKey("USER", "l", "1", "k2")
-        );
-
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key")
-            .put(json(keys));
-
-        assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
-        File laurasContactFolder = new File(new File(getLaurasData(), "contacts"), getMary().email().address());
-        assertThat(laurasContactFolder).exists();
-
-        response = marysClient.path("contacts/laura@imagey.cloud/key").put(json(keys));
         assertThat(response.getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
     }
 
     @Test
-    @DisplayName("Fetch contact key when key file does not exist")
-    void testGetContactKeyWhenFileDoesNotExist() throws IOException {
-        File contactFolder = new File(new File(getMarysData(), "contacts"), getLaura().email().address());
-        contactFolder.mkdirs(); // folder exists, but no key.json
+    @DisplayName("Inviting from a disallowed origin is rejected")
+    public void inviteFromDisallowedOrigin() {
+        Response response = contactRequests(mary, mary, "https://evil.example.com").post(json(invitation(laura)));
 
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key").get();
-
-        // The method getContactKey returns empty(), which mapped by ContactResource results in 404 NOT_FOUND
-        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
     }
 
     @Test
-    @DisplayName("Find contacts when contactsHome is a file instead of directory")
-    void testFindContactsWhenContactsHomeIsFile() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        if (marysContacts.exists()) {
-            org.apache.commons.io.FileUtils.deleteDirectory(marysContacts);
-        }
-        marysContacts.getParentFile().mkdirs();
-        marysContacts.createNewFile(); // create as a file instead of directory
+    @DisplayName("Declining an invitation that was never received records a denial")
+    public void declineWithoutPriorInvitation() {
+        Response response = contactRequest(mary, mary, laura, "https://secure-doc.store").delete();
 
-        List<String> contacts = marysClient.path("contacts").get(new GenericType<List<String>>() { });
-        assertThat(contacts).isEmpty();
-
-        marysContacts.delete();
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.DENIED);
     }
 
     @Test
-    @DisplayName("Accept a second contact")
-    public void acceptSecondContact() throws IOException {
-        // Setup laura as a contact for mary
-        File marysContacts = new File(getMarysData(), "contacts");
-        marysContacts.mkdirs();
-        File lauraFolder = new File(marysContacts, "laura@imagey.cloud");
-        lauraFolder.mkdirs();
+    @DisplayName("Re-inviting a user who has denied the request fails with a conflict")
+    public void inviteAfterDecline() {
+        contactRequest(laura, laura, mary, "https://secure-doc.store").delete();
 
-        // Now mary accepts joe
-        User joe = new User(new Email("joe@imagey.cloud"));
-        TestClient joesClient = path -> newClient()
+        Response response = contactRequests(mary, mary, "https://secure-doc.store").post(json(invitation(laura)));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Inviting a not-yet-registered user without a public key still sends an invitation")
+    public void inviteUnregisteredUserWithoutKey() {
+        Response response = contactRequests(mary, mary, ORIGIN)
+            .post(json("{\"invitee\": \"newcomer@imagey.cloud\"}"));
+
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Accepting without a chatId is rejected with 400")
+    public void acceptWithoutChatId() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(laura)));
+
+        String acceptBody = "{\"status\": \"ACCEPTED\", \"publicKey\": " + PUBLIC_KEY + ", \"sharedKey\": \"AAAA\"}";
+        Response response = contactRequest(laura, laura, mary, ORIGIN).put(json(acceptBody));
+
+        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("The party that declined an invitation may still invite the other side")
+    public void declinerCanReInvite() {
+        // mary invites laura, laura declines
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(laura)));
+        assertThat(contactRequest(laura, laura, mary, ORIGIN).delete().getStatusInfo().getFamily())
+            .isEqualTo(SUCCESSFUL);
+
+        // laura (the decliner) now invites mary - allowed, the stale DENIED exchange is overwritten
+        Response response = contactRequests(laura, laura, ORIGIN).post(json(invitation(mary)));
+
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+        assertThat(contactRepository.getContactExchange(laura, mary))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.INVITED);
+    }
+
+    @Test
+    @DisplayName("Accepting an invitation that was never sent fails with a conflict")
+    public void acceptWithoutInvitation() {
+        String acceptBody = "{\"status\": \"ACCEPTED\", \"chatId\": \"chat-x\", \"publicKey\": " + PUBLIC_KEY
+            + ", \"sharedKey\": \"AAAA\"}";
+
+        Response response = contactRequest(laura, laura, mary, "https://secure-doc.store").put(json(acceptBody));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Confirming receipt of an acceptance that never happened fails with a conflict")
+    public void confirmReceiptWithoutAcceptance() {
+        Response response = contactRequest(mary, mary, laura, "https://secure-doc.store")
+            .put(json("{\"status\": \"RECEIVED\"}"));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Full handshake: invite -> accept -> confirm receipt, with actionability at each step")
+    public void fullHandshake() {
+        // mary invites laura: only laura has something to act on
+        assertThat(contactRequests(mary, mary, ORIGIN).post(json(invitation(laura))).getStatus())
+            .isEqualTo(CREATED.getStatusCode());
+        assertThat(contactRequestsOf(laura)).contains("mary@imagey.cloud");
+        assertThat(contactRequestsOf(mary)).doesNotContain("laura@imagey.cloud");
+
+        // laura accepts: now mary has the acceptance to pick up, laura is done
+        assertThat(contactRequest(laura, laura, mary, ORIGIN).put(json(acceptBody())).getStatusInfo().getFamily())
+            .isEqualTo(SUCCESSFUL);
+        assertThat(contactRepository.getContactExchange(laura, mary))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.ACCEPTED);
+        assertThat(contactRequestsOf(mary)).contains("laura@imagey.cloud");
+        assertThat(contactRequestsOf(laura)).doesNotContain("mary@imagey.cloud");
+
+        // mary confirms she picked up the acceptance
+        assertThat(contactRequest(mary, mary, laura, ORIGIN).put(json("{\"status\": \"RECEIVED\"}"))
+            .getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.RECEIVED);
+
+        // a completed exchange is no longer actionable for either side
+        assertThat(contactRequestsOf(mary)).doesNotContain("laura@imagey.cloud");
+        assertThat(contactRequestsOf(laura)).doesNotContain("mary@imagey.cloud");
+    }
+
+    @Test
+    @DisplayName("Declining an invitation that was actually received denies the existing exchange")
+    public void declineExistingInvitation() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(laura)));
+
+        Response response = contactRequest(laura, laura, mary, ORIGIN).delete();
+
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+        assertThat(contactRepository.getContactExchange(laura, mary))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.DENIED);
+    }
+
+    @Test
+    @DisplayName("Accepting after the invitation was declined fails with a conflict")
+    public void acceptAfterDecline() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(laura)));
+        contactRequest(laura, laura, mary, ORIGIN).delete();
+
+        Response response = contactRequest(laura, laura, mary, ORIGIN).put(json(acceptBody()));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Confirming receipt while the invitation is only pending fails with a conflict")
+    public void confirmReceiptWhileStillInvited() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(laura)));
+
+        Response response = contactRequest(mary, mary, laura, ORIGIN).put(json("{\"status\": \"RECEIVED\"}"));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A stray non-JSON entry in contact-requests is skipped, not a 500")
+    public void strayEntryInContactRequestsIsIgnored() throws IOException {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(laura)));
+        File laurasRequests = new File(rootPath, laura.email().address() + "/contact-requests");
+        // a leftover directory and an unparseable file, as an on-branch data migration might leave
+        new File(laurasRequests, "old-status-dir").mkdirs();
+        writeStringToFile(new File(laurasRequests, "notes.txt"), "not json", UTF_8);
+
+        Response response = contactRequests(laura, laura, ORIGIN).get();
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(response.readEntity(String.class)).contains("mary@imagey.cloud");
+    }
+
+    private String contactRequestsOf(User owner) {
+        return newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(joe.email().address()).path(path)
-            .request().header("Origin", "https://secure-doc.store")
-            .cookie(new Cookie("token", tokenService.generateToken(joe, MAX_VALUE).token()));
-
-        // Joe sends request to mary
-        joesClient.path("contact-requests").post(json(of("email", "mary@imagey.cloud")));
-
-        // Mary accepts joe
-        Response contactRequestAccepted = marysClient.path("contacts/joe@imagey.cloud").put(json("""
-            {
-                "userKey": {
-                    "issuer": "mary@imagey.cloud",
-                    "kid": "0",
-                    "sharedKey": "public-shared-key"
-                },
-                "contactKey": {
-                    "issuer": "mary@imagey.cloud",
-                    "kid": "0",
-                    "sharedKey": "public-shared-key"
-                }
-            }
-            """));
-        assertThat(contactRequestAccepted.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+            .path("users").path(owner.email().address()).path("contact-requests")
+            .request()
+            .header("Origin", ORIGIN)
+            .cookie(tokenCookie(owner))
+            .get(String.class);
     }
 
-    @Test
-    @DisplayName("Cannot invite a user from a disallowed domain")
-    public void inviteDisallowedDomain() throws IOException {
-        // use an unknown origin
-        Response requestResponse = marysClient.path("contact-requests")
-            .header("Origin", "https://evil.com")
-            .post(json(of("email", "joe@imagey.cloud")));
-
-        // Allowed domains are defined in application.properties or DomainName.
-        // Typically imagey.cloud is allowed. If evil.com is rejected, we expect a 4xx error.
-        // Actually UserService / ContactService throws IllegalArgumentException or returns false.
-        // Let's assert it's a BAD_REQUEST or whatever maps from IllegalArgumentException
-        assertThat(requestResponse.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
+    private String acceptBody() {
+        return "{\"status\": \"ACCEPTED\", \"chatId\": \"chat-mary-laura\", \"publicKey\": " + PUBLIC_KEY
+            + ", \"sharedKey\": \"AAAA\"}";
     }
 
-    @Test
-    @DisplayName("Cannot reissue key for a user who is not a contact")
-    public void interactWithNonContact() throws IOException {
-        // Mary tries to reissue keys for Laura, but Laura is not a contact yet
-        ContactKeys keys = new ContactKeys(
-            new EncryptedSharedKey("USER", "m", "1", "k1"),
-            new EncryptedSharedKey("USER", "l", "1", "k2")
-        );
-
-        // the endpoint /contacts/{email}/key handles reissue
-        Response response = marysClient.path("contacts/laura@imagey.cloud/key").put(json(keys));
-
-        // Since she's not a contact, ContactService.reissueKey throws Exception or returns false.
-        // The resource maps it to 400 or 404 or 403.
-        assertThat(response.getStatusInfo().getFamily()).isNotEqualTo(SUCCESSFUL);
+    private Builder contactRequests(User owner, User tokenUser, String origin) {
+        return newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path(owner.email().address()).path("contact-requests")
+            .request()
+            .header("Origin", origin)
+            .cookie(tokenCookie(tokenUser));
     }
 
-    private User getMary() {
-        return new User(new Email("mary@imagey.cloud"));
+    private Builder contactRequest(User owner, User tokenUser, User contact, String origin) {
+        return newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path(owner.email().address()).path("contact-requests").path(contact.email().address())
+            .request()
+            .header("Origin", origin)
+            .cookie(tokenCookie(tokenUser));
     }
 
-    private User getLaura() {
-        return new User(new Email("laura@imagey.cloud"));
+    private Cookie tokenCookie(User user) {
+        return new Cookie.Builder("token").value(tokenService.generateToken(user, MAX_VALUE).token()).build();
     }
 
-    private File getMarysData() {
-        return new File(rootPath, getMary().email().address());
-    }
-
-    private File getLaurasData() {
-        return new File(rootPath, getLaura().email().address());
-    }
-
-    private File getMarysContactRequests() {
-        return new File(getMarysData(), "contact-requests");
-    }
-
-    private File getLaurasContactRequests() {
-        return new File(getLaurasData(), "contact-requests");
-    }
-
-    public interface TestClient {
-        Builder path(String path);
+    private String invitation(User invitee) {
+        return "{\"invitee\": \"" + invitee.email().address() + "\", \"publicKey\": " + PUBLIC_KEY + "}";
     }
 }

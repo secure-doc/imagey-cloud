@@ -16,6 +16,43 @@
  */
 package cloud.imagey.domain.encryption;
 
+import static jakarta.json.Json.createReader;
+
+import java.io.StringReader;
+import java.lang.reflect.Type;
+
+import jakarta.json.JsonReader;
+import jakarta.json.bind.annotation.JsonbTypeDeserializer;
+import jakarta.json.bind.annotation.JsonbTypeSerializer;
+import jakarta.json.bind.serializer.DeserializationContext;
+import jakarta.json.bind.serializer.JsonbDeserializer;
+import jakarta.json.bind.serializer.JsonbSerializer;
+import jakarta.json.bind.serializer.SerializationContext;
+import jakarta.json.stream.JsonGenerator;
+import jakarta.json.stream.JsonParser;
+
+import cloud.imagey.domain.encryption.PublicKey.Deserializer;
+import cloud.imagey.domain.encryption.PublicKey.Serializer;
+
+@JsonbTypeSerializer(Serializer.class)
+@JsonbTypeDeserializer(Deserializer.class)
 public record PublicKey(String key) {
 
+    public static class Serializer implements JsonbSerializer<PublicKey> {
+
+        @Override
+        public void serialize(PublicKey key, JsonGenerator generator, SerializationContext context) {
+            try (JsonReader reader = createReader(new StringReader(key.key()))) {
+                generator.write(reader.readValue());
+            }
+        }
+    }
+
+    public static class Deserializer implements JsonbDeserializer<PublicKey> {
+
+        @Override
+        public PublicKey deserialize(JsonParser parser, DeserializationContext ctx, Type rtType) {
+            return new PublicKey(parser.getValue().toString());
+        }
+    }
 }

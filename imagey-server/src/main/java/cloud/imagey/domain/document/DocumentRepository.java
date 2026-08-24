@@ -16,51 +16,38 @@
  */
 package cloud.imagey.domain.document;
 
-import static java.util.Base64.getEncoder;
-import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 import java.io.File;
-import java.util.List;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Stream;
+import java.util.Set;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.bind.Jsonb;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.encryption.Base64Content;
+import cloud.imagey.domain.common.AbstractUserFileRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
-import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
-public class DocumentRepository extends AbstractFileRepository {
+public class DocumentRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DocumentRepository.class);
+    private static final String KEY_FILE_SUFFIX = ".json";
 
     @Inject
-    @ConfigProperty(name = "root.path")
-    private String rootPath;
-
-    @PostConstruct
-    public void logRootPath() {
-        LOG.info("root.path = {}", rootPath);
-    }
-
-    public DocumentId persist(User user, EncryptedContent metadata) {
-        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
-        persist(user, documentId, metadata);
-        return documentId;
-    }
+    private Jsonb jsonb;
 
     public void persist(User user, DocumentId documentId, EncryptedContent metadata) {
         File userHome = getUserHome(user);
@@ -97,121 +84,123 @@ public class DocumentRepository extends AbstractFileRepository {
         return of(new EncryptedContent(readFileToByteArray(contentFile)));
     }
 
+    public boolean documentExists(User user, DocumentId documentId) {
+        return metadataFile(user, documentId).exists();
+    }
 
-    public Optional<Long> getTimestamp(User user, DocumentId documentId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File metadataFile = new File(documentFolder, "metadata.enc");
+    /**
+     * A strong validator for a document's current metadata: the hex-encoded SHA-256 of the stored
+     * {@code metadata.enc} bytes. Unlike a file timestamp this has no clock-granularity blind spot -
+     * any change to the content changes the tag - so it is safe to use for optimistic locking on
+     * the folder update path (see {@link DocumentService#uploadDocument}).
+     */
+    public Optional<String> getETag(User user, DocumentId documentId) {
+        return loadEncryptedMetadataWithETag(user, documentId).map(EncryptedMetadata::etag);
+    }
+
+    public Optional<EncryptedContent> loadEncryptedMetadata(User user, DocumentId documentId) {
+        return loadEncryptedMetadataWithETag(user, documentId).map(EncryptedMetadata::content);
+    }
+
+    /**
+     * The document's encrypted metadata together with its {@link #getETag ETag}, reading and hashing
+     * {@code metadata.enc} <em>once</em>. Prefer this on paths that need both (the document GET, the
+     * upload response) over separate {@link #loadEncryptedMetadata} + {@link #getETag} calls.
+     */
+    public Optional<EncryptedMetadata> loadEncryptedMetadataWithETag(User user, DocumentId documentId) {
+        File metadataFile = metadataFile(user, documentId);
         if (!metadataFile.exists()) {
             return empty();
         }
-        return of(metadataFile.lastModified());
+        byte[] bytes = readFileToByteArray(metadataFile);
+        return of(new EncryptedMetadata(new EncryptedContent(bytes), sha256Hex(bytes)));
     }
 
+    /** The ETag {@code content} would have once stored (see {@link #getETag}) - no I/O. */
+    public String etagOf(EncryptedContent content) {
+        return sha256Hex(content.content());
+    }
 
-    public List<DocumentMetadata> findMetadata(User user, Optional<DocumentId> folderId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        if (!documentHome.exists()) {
-            return emptyList();
+    private static String sha256Hex(byte[] data) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
         }
-        return Stream.of(documentHome.list())
-            .filter(name -> new File(documentHome, name).isDirectory())
-            .filter(name -> folderId.isEmpty() || !name.equals(folderId.get().id()))
-            .sorted()
-            .map(DocumentId::new)
-            .flatMap(id -> findMetadata(user, id, user.email(), folderId).stream())
-            .filter(metadata -> metadata.sharedKey() != null)
-            .toList();
     }
 
-    public Optional<DocumentMetadata> findMetadata(User user, DocumentId documentId, Email callerEmail, Optional<DocumentId> folderId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File metadataFile = new File(documentFolder, "metadata.enc");
-        if (!metadataFile.exists()) {
-            return empty();
+    public Optional<EncryptedSharedKey> findDocumentKey(User user, DocumentId documentId, Kid kid) {
+        return readKey(new File(keysFolder(user, documentId), kid.id() + KEY_FILE_SUFFIX));
+    }
+
+    public void create(User user, DocumentId documentId, EncryptedSharedKey sharedKey) {
+        createNewFileWithContent(
+            keysFolder(user, documentId), sharedKey.kid().id() + KEY_FILE_SUFFIX, jsonb.toJson(sharedKey));
+    }
+
+    public boolean isIssuerInKeyChain(User owner, DocumentId documentId, User member) {
+        return isIssuerInKeyChain(owner, documentId, member, new HashSet<>());
+    }
+
+    private boolean isIssuerInKeyChain(User owner, DocumentId documentId, User member, Set<String> visited) {
+        if (!visited.add(owner.email().address() + "/" + documentId.id())) {
+            return false;
         }
-
-        Email lookupEmail = folderId
-            .filter(f -> !f.equals(documentId))
-            .map(DocumentId::id)
-            .map(Email::new)
-            .orElse(callerEmail);
-        EncryptedSharedKey sharedKey = findDocumentKey(user, documentId, lookupEmail).orElse(null);
-        return of(new DocumentMetadata(documentId, loadDocumentMetadata(user, documentId), sharedKey));
-    }
-
-    private Base64Content loadDocumentMetadata(User user, DocumentId documentId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File metadataFile = new File(documentFolder, "metadata.enc");
-        return new Base64Content(getEncoder().encodeToString(readFileToByteArray(metadataFile)));
-    }
-
-    public Optional<EncryptedSharedKey> findDocumentKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File sharedKeysFolder = new File(documentFolder, "keys");
-        File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
-        if (!sharedKey.exists() && userTheDocumentIsSharedWith.address().equals(user.email().address())) {
-            Optional<File> folderKey = findFolderKey(sharedKeysFolder);
-            if (folderKey.isPresent()) {
-                sharedKeyFolder = folderKey.get();
-                sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
-                userTheDocumentIsSharedWith = new Email(sharedKeyFolder.getName());
+        File[] keyFiles = keysFolder(owner, documentId).listFiles(file -> file.getName().endsWith(KEY_FILE_SUFFIX));
+        if (keyFiles == null) {
+            return false;
+        }
+        for (File keyFile : keyFiles) {
+            Optional<EncryptedSharedKey> key = readKey(keyFile);
+            if (key.isEmpty()) {
+                continue;
+            }
+            if (member.equals(key.get().issuer())) {
+                return true;
+            }
+            User parentOwner = key.get().issuer();
+            DocumentId parent = new DocumentId(key.get().kid().id());
+            // A synced chat key is filed under kid = the issuer's own email (see
+            // ContactService.confirmReceipt), which also happens to be the id of that user's
+            // settings document. That is not a real parent of this document, so don't follow the
+            // link into the issuer's settings tree - a third-party key later filed there must not
+            // transitively grant access here.
+            if (parent.id().equals(parentOwner.email().address())) {
+                continue;
+            }
+            if (documentExists(parentOwner, parent)
+                && isIssuerInKeyChain(parentOwner, parent, member, visited)) {
+                return true;
             }
         }
-        if (!sharedKey.exists()) {
+        return false;
+    }
+
+    private Optional<EncryptedSharedKey> readKey(File keyFile) {
+        if (!keyFile.exists()) {
             return empty();
         }
-        String encodedKey = getEncoder().encodeToString(readFileToByteArray(sharedKey));
-        String issuer = userTheDocumentIsSharedWith.address();
-        String issuerType = issuer.contains("@") ? "USER" : "FOLDER";
-        return of(new EncryptedSharedKey(issuerType, issuer, "0", encodedKey));
-    }
-
-    private Optional<File> findFolderKey(File sharedKeysFolder) {
-        File[] folders = sharedKeysFolder.listFiles(File::isDirectory);
-        if (folders != null) {
-            for (File folder : folders) {
-                if (!folder.getName().contains("@") && new File(folder, "encrypted-shared.key").exists()) {
-                    return of(folder);
-                }
-            }
+        try {
+            return of(jsonb.fromJson(readFileToString(keyFile), EncryptedSharedKey.class));
+        } catch (RuntimeException e) {
+            // Not just JsonException: EncryptedSharedKey's compact constructor requireNonNull's its
+            // fields and its @JsonbCreator builds an Email (IllegalArgumentException on a bad
+            // address). A single half-written or legacy-format sibling key file must not turn the
+            // whole isIssuerInKeyChain folder scan into a 500 and lock every member out.
+            LOG.warn("Ignoring unreadable shared key file {}", keyFile, e);
+            return empty();
         }
-        return empty();
     }
 
-    public void persist(User user, DocumentId documentId, Email userTheDocumentIsSharedWith, EncryptedContent key) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File sharedKeysFolder = new File(documentFolder, "keys");
-        File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        if (!sharedKeyFolder.exists()) {
-            mkdir(sharedKeyFolder);
-        }
-        File sharedKeyFile = new File(sharedKeyFolder, "encrypted-shared.key");
-        writeByteArrayToFile(sharedKeyFile, key.content());
+    private File keysFolder(User user, DocumentId documentId) {
+        return new File(documentFolder(user, documentId), "keys");
     }
 
-    public boolean hasSharedKey(User user, DocumentId documentId, Email userTheDocumentIsSharedWith) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File sharedKeysFolder = new File(documentFolder, "keys");
-        File sharedKeyFolder = new File(sharedKeysFolder, userTheDocumentIsSharedWith.address());
-        File sharedKey = new File(sharedKeyFolder, "encrypted-shared.key");
-        return sharedKey.exists();
+    private File metadataFile(User user, DocumentId documentId) {
+        return new File(documentFolder(user, documentId), "metadata.enc");
     }
 
-    private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
+    private File documentFolder(User user, DocumentId documentId) {
+        return new File(new File(getUserHome(user), "documents"), documentId.id());
     }
 }

@@ -20,7 +20,9 @@ import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.text;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static jakarta.ws.rs.core.Response.Status.OK;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.io.FileUtils.forceDelete;
+import static org.apache.commons.io.FileUtils.writeStringToFile;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
@@ -43,19 +45,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import cloud.imagey.domain.chat.Message;
-import cloud.imagey.domain.chat.MessageId;
+import cloud.imagey.domain.contact.Message;
+import cloud.imagey.domain.contact.MessageId;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.infrastructure.jaxrs.RecordListMessageBodyWriter;
-import cloud.imagey.infrastructure.jaxrs.RecordMessageBodyReader;
-import cloud.imagey.infrastructure.jaxrs.RecordMessageBodyWriter;
+import cloud.imagey.infrastructure.jakartars.RecordListMessageBodyWriter;
+import cloud.imagey.infrastructure.jakartars.RecordMessageBodyReader;
+import cloud.imagey.infrastructure.jakartars.RecordMessageBodyWriter;
 import cloud.imagey.junit.GreenMail;
 
 @GreenMail
 @MonoMeecrowaveConfig
 public class MessageResourceTest {
+
+    // Messages hang off the chat's Document ({owner}/documents/{chatId}/messages), so the tests
+    // only need a chatId and - for the non-owner party - a shared key they issued filed under the
+    // chat Document so the "member" role resolves (see RolesFilter / isIssuerInKeyChain).
+    private static final String CHAT_ID = "test-chat-id";
 
     @ConfigurationInject
     private static Meecrowave.Builder config;
@@ -65,12 +72,12 @@ public class MessageResourceTest {
     @Inject
     private TokenService tokenService;
 
-    private Cookie receiverCookie;
-    private Cookie senderCookie;
-    private TestClient receiverClient;
-    private TestClient senderClient;
-    private User receiver;
-    private User sender;
+    private Cookie ownerCookie;
+    private Cookie contactCookie;
+    private TestClient ownerClient;
+    private TestClient contactClient;
+    private User owner;
+    private User contact;
 
     @BeforeEach
     void initializeState() throws URISyntaxException, IOException {
@@ -80,79 +87,93 @@ public class MessageResourceTest {
         }
         data.mkdirs();
 
-        receiver = new User(new Email("receiver@example.com"));
-        sender = new User(new Email("sender@example.com"));
+        owner = new User(new Email("owner@example.com"));
+        contact = new User(new Email("contact@example.com"));
 
-        receiverCookie = new Cookie.Builder("token").value(tokenService.generateToken(receiver, Integer.MAX_VALUE).token()).build();
-        receiverClient = path -> newClient()
+        // The chat Document must exist in the owner's tree for messages to be accepted there
+        // (MessageService guards against a member creating a stray messages folder in their own).
+        writeStringToFile(
+            new File(data, "owner@example.com/documents/" + CHAT_ID + "/metadata.enc"),
+            "encrypted-chat-metadata",
+            UTF_8);
+
+        // The non-owner party only reaches the chat via the "member" role: a shared key they
+        // issued, filed under the chat Document owned by `owner` - exactly what
+        // ContactService.confirmReceipt syncs there in the real flow (kid = the chat id).
+        writeStringToFile(
+            new File(data, "owner@example.com/documents/" + CHAT_ID + "/keys/" + CHAT_ID + ".json"),
+            "{\"issuer\":\"contact@example.com\",\"kid\":\"" + CHAT_ID + "\",\"sharedKey\":\"d3JhcHBlZA==\"}",
+            UTF_8);
+
+        ownerCookie = new Cookie.Builder("token").value(tokenService.generateToken(owner, Integer.MAX_VALUE).token()).build();
+        ownerClient = messages(owner, ownerCookie);
+
+        contactCookie = new Cookie.Builder("token").value(tokenService.generateToken(contact, Integer.MAX_VALUE).token()).build();
+        contactClient = messages(contact, contactCookie);
+    }
+
+    private TestClient messages(User user, Cookie cookie) {
+        return sinceId -> {
+            var target = newClient()
                 .register(RecordMessageBodyReader.class)
                 .register(RecordListMessageBodyWriter.class)
                 .register(RecordMessageBodyWriter.class)
                 .target("http://localhost:" + config.getHttpPort())
-                .path("users").path(receiver.email().address()).path(path)
-                .request()
-                .cookie(receiverCookie);
+                .path("users/owner@example.com/documents/" + CHAT_ID + "/messages");
+            if (sinceId != null) {
+                target = target.queryParam("sinceId", sinceId);
+            }
+            return target.request().cookie(cookie);
+        };
+    }
 
-        senderCookie = new Cookie.Builder("token").value(tokenService.generateToken(sender, Integer.MAX_VALUE).token()).build();
-        senderClient = path -> newClient()
-                .register(RecordMessageBodyReader.class)
-                .register(RecordListMessageBodyWriter.class)
-                .register(RecordMessageBodyWriter.class)
-                .target("http://localhost:" + config.getHttpPort())
-                .path("users").path(sender.email().address()).path(path)
-                .request()
-                .cookie(senderCookie);
+    @Test
+    @DisplayName("Sending into a chat that does not exist in the addressed owner's tree is rejected with 404")
+    void sendMessageToNonExistentChat() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner@example.com/documents/no-such-chat/messages")
+            .request()
+            .cookie(ownerCookie)
+            .post(text("encrypted-content"));
+
+        assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_FOUND.getStatusCode());
     }
 
     @Test
     @DisplayName("Send and receive messages")
     void sendAndReceiveMessages() throws Exception {
-        // Send a message
-        Response response = senderClient.path("contacts/receiver@example.com/messages")
-            .post(text("encrypted-content"));
+        Response response = contactClient.messages(null).post(text("encrypted-content"));
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
-        assertThat(response.getLocation().toString()).matches(".*/users/sender@example.com/contacts/receiver@example.com/messages/.*");
+        assertThat(response.getLocation().toString())
+            .matches(".*/users/owner@example.com/documents/" + CHAT_ID + "/messages/.*");
 
-        // Receive the message
-        List<Message> messages = receiverClient.path("contacts/sender@example.com/messages")
-            .get(new GenericType<List<Message>>() { });
+        List<Message> messages = ownerClient.messages(null).get(new GenericType<List<Message>>() { });
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content().value()).isEqualTo("encrypted-content");
+        assertThat(messages.get(0).sender().email().address()).isEqualTo("contact@example.com");
     }
 
     @Test
     @DisplayName("Receive multiple messages with sinceId")
     void receiveMultipleMessagesWithSinceId() throws Exception {
-        // Send first message
-        Response firstMessage = senderClient.path("contacts/receiver@example.com/messages")
-            .post(text("first-content"));
+        Response firstMessage = contactClient.messages(null).post(text("first-content"));
         assertThat(firstMessage.getStatus()).isEqualTo(CREATED.getStatusCode());
 
         // Wait a bit to ensure the timestamp in MessageId differs
         Thread.sleep(10);
 
-        // Send second message
-        Response secondMessage = senderClient.path("contacts/receiver@example.com/messages")
-            .post(text("second-content"));
+        Response secondMessage = contactClient.messages(null).post(text("second-content"));
         assertThat(secondMessage.getStatus()).isEqualTo(CREATED.getStatusCode());
 
-        // Receive all messages
-        List<Message> allMessages = receiverClient.path("contacts/sender@example.com/messages")
-            .get(new GenericType<List<Message>>() { });
+        List<Message> allMessages = ownerClient.messages(null).get(new GenericType<List<Message>>() { });
         assertThat(allMessages).hasSize(2);
         assertThat(allMessages.get(0).content().value()).isEqualTo("first-content");
         assertThat(allMessages.get(1).content().value()).isEqualTo("second-content");
 
         MessageId firstId = allMessages.get(0).id();
 
-        // Receive messages with sinceId
-        List<Message> newMessages = newClient()
-            .register(RecordListMessageBodyWriter.class)
-            .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(receiver.email().address()).path("contacts/sender@example.com/messages")
-            .queryParam("sinceId", firstId.value())
-            .request()
-            .cookie(receiverCookie)
+        List<Message> newMessages = ownerClient.messages(firstId.value())
             .get(new GenericType<List<Message>>() { });
 
         assertThat(newMessages).hasSize(1);
@@ -162,8 +183,7 @@ public class MessageResourceTest {
     @Test
     @DisplayName("Receive messages with long polling")
     void receiveMessagesLongPolling() throws Exception {
-        // Start long polling
-        Future<List<Message>> futureMessages = receiverClient.path("contacts/sender@example.com/messages")
+        Future<List<Message>> futureMessages = ownerClient.messages(null)
             .header("Prefer", "wait=30")
             .async()
             .get(new GenericType<List<Message>>() { });
@@ -171,12 +191,9 @@ public class MessageResourceTest {
         // Wait a bit to ensure long polling is active
         Thread.sleep(500);
 
-        // Send a message
-        Response response = senderClient.path("contacts/receiver@example.com/messages")
-            .post(text("delayed-content"));
+        Response response = contactClient.messages(null).post(text("delayed-content"));
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
 
-        // Get the response
         List<Message> messages = futureMessages.get();
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content().value()).isEqualTo("delayed-content");
@@ -185,7 +202,7 @@ public class MessageResourceTest {
     @Test
     @DisplayName("Prefer header with number format exception falls back to 0 timeout")
     void testPreferHeaderNumberFormatException() throws Exception {
-        Response response = receiverClient.path("contacts/sender@example.com/messages")
+        Response response = ownerClient.messages(null)
             .header("Prefer", "wait=999999999999999999999999999999999999999")
             .get();
 
@@ -195,7 +212,7 @@ public class MessageResourceTest {
     @Test
     @DisplayName("Invalid Prefer header format falls back to 0 timeout")
     void testInvalidPreferHeaderFormat() throws Exception {
-        Response response = receiverClient.path("contacts/sender@example.com/messages")
+        Response response = ownerClient.messages(null)
             .header("Prefer", "invalid-prefer-value")
             .get();
 
@@ -203,6 +220,6 @@ public class MessageResourceTest {
     }
 
     public interface TestClient {
-        Builder path(String path);
+        Builder messages(String query);
     }
 }

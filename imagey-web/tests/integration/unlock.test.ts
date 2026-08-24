@@ -3,8 +3,9 @@ import {
   clearLocalStorage,
   loginAsMary,
   prepareMarysDocuments,
+  prepareMarysEmptyProfile,
   prepareMarysLogin,
-  prepareMarysRootFolder,
+  prepareMarysSettingsDocument,
   provider,
   runningPactRequests,
   setupMockServer,
@@ -137,6 +138,10 @@ test("mary unlocks new device", async ({ page }) => {
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
   await prepareMarysDocuments();
+  // Clicking "Settings" (desktop nav) navigates straight to
+  // /settings/profile, so ProfilePage's own document fetch needs a mock too
+  // before we can get to the Devices page from there.
+  await prepareMarysEmptyProfile();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -240,6 +245,11 @@ test("mary logs into new device", async ({ page }) => {
   // Given
   await setupMarysSecondDevice(page);
   await prepareMarysContactRequests();
+  // App.tsx always fetches the settings document once keys are decrypted,
+  // regardless of how the device got unlocked - this flow uses
+  // DeviceSetupDialog (not prepareMarysLogin()), so it has to be mocked
+  // explicitly here too.
+  await prepareMarysSettingsDocument();
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
@@ -295,17 +305,10 @@ test("mary logs into new device", async ({ page }) => {
       r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
     );
 
-  await prepareMarysRootFolder();
-  provider
-    .addInteraction()
-    .given("marys second device unlocked")
-    .uponReceiving("a request of mary to get documents for second device")
-    .withRequest("GET", "/users/mary@imagey.cloud/documents", (r) =>
-      r
-        .query({ folderId: "root-folder-id" })
-        .headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  // App now resolves settings.documents to Mary's real documents root
+  // (68980188-...), not "root-folder-id" - the same root the rest of the
+  // suite uses, so we register it the same way here.
+  await prepareMarysDocuments();
 
   await provider
     .addInteraction()
@@ -369,6 +372,11 @@ test("mary successfully activates newly registered device after unlocking", asyn
 }) => {
   await prepareMarysContactRequests();
   await prepareMarysDocuments();
+  // App.tsx always fetches the settings document once keys are decrypted,
+  // regardless of whether we got here via login or (as in this test) via
+  // device registration + successful unlock retry - without this, the app
+  // gets stuck on "Loading settings..." because that fetch has no mock.
+  await prepareMarysSettingsDocument();
 
   provider
     .addInteraction()

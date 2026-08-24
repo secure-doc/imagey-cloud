@@ -1,30 +1,28 @@
 import { UserId } from "../authentication/UserId";
-import { IssuerId } from "../chat/Message";
-import {
-  Email,
-  EncryptedSharedKey,
-  Kid,
-} from "../contexts/AuthenticationContext";
-import { Contact, ContactKeys, SharedKey } from "./Contact";
+import { Email } from "../contexts/AuthenticationContext";
 import { ContactRequest } from "./ContactRequest";
 
 export const contactRepository = {
   sendContactRequest: async (
-    senderId: UserId,
-    addresseeEmail: Email,
+    inviter: UserId,
+    invitee: Email,
+    publicKey: JsonWebKey,
   ): Promise<void> => {
-    const response = await fetch(`/users/${senderId}/contact-requests`, {
+    const response = await fetch(`/users/${inviter}/contact-requests`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       credentials: "same-origin",
-      body: JSON.stringify({ email: addresseeEmail }),
+      body: JSON.stringify({ inviter, invitee, publicKey }),
     });
     if (!response.ok) {
       throw new Error("Failed to send contact request");
     }
   },
+  // Returns every contact request the user is party to (as inviter or
+  // invitee), in every status - the caller is responsible for filtering
+  // by status/role for what it wants to show or process.
   getContactRequests: async (userId: UserId): Promise<ContactRequest[]> => {
     const response = await fetch(`/users/${userId}/contact-requests`, {
       method: "GET",
@@ -36,24 +34,71 @@ export const contactRepository = {
     if (!response.ok) {
       throw new Error("Failed to get contact requests");
     }
-    const userIds: UserId[] = await response.json();
-    return userIds.map((userId) => ({ userId }));
+    return response.json();
   },
+  // Called by the invitee to accept: generates and uploads the chat
+  // Document (see ContactService.acceptContactRequest), then hands the
+  // inviter their ECDH-wrapped copy of its key via this PUT. Moves the
+  // request to status ACCEPTED.
   acceptContactRequest: async (
-    userId: UserId,
-    contactId: UserId,
-    contactKeys: ContactKeys,
+    invitee: UserId,
+    inviter: UserId,
+    publicKey: JsonWebKey,
+    chatId: string,
+    sharedKey: string,
   ): Promise<void> => {
-    const response = await fetch(`/users/${userId}/contacts/${contactId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
+    const response = await fetch(
+      `/users/${invitee}/contact-requests/${inviter}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          inviter,
+          invitee,
+          status: "ACCEPTED",
+          publicKey,
+          chatId,
+          sharedKey,
+        }),
       },
-      credentials: "same-origin",
-      body: JSON.stringify(contactKeys),
-    });
+    );
     if (!response.ok) {
       throw new Error("Failed to accept contact request");
+    }
+  },
+  // Called by the inviter once they've decrypted the shared key and
+  // recorded the contact locally: moves the request to status RECEIVED,
+  // which the server treats as "done" and deletes. `chatKey` is the chat
+  // Document key re-wrapped under the inviter's own chats-document key
+  // (issuer = the inviter); the server files it under the chat Document in
+  // the invitee's tree, which is what later grants the inviter access to
+  // the chat (see ContactService.confirmReceipt on the server).
+  confirmContactRequestReceived: async (
+    inviter: UserId,
+    invitee: UserId,
+    chatKey: { issuer: string; kid: string; sharedKey: string },
+  ): Promise<void> => {
+    const response = await fetch(
+      `/users/${inviter}/contact-requests/${invitee}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          inviter,
+          invitee,
+          status: "RECEIVED",
+          chatKey,
+        }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error("Failed to confirm contact request received");
     }
   },
   declineContactRequest: async (
@@ -69,61 +114,6 @@ export const contactRepository = {
     );
     if (!response.ok) {
       throw new Error("Failed to decline contact request");
-    }
-  },
-  getContacts: async (userId: UserId): Promise<Contact[]> => {
-    const response = await fetch(`/users/${userId}/contacts`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "same-origin",
-    });
-    if (!response.ok) {
-      throw new Error("Failed to get contact requests");
-    }
-    const userIds: UserId[] = await response.json();
-    return userIds.map((userId) => ({ userId }));
-  },
-  getSharedContactKey: async (
-    userId: UserId,
-    contactId: UserId,
-  ): Promise<{
-    issuerType?: string;
-    issuer: IssuerId;
-    kid: Kid;
-    sharedKey: EncryptedSharedKey;
-  }> => {
-    const response = await fetch(`/users/${userId}/contacts/${contactId}/key`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "same-origin",
-    });
-    if (!response.ok) {
-      throw new Error("Failed to get shared contact key");
-    }
-    return response.json();
-  },
-  reissueContactKey: async (
-    userId: UserId,
-    contactId: UserId,
-    contactKeys: {
-      userKey: SharedKey;
-      contactKey: SharedKey;
-    },
-  ) => {
-    const response = await fetch(`/users/${userId}/contacts/${contactId}/key`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify(contactKeys),
-    });
-    if (!response.ok) {
-      throw new Error("Failed to reissue contact key");
     }
   },
 };

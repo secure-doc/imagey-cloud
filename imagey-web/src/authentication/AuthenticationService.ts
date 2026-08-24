@@ -6,7 +6,9 @@ import { cryptoService } from "./CryptoService";
 
 import { ResponseError } from "./ResponseError";
 import { contactService } from "../contact/ContactService";
+import { contactRepository } from "../contact/ContactRepository";
 import { DeviceId, Password, UserId } from "./UserId";
+import { documentService } from "../document/DocumentService";
 
 export type Nonce = string;
 export type EncryptedRecoveryKey = string;
@@ -24,40 +26,139 @@ export const authenticationService = {
     password: Password,
     inviter?: UserId,
   ): Promise<JsonWebKeyPairs> => {
-    const device = await deviceService.initializeDevice(email, password);
-
-    const mainKeyPair = await cryptoService.initializeKeyPair();
-    const encryptedPrivateMainKey = await cryptoService.encryptKey(
-      mainKeyPair.privateKey,
-      device.deviceKeyPair.publicKey,
-      device.deviceKeyPair.privateKey,
-    );
-
-    const settingsKey = await cryptoService.generateSymmetricKey();
-    const encryptedSettings = await cryptoService.encryptDocument(settingsKey, [
-      new TextEncoder().encode("{}").buffer,
+    // The three roots have no data dependency on each other - run them in
+    // parallel (each is a WebCrypto round-trip).
+    const [device, mainKeyPair, settingsKey] = await Promise.all([
+      deviceService.initializeDevice(email, password),
+      cryptoService.initializeKeyPair(),
+      cryptoService.generateSymmetricKey(),
     ]);
-    const settingsContent = cryptoService.arrayBufferToBase64(
-      encryptedSettings[0],
-    );
 
-    const encryptedSettingsSharedKey = await cryptoService.encryptKey(
-      settingsKey,
-      mainKeyPair.publicKey,
-      mainKeyPair.privateKey,
-    );
+    const documentListId = cryptoService.generateUuid();
+    const chatListId = cryptoService.generateUuid();
+    const profileId = cryptoService.generateUuid();
+
+    // Each bootstrap document (document list, chat list, profile) gets its own
+    // symmetric key, wrapped under the settings key, plus its encrypted body.
+    // The three are independent of each other, as are the settings blobs below.
+    const encryptBootstrapDocument = async (plaintext: string) => {
+      const key = await cryptoService.generateSymmetricKey();
+      const [wrappedKey, encryptedDocument] = await Promise.all([
+        cryptoService.encryptKey(key, settingsKey),
+        cryptoService
+          .encryptDocument(key, [new TextEncoder().encode(plaintext).buffer])
+          .then((blobs) => blobs[0]),
+      ]);
+      return { wrappedKey, encryptedDocument };
+    };
+
+    const [
+      encryptedPrivateMainKey,
+      encryptedSettingsKey,
+      encryptedSettings,
+      documentList,
+      chatList,
+      profile,
+    ] = await Promise.all([
+      cryptoService.encryptKey(
+        mainKeyPair.privateKey,
+        device.deviceKeyPair.publicKey,
+        device.deviceKeyPair.privateKey,
+      ),
+      cryptoService.encryptKey(
+        settingsKey,
+        mainKeyPair.publicKey,
+        mainKeyPair.privateKey,
+      ),
+      cryptoService
+        .encryptDocument(settingsKey, [
+          new TextEncoder().encode(`
+			{
+				"documents": "${documentListId}",
+				"chats": "${chatListId}",
+				"profile": "${profileId}"
+			}
+		  `).buffer,
+        ])
+        .then((blobs) => blobs[0]),
+      encryptBootstrapDocument(
+        `{"documents": [], "type": "folder", "name": "Documents"}`,
+      ),
+      encryptBootstrapDocument(
+        `{"contacts": [], "type": "folder", "name": "Chats"}`,
+      ),
+      encryptBootstrapDocument(`{"emails": ["${email}"]}`),
+    ]);
 
     await authenticationRepository.register(
-      email,
-      device.deviceId,
-      mainKeyPair.publicKey,
-      encryptedPrivateMainKey,
-      device.deviceKeyPair.publicKey,
-      settingsContent,
-      { issuer: email, kid: "0", sharedKey: encryptedSettingsSharedKey },
+      {
+        email,
+        deviceId: device.deviceId,
+        devicePublicKey: device.deviceKeyPair.publicKey,
+        mainPublicKey: mainKeyPair.publicKey,
+        encryptedPrivateKey: encryptedPrivateMainKey,
+        settingsKey: {
+          issuer: email,
+          kid: "0",
+          sharedKey: encryptedSettingsKey,
+        },
+        documentList: {
+          id: documentListId,
+          key: {
+            issuer: email,
+            kid: email,
+            sharedKey: documentList.wrappedKey,
+          },
+        },
+        chatList: {
+          id: chatListId,
+          key: {
+            issuer: email,
+            kid: email,
+            sharedKey: chatList.wrappedKey,
+          },
+        },
+        profile: {
+          id: profileId,
+          key: {
+            issuer: email,
+            kid: email,
+            sharedKey: profile.wrappedKey,
+          },
+        },
+      },
+      {
+        settings: encryptedSettings,
+        documentList: documentList.encryptedDocument,
+        chatList: chatList.encryptedDocument,
+        profile: profile.encryptedDocument,
+      },
     );
     if (inviter) {
-      await contactService.acceptContactRequest(email, inviter, mainKeyPair);
+      // The inviter's public main key travels with the invitation itself: it
+      // is on our own contact-request entry (the server persisted it there
+      // when the invite was sent). No public-key fetch, no key in the link.
+      const invitation = (
+        await contactRepository.getContactRequests(email)
+      ).find(
+        (request) =>
+          request.inviter === inviter && request.status === "INVITED",
+      );
+      if (!invitation) {
+        throw new Error("No pending invitation from " + inviter + " to accept");
+      }
+      const settings = await documentService.getSettings(
+        email,
+        mainKeyPair.publicKey,
+        mainKeyPair.privateKey,
+      );
+      await contactService.acceptContactRequest(
+        email,
+        inviter,
+        invitation.publicKey,
+        settings,
+        mainKeyPair,
+      );
     }
     return {
       mainKeyPair,

@@ -47,31 +47,100 @@ Documents and their associated metadata are encrypted using symmetric cryptograp
 
 To allow users (including the owner themselves on different devices) to read a document, the symmetric Document Key must be securely distributed to them.
 
-- **ECDH Key Agreement:** To share the Document Key with a recipient, the sender performs an ECDH key agreement. They combine their own **Private Key** with the recipient's **Public Key** to derive a strong, shared secret key.
-- **Key Wrapping:** The Document Key (serialized as a JSON Web Key) is then encrypted using this derived shared secret via **AES-GCM** (with a random 12-byte IV prepended).
-- **Server Storage:** The server stores this encrypted key blob specifically for the recipient in the `shared-keys/{recipient-email}/encrypted-shared.key` file.
-- **Individual Encryption:** Because the shared secret is unique to the sender-recipient pair, the Document Key must be individually encrypted (wrapped) for *every* user who has access to the document.
+- **Key Wrapping:** A document's Document Key is wrapped by the key of its *parent*: the folder it lives in (Root-Folder Key, sub-folder key, …), or — when shared into a chat — the chat's key. Folder/chat keys are wrapped symmetrically (**AES-GCM**, random 12-byte IV prepended); a key handed to another user's account is wrapped via **ECDH** (sender's Private Key + recipient's Public Key).
+- **Server Storage:** Each wrapped key is one JSON file `documents/{documentId}/keys/{kid}.json` — a serialized `{issuer, kid, sharedKey}`. `issuer` is the account whose wrapping key it is; `kid` is the parent document's id (folder/chat), `"0"` (a document's own self key), or a recipient's email (a key filed for that account). Slots are **write-once** (`POST .../keys`, create-only, `kid` taken from the body): there is no update flow, so re-filing an occupied slot with different content is a `409`.
+- **Roles:** The server knows only two roles. The **owner** is the account in the URL path. A **member** of a document is any account that has issued one of its keys, or - recursively - can reach the parent document a key wraps under (`kid`). The parent lives in that key's `issuer`'s tree, so the walk may cross from one account's tree into another's (a document contributed to someone else's shared folder). A member may read the document and its files, and may `POST` a new document into a folder they belong to (it lands in *their* tree, the folder's content update in the folder owner's); only the owner may `PUT`.
+- **Individual Encryption:** A key wrapped via ECDH is unique to the sender–recipient pair, so it must be wrapped individually for every account granted direct (non-folder) access.
 
 ## 4. Document Decryption
 
 When an authorized user wants to access a document:
 
-1. **Fetch Encrypted Data:** The client fetches the encrypted document metadata and their individually encrypted `sharedKey` from the API.
-2. **Derive Shared Secret:** The recipient uses their own **Private Key** and the sender's **Public Key** to perform the ECDH key agreement. Because ECDH is symmetric in its derivation, this produces the exact same shared secret that the sender generated.
-3. **Unwrap Document Key:** The client uses the shared secret to decrypt their `encrypted-shared.key` via **AES-GCM**, recovering the symmetric Document Key.
-4. **Decrypt Content:** Finally, the client uses the Document Key to decrypt the Base64 metadata JSON and the actual document binaries for display.
+1. **Fetch Encrypted Data:** The client fetches the encrypted document metadata and the wrapped `sharedKey` (`GET documents/{id}/keys/{kid}`) from the API.
+2. **Obtain the Wrapping Key:** If the key was wrapped by a folder/chat key, the client already holds that key (it walked down from the Root-Folder). If it was ECDH-wrapped for this account, the client derives the shared secret from its own **Private Key** and the issuer's **Public Key**.
+3. **Unwrap Document Key:** The client decrypts the `sharedKey` via **AES-GCM**, recovering the symmetric Document Key.
+4. **Decrypt Content:** Finally, the client uses the Document Key to decrypt the Base64 metadata JSON and the actual document binaries for display. Content lives in the owner's namespace, which the client tracks separately from the key's `issuer`.
 
 ## 5. Contact Requests and Chat
 
-To allow users to exchange messages, a secure shared key is established when a contact request is accepted.
+Contacts and chats are, like everything else the user owns, also
+represented as an encrypted `Document`: each user has a "chats" Document
+(referenced from their Settings document, alongside the root document
+folder and the profile) whose decrypted content is a
+`contacts: { userId, chatId, owner }[]` array instead of a dedicated
+`/users/{id}/contacts` listing endpoint. `owner` is whichever party created
+the chat Document (see step 2 below) and is needed to know how to unwrap
+its key later (step 4).
 
-1. **Send Request:** User A sends a contact request to User B.
-2. **Accept Request:** User B accepts the request. User B fetches User A's Public Main Key.
-3. **Generate Key:** User B generates a symmetric Shared Contact Key (AES-GCM 256-bit).
-4. **Encrypt Key for Contact:** User B encrypts this Shared Contact Key using an ECDH shared secret derived from User A's Public Main Key and User B's Private Main Key.
-5. **Encrypt Key for Self:** User B also encrypts the Shared Contact Key using their own Public and Private Main Keys.
-6. **Store Keys:** The keys are sent to the backend in a JSON payload that explicitly tracks which user and key ID (`kid`) was used to encrypt it (e.g., `{ "user": "A", "kid": "0", "sharedKey": "..." }`).
-7. **Direct Communication:** Both users now possess a secure shared key for direct chat.
+A **chat has no separately generated symmetric key** - the chat's shared
+key *is* the chat Document's own Document key. Access to a chat is granted
+like access to any other Document: each party has a key entry, wrapped
+under their *own* "chats" Document key, filed under the chat Document in
+the owner's tree with themselves as `issuer`. The owner files theirs when
+creating the chat; the other party's is delivered ECDH-wrapped in the
+handshake, re-wrapped by them under their own "chats" key, and **synced by
+the server** into the owner's tree (step 3). Both parties always reach the
+chat - messages and in-chat shared documents - through the owner's
+namespace (`Contact.owner`).
+
+Contact requests are tracked separately, as a transient handshake record -
+they are not the durable contact list; they are deleted by the server once
+the handshake completes.
+
+1. **Send Request:** User A (the inviter) sends a contact request via
+   `POST /users/{A}/contact-requests` with `{ inviter: A, invitee: B,
+   publicKey: A's public main key }`. The server stores it with status
+   `INVITED`. If B doesn't have an Imagey account yet, the server emails B
+   a registration link instead of (or in addition to) storing the request
+   for later pickup. That email link is `/invitations/{token}` where the
+   signed `token` carries A's public main key as a claim
+   (`ContactService.invite`); following it, `InvitationFilter` redirects
+   into the SPA with `?inviter=A&inviterPublicKey=<A's public main key,
+   JSON + base64-encoded>` as query parameters, so that accepting the
+   request as part of registration (see `RegistrationDialog` /
+   `AuthenticationService.register`) doesn't require a separate public-key
+   fetch - A's public key travelled in the link itself.
+2. **Accept Request:** User B (the invitee) fetches their pending requests
+   via `GET /users/{B}/contact-requests` and accepts, or - if B just
+   registered via an invite link as described above - accepts as the last
+   step of registration instead. Accepting:
+   - Creates a new, empty chat Document as a child of B's own "chats"
+     Document, generating a fresh Document Key for it exactly as for any
+     other document, and self-issuing B's own access to it (wrapped under
+     the "chats" Document's key).
+   - Appends `{ userId: A, chatId, owner: B }` to B's own "chats" Document
+     contacts array, which is then re-encrypted and re-uploaded (the same
+     multipart `POST /users/{id}/documents` call used for creating a
+     folder).
+   - ECDH-wraps the same chat Document key for A, using A's public main
+     key (from the request) and B's own private main key.
+   - Sends `PUT /users/{B}/contact-requests/{A}` with
+     `{ inviter: A, invitee: B, publicKey: B's public main key, chatId,
+     sharedKey: <ECDH-wrapped chat key> }`. The server moves the request to
+     status `ACCEPTED` and overwrites `publicKey` with B's (so A can later
+     derive the same ECDH shared secret B used to wrap `sharedKey`).
+3. **Pick Up the Chat Key:** User A polls `GET /users/{A}/contact-requests`
+   and finds the request now `ACCEPTED`. A decrypts `sharedKey` (ECDH,
+   using B's public key from the request and A's own private key),
+   **re-wraps the chat key symmetrically under A's own "chats" Document
+   key**, appends `{ userId: B, chatId, owner: B }` to A's own "chats"
+   Document contacts array (re-encrypted/re-uploaded the same way), and
+   confirms receipt via `PUT /users/{A}/contact-requests/{B}` with
+   `{ inviter: A, invitee: B, status: "RECEIVED",
+   chatKey: { issuer: A, kid: <A's chats doc id>, sharedKey: <re-wrapped> } }`.
+   The server files `chatKey` under the chat Document in **B's** tree
+   (`documents/{chatId}/keys/{A}`, issuer `A`) - this is what grants A the
+   `member` role on the chat from then on - and deletes the request. Both
+   sides now have their own durable copy of the contact and their own
+   key entry.
+4. **Loading the Chat Key (either side, any time after):** To open a chat,
+   a user looks up the matching `Contact` entry (`{ userId, chatId, owner
+   }`) in their own decrypted "chats" Document, then fetches their key
+   entry from the owner's tree - `keys/{chatId's parent}` if they own the
+   chat, `keys/{self}` if not - and unwraps it symmetrically with their own
+   "chats" Document key. No ECDH is involved at open time either way.
+5. **Decline:** `DELETE /users/{B}/contact-requests/{A}` removes an
+   `INVITED` request User B does not want to accept.
 
 ## Cryptographic Primitives Summary
 

@@ -101,6 +101,19 @@ public abstract class AbstractRecordConverter {
         if (type.isEnum()) {
             return (T) Enum.valueOf((Class<Enum>) type, value.toUpperCase());
         }
+        // A record wrapping another record (e.g. User(Email(String))) is common throughout the
+        // domain model and is usually serialized as the innermost plain string (an email address,
+        // say). When the target isn't directly constructible from a String, recurse one level in
+        // and build the wrapped type first, then wrap it - this mirrors how AbstractRecordMessageBodyWriter
+        // unwraps such chains in the other direction when writing.
+        if (type.isRecord()) {
+            RecordComponent[] recordComponents = type.getRecordComponents();
+            if (recordComponents.length == 1 && !recordComponents[0].getType().equals(String.class)) {
+                Class<?> innerType = recordComponents[0].getType();
+                Object innerValue = instantiate(innerType, value);
+                return instantiate(type, new Class<?>[] {innerType}, new Object[] {innerValue});
+            }
+        }
         return instantiate(type, new Class<?>[] {value.getClass()}, new Object[] {value});
     }
 

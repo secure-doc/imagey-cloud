@@ -135,11 +135,35 @@ public class LoginTest {
         assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
     }
 
+    @Test
+    @DisplayName("Verification of an invited-but-not-registered user leads to registration mail, not login")
+    public void verifyInvitedButUnregistered() throws IOException, MessagingException {
+        // A pending invite creates the invitee's home directory (ContactRepository.persist) before
+        // they ever register - that bare directory must not make them look like an existing account.
+        File inviteeHome = new File(rootPath, "invitee@imagey.cloud");
+        new File(inviteeHome, "contact-requests").mkdirs();
+
+        newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/invitee@imagey.cloud/verifications")
+            .request().header("Origin", "https://secure-doc.store")
+            .post(json(""));
+
+        MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
+        assertThat(receivedMessages).hasSize(1);
+        assertThat(extractLink(receivedMessages[0])).contains("/registrations/");
+    }
+
     @BeforeEach
     void initializeDefaultState() throws URISyntaxException, IOException {
         File joesData = new File("./" + rootPath, "joe@imagey.cloud");
         if (joesData.exists()) {
             forceDelete(joesData);
+        }
+
+        File inviteeData = new File(rootPath, "invitee@imagey.cloud");
+        if (inviteeData.exists()) {
+            forceDelete(inviteeData);
         }
 
         File marysData = new File(rootPath, "mary@imagey.cloud");

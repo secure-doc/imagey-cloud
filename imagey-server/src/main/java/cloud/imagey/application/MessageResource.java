@@ -50,19 +50,22 @@ import jakarta.ws.rs.container.AsyncResponse;
 import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriInfo;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import cloud.imagey.domain.chat.Channel;
-import cloud.imagey.domain.chat.Message;
-import cloud.imagey.domain.chat.MessageContent;
-import cloud.imagey.domain.chat.MessageId;
-import cloud.imagey.domain.chat.MessageRepository;
-import cloud.imagey.domain.chat.MessageService;
+import cloud.imagey.domain.contact.Channel;
+import cloud.imagey.domain.contact.Message;
+import cloud.imagey.domain.contact.MessageContent;
+import cloud.imagey.domain.contact.MessageId;
+import cloud.imagey.domain.contact.MessageRepository;
+import cloud.imagey.domain.contact.MessageService;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
-@Path("{email}/contacts/{contact}/messages")
+@Path("{email}/documents/{chatId}/messages")
 @ApplicationScoped
 public class MessageResource {
 
@@ -73,48 +76,54 @@ public class MessageResource {
     @Inject
     @ConfigProperty(name = "chat.polling.timeout", defaultValue = "30")
     private long pollingTimeoutSeconds;
+    @Context
+    private SecurityContext securityContext;
     private Map<Channel, Queue<AsyncResponse>> waitingRequests = new ConcurrentHashMap<>();
 
     @POST
-    @RolesAllowed("owner")
+    @RolesAllowed({"owner", "member"})
     @Consumes(TEXT_PLAIN)
     public Response sendMessage(
-        @PathParam("email") User sender,
-        @PathParam("contact") User contact,
+        @PathParam("email") User owner,
+        @PathParam("chatId") DocumentId chatId,
         MessageContent messageContent,
         @Context UriInfo uriInfo) throws IOException {
 
-        Message message = messageService.sendMessage(sender, contact, messageContent);
+        Message message = messageService.sendMessage(owner, chatId, caller(), messageContent);
         return Response.created(uriInfo.getAbsolutePathBuilder().path(message.id().value()).build()).build();
     }
 
     @GET
-    @RolesAllowed("owner")
+    @RolesAllowed({"owner", "member"})
     @Produces(APPLICATION_JSON)
     public void receiveMessages(
-        @PathParam("email") User receiver,
-        @PathParam("contact") User sender,
+        @PathParam("email") User owner,
+        @PathParam("chatId") DocumentId chatId,
         @QueryParam("sinceId") MessageId sinceId,
         @HeaderParam("Prefer") Prefer prefer,
         @Suspended AsyncResponse asyncResponse) {
 
         long timeout = min(pollingTimeoutSeconds, ofNullable(prefer).map(Prefer::timeout).orElse(0L));
 
-        List<Message> messages = messageRepository.fetchMessages(receiver, sender, Optional.ofNullable(sinceId));
+        List<Message> messages = messageRepository.fetchMessages(owner, chatId, Optional.ofNullable(sinceId));
         if (messages.isEmpty() && timeout > 0) {
             asyncResponse.setTimeout(timeout, SECONDS);
             asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.ok(emptyList()).build()));
 
-            Channel channel = new Channel(sender.email().address() + ":" + receiver.email().address());
+            Channel channel = new Channel(chatId.id());
             waitingRequests.computeIfAbsent(channel, c -> new ConcurrentLinkedQueue<>()).add(asyncResponse);
         } else {
             asyncResponse.resume(messages);
         }
     }
 
-    public void sendMessage(@Observes Message message) {
+    public void onMessageSent(@Observes Message message) {
         ofNullable(waitingRequests.remove(message.channel())).ifPresent(responses
             -> responses.stream().filter(not(AsyncResponse::isDone)).forEach(response -> response.resume(List.of(message))));
+    }
+
+    private User caller() {
+        return new User(new Email(securityContext.getUserPrincipal().getName()));
     }
 
     public record Prefer(String value) {

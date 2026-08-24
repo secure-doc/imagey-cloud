@@ -16,9 +16,14 @@
  */
 package cloud.imagey.domain.document;
 
+import jakarta.json.bind.annotation.JsonbTypeAdapter;
+
+import cloud.imagey.domain.document.DocumentId.Adapter;
+import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
+
+@JsonbTypeAdapter(Adapter.class)
 public record DocumentId(String id) {
 
-    public static final DocumentId CONTENT = new DocumentId("content");
-    public static final DocumentId SMALL = new DocumentId("small");
-    public static final DocumentId PREVIEW = new DocumentId("preview");
+    public static class Adapter extends AbstractSimpleRecordAdapter<DocumentId, String> {
+    }
 }

@@ -28,26 +28,20 @@ import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cloud.imagey.domain.common.AbstractUserFileRepository;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
-import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
-public class DeviceRepository extends AbstractFileRepository {
+public class DeviceRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DeviceRepository.class);
     private static final Charset UTF_8 = Charset.forName("UTF-8");
-
-    @Inject
-    @ConfigProperty(name = "root.path")
-    private String rootPath;
 
     public List<DeviceId> loadDevices(User user) {
         File devicesDirectory = new File(getUserHome(user), "devices");
@@ -104,10 +98,6 @@ public class DeviceRepository extends AbstractFileRepository {
             LOG.info("Recovery key loaded");
             return recoveryKey;
         }
-    }
-
-    private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
     }
 
     private PrivateKeyMetadata parse(String json) {

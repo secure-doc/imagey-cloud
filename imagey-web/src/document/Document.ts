@@ -1,9 +1,9 @@
-export default interface Document {
-  name: string;
-  type?: string;
-  documentId: string;
+import DocumentMetadata from "./DocumentMetadata";
+
+// Document is a DocumentMetadata that has actually been loaded/decrypted:
+// it carries everything DocumentMetadata does (size, contentId, sharedKey,
+// ETag, etc.) plus the fields only meaningful once loaded (raw content).
+export default interface Document extends DocumentMetadata {
   content?: ArrayBuffer;
-  key?: JsonWebKey;
-  etag?: string;
-  documents?: string[];
+  profilePictureId?: string;
 }

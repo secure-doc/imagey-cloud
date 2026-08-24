@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import { documentService } from "../document/DocumentService";
+import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import DocumentMetadata from "../document/DocumentMetadata";
+import Document from "../document/Document";
+import { useKey } from "../contexts/FolderContext";
 
 export default function UploadButton({
   className,
@@ -9,57 +10,38 @@ export default function UploadButton({
   onUploadComplete,
   children,
   "aria-label": ariaLabel,
-  parentFolderId,
-  parentFolderKey,
+  folder,
   asMenuItem,
 }: {
   className?: string;
   multiple?: boolean;
-  onUploadComplete?: (document: DocumentMetadata) => void;
+  onUploadComplete?: (result: StoreResult) => void;
   children?: React.ReactNode;
   "aria-label"?: string;
-  parentFolderId?: string;
-  parentFolderKey?: JsonWebKey;
+  folder: Document;
   asMenuItem?: boolean;
 }) {
   const fileChooser = useRef<HTMLInputElement>(null);
   const authentication = useAuthentication();
   const user = authentication.user;
-  const mainKeyPair = authentication.keyPairs.mainKeyPair;
   const [isUploading, setIsUploading] = useState(false);
+  const folderKey = useKey(folder.documentId);
 
   const handleUpload = async (files: File[]) => {
-    if (!user || !mainKeyPair) return;
-    const publicMainKey = mainKeyPair.publicKey;
-    const privateMainKey = mainKeyPair.privateKey;
+    if (!user || !folderKey) return;
 
     setIsUploading(true);
     try {
-      let actualFolderId = parentFolderId;
-      let actualFolderKey = parentFolderKey;
-      if (!actualFolderId || !actualFolderKey) {
-        const rootFolder = await documentService.getRootFolder(
-          user,
-          publicMainKey,
-          privateMainKey,
-        );
-        actualFolderId = rootFolder.documentId;
-        actualFolderKey = rootFolder.key;
-      }
-
       for (const file of files) {
         if (file) {
-          const metadata = await documentService.storeDocument(
+          const result = await documentService.storeDocument(
             user,
             file,
-            publicMainKey,
-            privateMainKey,
-            actualFolderId,
-            actualFolderKey,
+            folder,
+            folderKey,
           );
-
           if (onUploadComplete) {
-            onUploadComplete(metadata);
+            onUploadComplete(result);
           }
         }
       }

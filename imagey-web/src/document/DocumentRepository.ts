@@ -1,11 +1,24 @@
-import { cryptoService } from "../authentication/CryptoService";
-import EncryptedDocumentMetadata from "./EncryptedDocumentMetadata";
+// Thrown when the server rejects a write because the ETag the client sent
+// (If-Match on a PUT, folderETag in an upload) no longer matches - the
+// resource was changed by someone else in the meantime. Callers doing a
+// read-modify-write should re-read and retry.
+export class PreconditionFailedError extends Error {
+  constructor(message = "Precondition failed") {
+    super(message);
+    this.name = "PreconditionFailedError";
+  }
+}
 
 export const documentRepository = {
   uploadDocument: async (
     email: string,
+    folderOwner: string,
     folderId: string,
     folderContent: ArrayBuffer,
+    // The ETag the client last saw for the parent folder document. The server
+    // rejects the upload with 412 (surfaced as PreconditionFailedError) if the
+    // folder changed since - see documentService.storeDocument for the retry.
+    folderETag: string | null,
     documentId: string,
     documentContent: ArrayBuffer,
     sharedKey: {
@@ -14,24 +27,36 @@ export const documentRepository = {
       sharedKey: string;
     },
     files: { filename: string; buffer: ArrayBuffer }[],
-  ): Promise<string> => {
+  ): Promise<{ documentId: string; folderETag: string | null }> => {
     const formData = new FormData();
-    formData.append("folderId", folderId);
+    // Mirrors the registration request (see AuthenticationRepository.register): one JSON
+    // "metadata" part with every scalar value, plus the opaque encrypted blobs as their own
+    // binary parts. The content type on the JSON blob is mandatory - a plain Blob defaults to
+    // application/octet-stream, which CXF routes to the wrong MessageBodyReader.
+    // `email` is the caller (the new document lands in their tree); `folderOwner` is whose tree the
+    // parent folder lives in - the same account when adding to one's own folder.
+    formData.append(
+      "metadata",
+      new Blob(
+        [
+          JSON.stringify({
+            folderOwner,
+            folderId,
+            ...(folderETag ? { folderETag } : {}),
+            documentId,
+            key: sharedKey,
+          }),
+        ],
+        { type: "application/json" },
+      ),
+    );
     formData.append(
       "folder",
       new Blob([folderContent], { type: "application/octet-stream" }),
     );
-    formData.append("documentId", documentId);
     formData.append(
       "document",
       new Blob([documentContent], { type: "application/octet-stream" }),
-    );
-    formData.append(
-      "key",
-      new Blob([cryptoService.base64ToArrayBuffer(sharedKey.sharedKey)], {
-        type: "application/octet-stream",
-      }),
-      "key",
     );
     for (const file of files) {
       formData.append(
@@ -45,11 +70,18 @@ export const documentRepository = {
       method: "POST",
       credentials: "same-origin",
       body: formData,
+      // The browser sets Content-Type (including the multipart boundary) itself.
     });
+    if (response.status === 412) {
+      throw new PreconditionFailedError("Folder changed during upload");
+    }
     return resolve(response, () => {
       const location = response.headers.get("Location");
       if (!location) throw new Error("No location header");
-      return Promise.resolve(location.substring(location.lastIndexOf("/") + 1));
+      return Promise.resolve({
+        documentId: location.substring(location.lastIndexOf("/") + 1),
+        folderETag: response.headers.get("ETag"),
+      });
     });
   },
 
@@ -72,75 +104,49 @@ export const documentRepository = {
     });
   },
 
-  loadDocumentMetadata: async (
-    email: string,
-    documentId: string,
-    folderId?: string,
-  ): Promise<{ metadata: EncryptedDocumentMetadata; etag: string | null }> => {
-    /*
-    let url = `/users/${email}/documents/${documentId}`;
-    if (folderId) {
-      url += "?folderId=" + encodeURIComponent(folderId);
-    }
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "same-origin",
-    });
-    return resolve(response, async () => {
-      const metadata = await response.json();
-      const etag = response.headers.get("ETag");
-      return { metadata, etag };
-    });*/
-    return Promise.reject();
-  },
-
   updateDocumentMetadata: async (
     email: string,
     documentId: string,
     metadata: ArrayBuffer,
-    etag?: string,
-  ): Promise<void> => {
-    /*
-    const headers: Record<string, string> = {
-      "Content-Type": "application/octet-stream",
-    };
-    if (etag) {
-      headers["If-Match"] = etag;
-    }
-
+    etag?: string | null,
+  ): Promise<string | null> => {
     const response = await fetch(`/users/${email}/documents/${documentId}`, {
       method: "PUT",
-      headers,
+      headers: {
+        "Content-Type": "application/octet-stream",
+        ...(etag ? { "If-Match": etag } : {}),
+      },
       credentials: "same-origin",
       body: metadata,
     });
-    return resolve(response, () => Promise.resolve());
-	*/
-    return Promise.reject();
+    if (response.status === 412) {
+      throw new PreconditionFailedError("Document changed since it was loaded");
+    }
+    // The server returns the new ETag so a follow-up save in the same session
+    // can send a fresh If-Match instead of the now-stale one it was loaded with.
+    return resolve(response, () =>
+      Promise.resolve(response.headers.get("ETag")),
+    );
   },
 
-  loadDocuments: async (
+  storeContent: async (
     email: string,
-    folderId?: string,
-  ): Promise<EncryptedDocumentMetadata[]> => {
-    /*
-    let url = "/users/" + email + "/documents";
-    if (folderId) {
-      url += "?folderId=" + encodeURIComponent(folderId);
-    }
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
+    documentId: string,
+    contentId: string,
+    content: ArrayBuffer,
+  ): Promise<void> => {
+    const response = await fetch(
+      `/users/${email}/documents/${documentId}/files/${contentId}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/octet-stream",
+        },
+        credentials: "same-origin",
+        body: content,
       },
-      credentials: "same-origin",
-      cache: "no-cache",
-    });
-    return resolve(response, () => response.json());
-	*/
+    );
+    return resolve(response, () => Promise.resolve());
   },
 
   loadKey: async (
@@ -188,14 +194,12 @@ export const documentRepository = {
   storeSharedKey: async (
     email: string,
     documentId: string,
-    shareEmail: string,
     key: { issuer: string; kid: string; sharedKey: string },
   ): Promise<void> => {
-    /*
     const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/keys/" + shareEmail,
+      "/users/" + email + "/documents/" + documentId + "/keys",
       {
-        method: "PUT",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -203,9 +207,13 @@ export const documentRepository = {
         credentials: "same-origin",
       },
     );
+    // Key slots are write-once server-side. A 409 means this contact's entry is
+    // already filed (the document was shared into this chat before) - that is
+    // the state we wanted, so treat it as success.
+    if (response.status === 409) {
+      return;
+    }
     return resolve(response, () => Promise.resolve());
-	*/
-    return Promise.reject();
   },
 };
 
@@ -213,6 +221,8 @@ async function resolve<T>(
   response: Response,
   result: () => Promise<T>,
 ): Promise<T> {
+  // Any 4xx/5xx is an error here; 2xx/3xx (including the 201 that uploads
+  // return) fall through to the caller-supplied result handler.
   if (response.status >= 400) {
     return Promise.reject(new Error("Http Error " + response.status));
   }

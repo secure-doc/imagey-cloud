@@ -1,6 +1,6 @@
 import { MessageContent } from "../chat/Message.ts";
 import { Nonce } from "./AuthenticationService.ts";
-import { DeviceId, Password } from "./UserId.ts";
+import { Password } from "./UserId.ts";
 
 export type EncryptedKey = string;
 export type EncryptedContent = string;
@@ -15,34 +15,6 @@ export const cryptoService = {
       ["encrypt", "decrypt"],
     );
     return crypto.subtle.exportKey("jwk", key) as Promise<JsonWebKey>;
-  },
-
-  generatePasswordKey: async (
-    deviceId: DeviceId,
-    password: Password,
-  ): Promise<JsonWebKey> => {
-    const passwordKey = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(password),
-      "PBKDF2",
-      false,
-      ["deriveKey"],
-    );
-
-    const derivedKey = await crypto.subtle.deriveKey(
-      {
-        name: "PBKDF2",
-        salt: new TextEncoder().encode(deviceId),
-        iterations: 250_000,
-        hash: "SHA-256",
-      },
-      passwordKey,
-      { name: "AES-GCM", length: 256 },
-      true,
-      ["encrypt", "decrypt"],
-    );
-
-    return crypto.subtle.exportKey("jwk", derivedKey) as Promise<JsonWebKey>;
   },
 
   initializeKeyPair: async (): Promise<{
@@ -129,27 +101,12 @@ export const cryptoService = {
       return keyToDecrypt;
     } else {
       const cryptoKey = await importSymmetricKey(publicKeyOrSymmetricKey);
-      console.log(
-        "decryptKey imported: " + JSON.stringify(publicKeyOrSymmetricKey),
+      const decryptedKey = await decryptAESGCM(
+        base64ToArrayBuffer(encrypted),
+        cryptoKey,
       );
-      try {
-        console.log("encrypted: " + encrypted);
-        const decryptedKey = await decryptAESGCM(
-          base64ToArrayBuffer(encrypted),
-          cryptoKey,
-        );
-        console.log("key decrypted");
-        const text = new TextDecoder().decode(decryptedKey);
-        return JSON.parse(text);
-      } catch (e) {
-        console.log(
-          "failed to decrypt " +
-            encrypted +
-            " with key " +
-            JSON.stringify(publicKeyOrSymmetricKey),
-        );
-        throw e;
-      }
+      const text = new TextDecoder().decode(decryptedKey);
+      return JSON.parse(text);
     }
   },
 

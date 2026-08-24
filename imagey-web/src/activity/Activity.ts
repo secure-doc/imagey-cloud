@@ -14,6 +14,10 @@ export interface InvitationActivity {
   id: ActivityId;
   type: ActivityType.INVITATION;
   userId: UserId;
+  // The inviter's public main key, carried over from the ContactRequest -
+  // needed to accept without a separate public-key fetch (see
+  // ContactService.acceptContactRequest).
+  publicKey: JsonWebKey;
   message?: MessageContent;
 }
 

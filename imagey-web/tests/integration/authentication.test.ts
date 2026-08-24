@@ -1,12 +1,15 @@
-import { MatchersV2 as Matchers } from "@pact-foundation/pact";
+import { MatchersV2 as Matchers, MatchersV3 } from "@pact-foundation/pact";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   inputMarysPassword,
+  prepareFreshUserSettings,
+  prepareMarysChatsDocument,
   prepareMarysContactRequests,
   prepareMarysDocuments,
-  prepareEmptyMarysDocuments,
+  prepareMarysEmptyDocumentsFolder,
   prepareMarysLogin,
+  prepareMarysSettingsDocument,
   provider,
   setupMarysDevice,
   setupMockServer,
@@ -199,93 +202,41 @@ test("new user clicks registration link", async ({ page }) => {
     )
     .willRespondWith(404);
 
+  // Registration creates the root document, profile, chats and documents
+  // list directly - a single multipart POST /users (no trailing slash):
+  // one JSON "metadata" part plus the four encrypted document blobs as
+  // binary parts (see AuthenticationRepository.register). The values are
+  // all client-generated crypto (random per test run), so we only assert
+  // the Content-Type shape here, same as prepareMarysFolderCreation()'s
+  // multipart matcher elsewhere in this suite.
   provider
     .addInteraction()
     .uponReceiving("a request to register joe")
-    .withRequest("POST", "/users/", (r) =>
-      r
-        .headers({
-          "Content-Type": "application/json",
-        })
-        .jsonBody({
-          email: "joe@imagey.cloud",
-          deviceId: Matchers.string("ab85c7ca-8288-4a67-9d7a-15b82e22e75b"),
-          devicePublicKey: {
-            crv: "P-256",
-            ext: true,
-            key_ops: [],
-            kty: "EC",
-            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-          },
-          mainPublicKey: {
-            crv: "P-256",
-            ext: true,
-            key_ops: [],
-            kty: "EC",
-            x: Matchers.string("I_VS7DvICMehgUF2rA4llF0mjZOSs6vgO_A5PLobUmc"),
-            y: Matchers.string("Z4astOZHg9NfhoAldwMZhC34UQsRU7CflGn8JpNGtAg"),
-          },
-          encryptedPrivateKey: Matchers.string(
-            "ca714722798563b39d9a75bd8d58e79cb81b78b7601d99d1725de64c437a551ffbf3b7dbb03babaeb58bf59305ad6674f91d0eccee6b73210d2d3134165530d0d512c40ae9a2a6c27829b5a5863d10591da8ee7032bbf2490c8f9b194cddc5537f3c2e1c0e0ba6bbce3f692103db085961cfcac38a87ef29b4340c69355f73d7ae527821478eff2e421d8693d50aae5ec253be5675796f9660984945d297500aca8108694b1cf2af4554670f88edb7f8de9c19ce48b254839bc9822456f949ee23718ac369102c70c994826827e36470c237cb",
-          ),
-          settings: Matchers.string("e30="),
-          settingsSharedKey: {
-            issuer: "joe@imagey.cloud",
-            kid: "0",
-            sharedKey: Matchers.string("ZHVtbXlTaGFyZWRLZXk="),
-          },
-        }),
-    )
-    .willRespondWith(200);
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to get contacts")
-    .withRequest("GET", "/users/joe@imagey.cloud/contacts", (r) =>
+    .withRequest("POST", "/users", (r) =>
       r.headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to get documents with folderId")
-    .withRequest("GET", "/users/joe@imagey.cloud/documents", (r) =>
-      r.query({ folderId: Matchers.string("some-uuid") }).headers({
-        Accept: "application/json",
-      }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to get settings document")
-    .withRequest(
-      "GET",
-      "/users/joe@imagey.cloud/documents/joe@imagey.cloud",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(404);
-
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to create root folder")
-    .withRequest(
-      "PUT",
-      Matchers.regex({
-        matcher: "/users/joe@imagey\\.cloud/documents/.*",
-        generate: "/users/joe@imagey.cloud/documents/some-uuid",
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=.*",
+        ),
       }),
     )
     .willRespondWith(200);
+
+  // App.tsx always fetches the settings document once keys are available -
+  // including right after registration, since RegistrationDialog only
+  // passes the key pairs forward, not the settings/document-list data the
+  // registration call itself just generated. See prepareFreshUserSettings()
+  // for why this needs its own freshly-generated settings key rather than
+  // one of Mary's fixed fixtures, and the crypto.subtle.decrypt override
+  // below for how the one undecryptable envelope (wrapped under joe's
+  // randomly-generated, in-browser mainKeyPair) is handled.
+  const { settingsKeyJwk } = await prepareFreshUserSettings("joe@imagey.cloud");
+  // The chats document (with an empty contacts list) is already mocked by
+  // prepareFreshUserSettings() above, same as the document list.
 
   await provider
     .addInteraction()
+    .given("Joe is registered")
     .uponReceiving("a request of joe to get contact requests")
     .withRequest("GET", "/users/joe@imagey.cloud/contact-requests", (r) =>
       r.headers({
@@ -296,33 +247,206 @@ test("new user clicks registration link", async ({ page }) => {
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
+      await page.addInitScript((fixedSettingsKey) => {
+        const originalDecrypt = crypto.subtle.decrypt.bind(crypto.subtle);
+        crypto.subtle.decrypt = async function (algorithm, key, data) {
+          try {
+            return await originalDecrypt(algorithm, key, data);
+          } catch {
+            return new TextEncoder().encode(JSON.stringify(fixedSettingsKey))
+              .buffer;
+          }
+        };
+      }, settingsKeyJwk);
       await page.goto("/?email=joe@imagey.cloud");
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill(TestData.mary.password);
-
-      const contactsResponse = page.waitForResponse(
-        "**/users/joe@imagey.cloud/contacts",
-      );
-      const documentsResponse = page.waitForResponse((r) =>
-        r.url().includes("/users/joe@imagey.cloud/documents"),
-      );
-      const contactRequestsResponse = page.waitForResponse(
-        "**/users/joe@imagey.cloud/contact-requests",
-      );
-
       await page.getByLabel("Confirm Password").fill(TestData.mary.password);
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
-      await Promise.all([
-        contactsResponse,
-        documentsResponse,
-        contactRequestsResponse,
-      ]);
-
       // Then
-      await expect(page.getByText(/Upload Images/)).toBeVisible();
+      await expect(page.getByText(/Upload Images/)).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
+test("new user registers via invite link and accepts the invitation", async ({
+  page,
+}) => {
+  // Given: joe follows an invite link from mary. The link no longer carries
+  // mary's public key - joe reads it off his own contact-request entry when
+  // he accepts the invitation as the last step of registration (see
+  // AuthenticationService.register / InvitationFilter).
+
+  // The emailed link itself is a real provider interaction: GET
+  // /invitations/<token> answers 302 back into the SPA with just the inviter
+  // and email as query params. Pinning it here (rather than hand-building the
+  // redirect URL) keeps the server responsible for the redirect shape - see
+  // InvitationFilter / ContactService.invite.
+  provider
+    .addInteraction()
+    .given("mary has invited joe")
+    .uponReceiving("the browser following mary's emailed invitation link")
+    .withRequest(
+      "GET",
+      MatchersV3.regex(
+        "/invitations/[^/?]+",
+        "/invitations/pact-invitation-token",
+      ),
+    )
+    .willRespondWith(302, (r) =>
+      r.headers({
+        Location: MatchersV3.regex(
+          "/\\?email=joe@imagey\\.cloud&inviter=mary@imagey\\.cloud",
+          `/?email=joe@imagey.cloud&inviter=mary@imagey.cloud`,
+        ),
+      }),
+    );
+
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of registering joe (invited by mary) to get public key",
+    )
+    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(404);
+
+  // Same multipart registration call as "new user clicks registration
+  // link" above - only assert the Content-Type shape, same reasoning.
+  provider
+    .addInteraction()
+    .uponReceiving("a request to register joe invited by mary")
+    .withRequest("POST", "/users", (r) =>
+      r.headers({
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=.*",
+        ),
+      }),
+    )
+    .willRespondWith(200);
+
+  const { settingsKeyJwk } = await prepareFreshUserSettings("joe@imagey.cloud");
+
+  // Accepting mary's invitation as the last step of registration also
+  // creates the chat's own Document - same shape as
+  // prepareMarysChatCreation() elsewhere in this suite.
+  provider
+    .addInteraction()
+    .uponReceiving("a request to create joes chat with mary on registration")
+    .withRequest("POST", "/users/joe@imagey.cloud/documents", (r) => {
+      r.headers({
+        "Content-Type": MatchersV3.regex(
+          "multipart/form-data.*",
+          "multipart/form-data; boundary=.*",
+        ),
+      });
+    })
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/joe@imagey.cloud/documents/new-chat-id",
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
+      }),
+    );
+
+  // No dedicated fetch of mary's public key - it comes back on joe's own
+  // contact-request entry (see the "get contact requests" interaction below,
+  // which returns mary's still-pending INVITED request with her public key).
+  provider
+    .addInteraction()
+    // Joe hasn't registered yet at this point in the test, but mary's invitation to him was
+    // already persisted server-side when she sent it (see ContactService.invite) - the backend
+    // needs to be told that's waiting for him so this PUT has something to accept.
+    .given("mary has invited joe")
+    .uponReceiving(
+      "a request of joe to accept marys invitation on registration",
+    )
+    .withRequest(
+      "PUT",
+      "/users/joe@imagey.cloud/contact-requests/mary@imagey.cloud",
+      (r) => {
+        r.headers({
+          "Content-Type": "application/json",
+        });
+        // The encrypted key/chatId are generated dynamically (see
+        // ContactService.acceptContactRequest) - only assert the shape.
+        r.jsonBody({
+          inviter: "mary@imagey.cloud",
+          invitee: "joe@imagey.cloud",
+          status: "ACCEPTED",
+          publicKey: MatchersV3.like(TestData.mary.publicMainKey),
+          chatId: MatchersV3.string("new-chat-id"),
+          sharedKey: MatchersV3.string("dummy-encrypted-key"),
+        });
+      },
+    )
+    .willRespondWith(204);
+
+  await provider
+    .addInteraction()
+    .given("mary has invited joe")
+    .uponReceiving("a request of joe to get contact requests after registering")
+    .withRequest("GET", "/users/joe@imagey.cloud/contact-requests", (r) =>
+      r.headers({
+        Accept: "application/json",
+      }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          inviter: "mary@imagey.cloud",
+          invitee: "joe@imagey.cloud",
+          status: "INVITED",
+          publicKey: MatchersV3.like(TestData.mary.publicMainKey),
+        },
+      ]),
+    )
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.addInitScript((fixedSettingsKey) => {
+        const originalDecrypt = crypto.subtle.decrypt.bind(crypto.subtle);
+        crypto.subtle.decrypt = async function (algorithm, key, data) {
+          try {
+            return await originalDecrypt(algorithm, key, data);
+          } catch {
+            return new TextEncoder().encode(JSON.stringify(fixedSettingsKey))
+              .buffer;
+          }
+        };
+      }, settingsKeyJwk);
+
+      // Follow the emailed link; the mock server answers 302 and the browser
+      // lands on the SPA with ?email/?inviter set.
+      await page.goto("/invitations/pact-invitation-token");
+      await expect(page).toHaveURL(/inviter=mary@imagey\.cloud/);
+
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill(TestData.mary.password);
+      await page.getByLabel("Confirm Password").fill(TestData.mary.password);
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      // Then: the accept PUT and the chat-document POST above are verified by
+      // executeTest (it fails if an interaction was not called). Confirm the
+      // SPA finished registration and landed in the app rather than erroring
+      // on the dialog.
+      await expect(
+        page.getByText("An error occurred during authentication"),
+      ).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Home" })).toBeVisible({
+        timeout: 10_000,
+      });
       await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
@@ -595,6 +719,11 @@ test("existing user authenticates via challenge-response on existing device", as
 }) => {
   // Given
   await prepareMarysDocuments();
+  // App.tsx always fetches the settings document once keys are decrypted,
+  // regardless of how the device got unlocked - this challenge-response
+  // flow doesn't go through prepareMarysLogin(), so it has to be mocked
+  // explicitly here too.
+  await prepareMarysSettingsDocument();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -712,18 +841,16 @@ test("existing user authenticates via challenge-response on existing device", as
       ),
     );
 
-  provider
-    .addInteraction()
-    .given("marys second device registered")
-    .given("marys second device unlocked")
-    .given("mary has no contacts")
-    .uponReceiving("a request of mary to get contacts after challenge")
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareMarysChatsDocument(
+    [],
+    [
+      "marys second device registered",
+      "marys second device unlocked",
+      "mary has no contacts",
+    ],
+  );
 
-  provider
+  await provider
     .addInteraction()
     .given("marys second device registered")
     .given("marys second device unlocked")
@@ -751,7 +878,10 @@ test("existing user authenticates via challenge-response on existing device", as
       // Then
       await authenticationsResponse;
 
-      await expect(page.getByText(/Upload Images/)).toBeVisible();
+      await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
 
       await expect.poll(() => runningPactRequests).toBe(0);
     });
@@ -761,7 +891,16 @@ test("existing user authenticates via challenge-response and selects keep me log
   page,
 }) => {
   // Given
-  await prepareEmptyMarysDocuments();
+  // Same real-documents-root fix as unlock.test.ts: settings.documents
+  // resolves to Mary's real documents root (68980188-...), not a
+  // "root-folder-id" placeholder, so we need the empty variant of the real
+  // root here (the old root-folder-id-based helper was removed as dead code).
+  await prepareMarysEmptyDocumentsFolder();
+  // App.tsx always fetches the settings document once keys are decrypted,
+  // regardless of how the device got unlocked - this challenge-response
+  // flow doesn't go through prepareMarysLogin(), so it has to be mocked
+  // explicitly here too.
+  await prepareMarysSettingsDocument();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -906,18 +1045,14 @@ test("existing user authenticates via challenge-response and selects keep me log
       ),
     );
 
-  await provider
-    .addInteraction()
-    .given("marys second device registered")
-    .given("marys second device unlocked")
-    .given("mary has no contacts")
-    .uponReceiving(
-      "a request of mary to get contacts after challenge with keep me logged in",
-    )
-    .withRequest("GET", "/users/mary@imagey.cloud/contacts", (r) =>
-      r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
+  await prepareMarysChatsDocument(
+    [],
+    [
+      "marys second device registered",
+      "marys second device unlocked",
+      "mary has no contacts",
+    ],
+  );
 
   await provider
     .addInteraction()
@@ -1085,6 +1220,11 @@ test("existing user auto-logs in with stored recovery key", async ({
 }) => {
   await prepareMarysDocuments();
   await prepareMarysContactRequests();
+  // App.tsx always fetches the settings document once keys are decrypted,
+  // regardless of how the device got unlocked - this auto-login-via-
+  // recovery-key flow doesn't go through prepareMarysLogin(), so it has to
+  // be mocked explicitly here too.
+  await prepareMarysSettingsDocument();
 
   provider
     .addInteraction()

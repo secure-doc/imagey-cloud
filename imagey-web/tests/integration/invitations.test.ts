@@ -2,14 +2,17 @@ import { test, expect } from "./fixtures";
 import { MatchersV3 } from "@pact-foundation/pact";
 import {
   clearLocalStorage,
+  generateAesGcmKeyJwk,
   loginAsMary,
+  prepareMarysChatCreation,
+  prepareMarysChatsDocument,
   prepareMarysLogin,
   setupMockServer,
   provider,
   TestData,
   prepareMarysContactRequests,
   prepareMarysEmptyContactRequests,
-  prepareEmptyMarysDocuments,
+  prepareMarysEmptyDocumentsFolder,
   runningPactRequests,
 } from "./setup";
 
@@ -20,49 +23,53 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 test("accept open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
-  await prepareMarysContactRequests();
+  await prepareMarysEmptyDocumentsFolder();
+  // Accepting re-reads the "chats" document a second time (see
+  // ContactService.acceptContactRequest) - use the SAME key for both
+  // registered reads below so it doesn't matter which of the two
+  // identical-looking interactions the mock server matches which request
+  // against.
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  await prepareMarysContactRequests(chatsDocumentKey);
 
-  provider
-    .addInteraction()
-    .given("mary has no contacts and a contact request from bill")
-    .uponReceiving("a request of mary to get bills public key")
-    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) => {
-      r.headers({
-        Accept: "application/json",
-      });
-    })
-    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
-
+  // No fetch of bill's public key is needed here - it was already sent
+  // along with the ContactRequest itself (see
+  // ContactService.acceptContactRequest).
   const builder = provider
     .addInteraction()
     .given("mary has no contacts and a contact request from bill")
     .uponReceiving("a request of mary to accept bills invitation")
     .withRequest(
       "PUT",
-      "/users/mary@imagey.cloud/contacts/bill@imagey.cloud",
+      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
       (r) => {
         r.headers({
           "Content-Type": "application/json",
         });
-        // We don't exact-match the encrypted key because it changes dynamically
+        // We don't exact-match the encrypted key/chatId because they're
+        // generated dynamically (see ContactService.acceptContactRequest).
         r.jsonBody({
-          userKey: MatchersV3.like({
-            issuerType: "USER",
-            issuer: "mary@imagey.cloud",
-            kid: "0",
-            sharedKey: "dummy-encrypted-key",
-          }),
-          contactKey: MatchersV3.like({
-            issuerType: "USER",
-            issuer: "bill@imagey.cloud",
-            kid: "0",
-            sharedKey: "dummy-encrypted-key",
-          }),
+          inviter: "bill@imagey.cloud",
+          invitee: "mary@imagey.cloud",
+          status: "ACCEPTED",
+          publicKey: MatchersV3.like(TestData.mary.publicMainKey),
+          chatId: MatchersV3.string("new-chat-id"),
+          sharedKey: MatchersV3.string("dummy-encrypted-key"),
         });
       },
     )
     .willRespondWith(204);
+
+  // Accepting now also creates the chat's own Document: it re-reads the
+  // "chats" document (a second GET, distinct from the one the initial
+  // page load already consumed via prepareMarysContactRequests() above)
+  // and then uploads the new chat Document, same shape as creating a folder.
+  await prepareMarysChatsDocument(
+    [],
+    "mary has no contacts and a contact request from bill",
+    chatsDocumentKey,
+  );
+  await prepareMarysChatCreation();
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -92,7 +99,7 @@ test("accept open invitations", async ({ page }) => {
 test("decline open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
+  await prepareMarysEmptyDocumentsFolder();
   await prepareMarysContactRequests();
 
   const builder = provider
@@ -132,18 +139,19 @@ test("decline open invitations", async ({ page }) => {
 test("accept open invitations fails", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
-  await prepareMarysContactRequests();
+  await prepareMarysEmptyDocumentsFolder();
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const builder = await prepareMarysContactRequests(chatsDocumentKey);
 
-  const builder = provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get bills public key (fail case)")
-    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) => {
-      r.headers({
-        Accept: "application/json",
-      });
-    })
-    .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
+  // Accepting re-reads the "chats" document and creates the chat's own
+  // Document before it ever reaches the (overridden-to-fail) PUT below -
+  // both need to be mocked so the flow actually gets there.
+  await prepareMarysChatsDocument(
+    [],
+    "mary has no contacts and a contact request from bill",
+    chatsDocumentKey,
+  );
+  await prepareMarysChatCreation();
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -151,10 +159,12 @@ test("accept open invitations fails", async ({ page }) => {
 
     // Override the PUT request with Playwright's page.route to return 500
     // so we don't pollute the Pact contract!
+    let acceptPutAttempted = false;
     await page.route(
-      "**/users/mary@imagey.cloud/contacts/bill@imagey.cloud",
+      "**/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
       async (route) => {
         if (route.request().method() === "PUT") {
+          acceptPutAttempted = true;
           await route.fulfill({ status: 500 });
         } else {
           await route.fallback();
@@ -177,6 +187,16 @@ test("accept open invitations fails", async ({ page }) => {
     });
     await acceptAliceBtn.click();
 
+    // The failure path leaves the panel visible, so there's no UI change to
+    // wait on. Gate the callback's return on the failing PUT actually being
+    // reached: it's the last call in the accept flow, so by the time it
+    // fires the preceding chats re-read + chat-document upload have already
+    // completed against the Pact mock server - without this, executeTest can
+    // tear the mock server down while one of those is still in flight
+    // ("route.fetch: connect ECONNREFUSED" / "request expected but not
+    // received").
+    await expect.poll(() => acceptPutAttempted).toBe(true);
+
     // Panel should still be visible because it threw an error
     await expect(invitationPanel).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -186,7 +206,7 @@ test("accept open invitations fails", async ({ page }) => {
 test("decline open invitations fails", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
+  await prepareMarysEmptyDocumentsFolder();
   const builder = await prepareMarysContactRequests();
 
   await builder.executeTest(async (mockServer) => {
@@ -194,10 +214,12 @@ test("decline open invitations fails", async ({ page }) => {
     await setupMockServer(page, mockServer);
 
     // Override the DELETE request with Playwright's page.route to return 500
+    let declineDeleteAttempted = false;
     await page.route(
       "**/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
       async (route) => {
         if (route.request().method() === "DELETE") {
+          declineDeleteAttempted = true;
           await route.fulfill({ status: 500 });
         } else {
           await route.fallback();
@@ -220,6 +242,11 @@ test("decline open invitations fails", async ({ page }) => {
     });
     await declineAliceBtn.click();
 
+    // The failure path leaves the panel visible, so gate on the failing
+    // DELETE actually being reached before letting executeTest tear the
+    // mock server down (see the accept-fails test above).
+    await expect.poll(() => declineDeleteAttempted).toBe(true);
+
     // Panel should still be visible because it threw an error
     await expect(invitationPanel).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -229,7 +256,7 @@ test("decline open invitations fails", async ({ page }) => {
 test("send contact request", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
-  await prepareEmptyMarysDocuments();
+  await prepareMarysEmptyDocumentsFolder();
   await prepareMarysEmptyContactRequests();
 
   const builder = provider
@@ -239,7 +266,11 @@ test("send contact request", async ({ page }) => {
       r.headers({
         "Content-Type": "application/json",
       });
-      r.jsonBody({ email: "bill@imagey.cloud" });
+      r.jsonBody({
+        inviter: "mary@imagey.cloud",
+        invitee: "bill@imagey.cloud",
+        publicKey: MatchersV3.like(TestData.mary.publicMainKey),
+      });
     })
     .willRespondWith(201);
 

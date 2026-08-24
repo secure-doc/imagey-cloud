@@ -23,40 +23,40 @@ import java.io.File;
 import java.nio.charset.Charset;
 import java.util.Optional;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cloud.imagey.domain.common.AbstractUserFileRepository;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
-import cloud.imagey.infrastructure.common.AbstractFileRepository;
 
 @ApplicationScoped
-public class UserRepository extends AbstractFileRepository {
+public class UserRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(UserRepository.class);
     private static final Charset UTF_8 = Charset.forName("UTF-8");
 
-    @Inject
-    @ConfigProperty(name = "root.path")
-    private String rootPath;
-
-    @PostConstruct
-    public void logRootPath() {
-        LOG.info("root.path = {}", rootPath);
-    }
-
     public void persist(User user) {
-        File userHome = createNewFile(new File(rootPath), user.email().address());
+        File userHome = createNewFile(rootPath(), user.email().address());
         mkdir(userHome);
     }
 
     public boolean exists(User user) {
         return getUserHome(user).exists();
+    }
+
+    /**
+     * Whether {@code user} has actually completed registration, as opposed to merely having a home
+     * directory - which {@link cloud.imagey.domain.contact.ContactRepository#persist} creates for a
+     * not-yet-registered invitee. Registration always stores the main public key under kid {@code 0}
+     * (see {@link cloud.imagey.domain.user.UserService#register}), so its presence is the marker.
+     * Used for register-vs-login routing and the invite flow, where a bare directory must still
+     * count as "no account yet".
+     */
+    public boolean isRegistered(User user) {
+        return new File(new File(getUserHome(user), "public-keys"), "0.json").exists();
     }
 
     public Optional<String> loadPublicKey(User user, Kid kid) {
@@ -76,9 +76,5 @@ public class UserRepository extends AbstractFileRepository {
     public void storePublicKey(User user, Kid kid, PublicKey publicKey) {
         File publicKeysFolder = new File(getUserHome(user), "public-keys");
         createNewFileWithContent(publicKeysFolder, kid.id() + ".json", publicKey.key());
-    }
-
-    private File getUserHome(User user) {
-        return new File(rootPath, user.email().address());
     }
 }

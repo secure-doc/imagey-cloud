@@ -2,21 +2,33 @@ import { useTranslation } from "react-i18next";
 import Panel from "../components/Panel";
 import UploadButton from "../components/UploadButton";
 
-import DocumentMetadata from "../document/DocumentMetadata";
+import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
+import { useEffect, useState } from "react";
+import { documentService, StoreResult } from "../document/DocumentService";
+import { useUser } from "../contexts/AuthenticationContext";
+import Document from "../document/Document";
 
 export default function UploadPanel({
   className,
   onUploadComplete,
-  parentFolderId,
-  parentFolderKey,
 }: {
   className?: string;
-  onUploadComplete?: (document: DocumentMetadata) => void;
-  parentFolderId?: string;
-  parentFolderKey?: JsonWebKey;
+  onUploadComplete?: (result: StoreResult) => void;
 }) {
   const { t } = useTranslation();
+  const user = useUser();
+  const settingsKey = useSettingsKey();
+  const documentsId = useDocumentsId();
+  const [rootFolder, setRootFolder] = useState<Document | undefined>();
 
+  useEffect(() => {
+    documentService
+      .loadDocument(user, documentsId, user, settingsKey)
+      .then((document) => setRootFolder(document as Document));
+  }, [user, settingsKey, documentsId]);
+  if (!rootFolder) {
+    return <>{t("Loading...")}</>;
+  }
   return (
     <Panel
       className={className}
@@ -27,8 +39,7 @@ export default function UploadPanel({
             className="circle extra"
             multiple
             onUploadComplete={onUploadComplete}
-            parentFolderId={parentFolderId}
-            parentFolderKey={parentFolderKey}
+            folder={rootFolder}
           >
             <i>upload</i>
           </UploadButton>
