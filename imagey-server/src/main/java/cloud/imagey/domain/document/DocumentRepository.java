@@ -143,7 +143,7 @@ public class DocumentRepository extends AbstractUserFileRepository {
     }
 
     private boolean isIssuerInKeyChain(User owner, DocumentId documentId, User member, Set<String> visited) {
-        if (!visited.add(owner.email().address() + "/" + documentId.id())) {
+        if (!visited.add(owner.id().id() + "/" + documentId.id())) {
             return false;
         }
         File[] keyFiles = keysFolder(owner, documentId).listFiles(file -> file.getName().endsWith(KEY_FILE_SUFFIX));
@@ -160,12 +160,12 @@ public class DocumentRepository extends AbstractUserFileRepository {
             }
             User parentOwner = key.get().issuer();
             DocumentId parent = new DocumentId(key.get().kid().id());
-            // A synced chat key is filed under kid = the issuer's own email (see
+            // A synced chat key is filed under kid = the issuer's own userId (see
             // ContactService.confirmReceipt), which also happens to be the id of that user's
             // settings document. That is not a real parent of this document, so don't follow the
             // link into the issuer's settings tree - a third-party key later filed there must not
             // transitively grant access here.
-            if (parent.id().equals(parentOwner.email().address())) {
+            if (parent.id().equals(parentOwner.id().id())) {
                 continue;
             }
             if (documentExists(parentOwner, parent)

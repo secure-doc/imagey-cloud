@@ -47,10 +47,10 @@ public class ContactRepository extends AbstractUserFileRepository {
         File inviterRequests = new File(
             getUserHome(contactExchange.inviter()), "contact-requests");
         File inviteeRequests = new File(
-            getUserHome(new User(contactExchange.invitee())), "contact-requests");
+            getUserHome(contactExchange.invitee()), "contact-requests");
         String content = jsonb.toJson(contactExchange);
-        writeStringToFile(new File(inviterRequests, contactExchange.invitee().address() + ".json"), content);
-        writeStringToFile(new File(inviteeRequests, contactExchange.inviter().email().address() + ".json"), content);
+        writeStringToFile(new File(inviterRequests, contactExchange.invitee().id().id() + ".json"), content);
+        writeStringToFile(new File(inviteeRequests, contactExchange.inviter().id().id() + ".json"), content);
     }
 
     public List<ContactExchange> findContactRequests(User user) {
@@ -91,7 +91,7 @@ public class ContactRepository extends AbstractUserFileRepository {
     // exchanges are done and no longer show up for either side.
     private boolean isActionableFor(User user, ContactExchange exchange) {
         return switch (exchange.status()) {
-            case INVITED -> exchange.invitee().equals(user.email());
+            case INVITED -> exchange.invitee().equals(user);
             case ACCEPTED -> exchange.inviter().equals(user);
             default -> false;
         };
@@ -100,7 +100,7 @@ public class ContactRepository extends AbstractUserFileRepository {
     public Optional<ContactExchange> getContactExchange(User user, User contact) {
         File userHome = getUserHome(user);
         File contactRequests = new File(userHome, "contact-requests");
-        File exchangeFile = new File(contactRequests, contact.email().address() + ".json");
+        File exchangeFile = new File(contactRequests, contact.id().id() + ".json");
         if (!exchangeFile.exists()) {
             return empty();
         }

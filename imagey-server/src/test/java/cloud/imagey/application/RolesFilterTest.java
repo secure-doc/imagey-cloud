@@ -40,12 +40,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.UserFactory;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -70,16 +70,16 @@ public class RolesFilterTest {
     @Inject
     private DocumentRepository documentRepository;
 
-    private final User mary = new User(new Email("mary@imagey.cloud"));
-    private final User laura = new User(new Email("laura@imagey.cloud"));
+    private final User mary = UserFactory.mary();
+    private final User laura = UserFactory.laura();
 
     @BeforeEach
     void initializeState() throws IOException {
         File data = new File(rootPath);
         deleteQuietly(data);
         copyDirectory(TEST_DATA_DIRECTORY, data);
-        deleteQuietly(new File(data, mary.email().address() + "/contact-requests"));
-        deleteQuietly(new File(data, laura.email().address() + "/contact-requests"));
+        deleteQuietly(new File(data, mary.id().id() + "/contact-requests"));
+        deleteQuietly(new File(data, laura.id().id() + "/contact-requests"));
     }
 
     @Test
@@ -87,7 +87,7 @@ public class RolesFilterTest {
     void keyIssuerHasMemberRole() {
         DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
         documentRepository.persist(mary, documentId, new EncryptedContent("{}".getBytes()));
-        documentRepository.create(mary, documentId, sharedKey(laura, laura.email().address()));
+        documentRepository.create(mary, documentId, sharedKey(laura, laura.id().id()));
 
         assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(OK.getStatusCode());
     }
@@ -98,7 +98,7 @@ public class RolesFilterTest {
         DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
         DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
         documentRepository.persist(mary, folder, new EncryptedContent("folder".getBytes()));
-        documentRepository.create(mary, folder, sharedKey(laura, laura.email().address()));
+        documentRepository.create(mary, folder, sharedKey(laura, laura.id().id()));
         documentRepository.persist(mary, documentId, new EncryptedContent("doc".getBytes()));
         documentRepository.create(mary, documentId, sharedKey(mary, folder.id()));
 
@@ -122,7 +122,7 @@ public class RolesFilterTest {
 
         assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
 
-        documentRepository.create(mary, documentId, sharedKey(laura, laura.email().address()));
+        documentRepository.create(mary, documentId, sharedKey(laura, laura.id().id()));
 
         assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(OK.getStatusCode());
     }
@@ -138,7 +138,7 @@ public class RolesFilterTest {
     void anonymousRequestIsRejected() {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(mary.email().address()).path("public-keys").path("0")
+            .path("users").path(mary.id().id()).path("public-keys").path("0")
             .request()
             .get();
 
@@ -148,7 +148,7 @@ public class RolesFilterTest {
     private Response getDocumentAs(User owner, DocumentId documentId, User caller) {
         return newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(owner.email().address()).path("documents").path(documentId.id())
+            .path("users").path(owner.id().id()).path("documents").path(documentId.id())
             .request()
             .cookie(tokenCookie(caller))
             .get();
@@ -157,14 +157,14 @@ public class RolesFilterTest {
     private Response marysPublicKeyAs(User caller) {
         return newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(mary.email().address()).path("public-keys").path("0")
+            .path("users").path(mary.id().id()).path("public-keys").path("0")
             .request()
             .cookie(tokenCookie(caller))
             .get();
     }
 
     private Cookie tokenCookie(User user) {
-        return new Cookie.Builder("token").value(tokenService.generateToken(user, MAX_VALUE).token()).build();
+        return new Cookie.Builder("token").value(tokenService.generateAuthenticationToken(user, MAX_VALUE).token()).build();
     }
 
     private static EncryptedSharedKey sharedKey(User issuer, String kid) {

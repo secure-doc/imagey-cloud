@@ -3,8 +3,8 @@ import { Message } from "./Message";
 import { messageService } from "./MessageService";
 
 export function usePolling(
-  userEmail: string,
-  ownerEmail: string | undefined,
+  userId: string,
+  ownerId: string | undefined,
   chatId: string | undefined,
   sharedKey?: JsonWebKey,
 ) {
@@ -16,20 +16,20 @@ export function usePolling(
   // leaking one contact's plaintext messages into another's thread.
   useEffect(() => {
     setMessages(undefined);
-  }, [ownerEmail, chatId]);
+  }, [ownerId, chatId]);
 
   useEffect(() => {
     let mounted = true;
 
     const pollMessages = async () => {
-      if (!sharedKey || !ownerEmail || !chatId) return;
+      if (!sharedKey || !ownerId || !chatId) return;
       let sinceId: string | undefined = undefined;
 
       while (mounted) {
         try {
           const newMessages = await messageService.receiveDecryptedMessages(
-            userEmail,
-            ownerEmail,
+            userId,
+            ownerId,
             chatId,
             sinceId,
             sharedKey,
@@ -68,7 +68,7 @@ export function usePolling(
     return () => {
       mounted = false;
     };
-  }, [userEmail, ownerEmail, chatId, sharedKey]);
+  }, [userId, ownerId, chatId, sharedKey]);
 
   return { messages, setMessages };
 }

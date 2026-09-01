@@ -5,12 +5,12 @@ import { Message } from "./Message";
 // same URL - the owner directly, the other party via their ECDH-wrapped chat key.
 export const messageRepository = {
   sendMessage: async (
-    ownerEmail: string,
+    ownerId: string,
     chatId: string,
     encryptedContent: string,
   ): Promise<string> => {
     const response = await fetch(
-      `/users/${ownerEmail}/documents/${chatId}/messages`,
+      `/users/${ownerId}/documents/${chatId}/messages`,
       {
         method: "POST",
         headers: {
@@ -31,7 +31,7 @@ export const messageRepository = {
     return parts[parts.length - 1];
   },
   receiveMessages: async (
-    ownerEmail: string,
+    ownerId: string,
     chatId: string,
     sinceId?: string,
     wait?: number,
@@ -44,7 +44,7 @@ export const messageRepository = {
     }
 
     const response = await fetch(
-      `/users/${ownerEmail}/documents/${chatId}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
+      `/users/${ownerId}/documents/${chatId}/messages${sinceId ? "?" + new URLSearchParams({ sinceId }) : ""}`,
       {
         method: "GET",
         headers,

@@ -6,7 +6,6 @@ import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
 import { getAppName } from "../utils/appName";
 import Panel from "../components/Panel";
-import { UserId } from "../authentication/UserId";
 
 export default function NoContactsPanel({ className }: { className?: string }) {
   const { t } = useTranslation();
@@ -15,12 +14,13 @@ export default function NoContactsPanel({ className }: { className?: string }) {
   const mainKeyPair = authentication.keyPairs?.mainKeyPair;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const handleContactRequest = async (userId: UserId) => {
+  const handleContactRequest = async (inviteeEmail: string) => {
     if (user && mainKeyPair) {
       try {
         await contactRepository.sendContactRequest(
           user,
-          userId,
+          authentication.email ?? "",
+          inviteeEmail,
           mainKeyPair.publicKey,
         );
         setIsDialogOpen(false);

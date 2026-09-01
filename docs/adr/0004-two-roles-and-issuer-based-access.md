@@ -71,3 +71,12 @@ hierarchy the key structure already encodes (ADR 0002/0003).
   (`DocumentMetadata.owner`, stamped by `loadDocument`).
 - No production data exists yet, so test fixtures were migrated in place
   rather than with a data migration.
+
+## Amendment (2026-09-01, ADR 0005)
+
+The "email-as-`kid`" convention this ADR describes is now "UserId-as-`kid`":
+a shared key's `issuer` and a key filed for a specific account both use the
+account's opaque **UserId**, not its email address. The recursion rule is
+unchanged - the special case that stops the walk when `kid == issuer's
+settings-document id` still holds, because that id is the issuer's UserId.
+The `{email}` path segment is now `{userId}`.

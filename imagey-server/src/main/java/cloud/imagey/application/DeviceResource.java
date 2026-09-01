@@ -44,7 +44,7 @@ import cloud.imagey.domain.user.DeviceRepository;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
-@Path("{email}/devices")
+@Path("{userId}/devices")
 public class DeviceResource {
 
     private static final Logger LOG = LogManager.getLogger(DeviceResource.class);
@@ -55,7 +55,7 @@ public class DeviceResource {
     @GET
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
-    public List<DeviceId> getDevices(@PathParam("email") User user) {
+    public List<DeviceId> getDevices(@PathParam("userId") User user) {
         return deviceRepository.loadDevices(user);
     }
 
@@ -64,7 +64,7 @@ public class DeviceResource {
     @Path("{deviceId}/public-keys")
     @Consumes(APPLICATION_JSON)
     public Response storeDevicePublicKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
         String key) throws IOException {
 
@@ -77,7 +77,7 @@ public class DeviceResource {
     @Path("{deviceId}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public PublicKey getDevicePublicKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {
 
@@ -90,7 +90,7 @@ public class DeviceResource {
     @Path("{deviceId}/private-keys")
     @Consumes(APPLICATION_JSON)
     public Response storeEncryptedPrivateKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
         String key) throws IOException {
 
@@ -106,7 +106,7 @@ public class DeviceResource {
     @Path("{deviceId}/private-keys/{kid}")
     @Produces(APPLICATION_JSON)
     public PrivateKeyMetadata getEncryptedPrivateKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
         @PathParam("kid") Kid kid) throws IOException {
 
@@ -118,7 +118,7 @@ public class DeviceResource {
     @Path("{deviceId}/recovery-key")
     @Consumes(APPLICATION_JSON)
     public Response storeDeviceRecoveryKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
         String recoveryKey) throws IOException {
 
@@ -131,7 +131,7 @@ public class DeviceResource {
     @Path("{deviceId}/recovery-key")
     @Produces(APPLICATION_JSON)
     public String getDeviceRecoveryKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId) throws IOException {
 
         LOG.info("Loading device recovery key");

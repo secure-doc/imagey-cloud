@@ -38,7 +38,10 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.token.TokenService.TokenType;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
+import cloud.imagey.domain.user.UserMappingService;
 import cloud.imagey.domain.user.UserService;
 
 @ApplicationScoped
@@ -50,6 +53,8 @@ public class InvitationFilter extends HttpFilter {
     private TokenService tokenService;
     @Inject
     private UserService userService;
+    @Inject
+    private UserMappingService userMappingService;
 
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -57,26 +62,27 @@ public class InvitationFilter extends HttpFilter {
         LOG.info("Registration via invitation started");
         Token invitationToken = extractToken(request.getRequestURI());
         Optional<DecodedToken> decoded = tokenService.decode(invitationToken);
-        if (decoded.isEmpty()) {
+        if (decoded.isEmpty() || !decoded.get().isOfType(TokenType.INVITATION)) {
             LOG.warn("Invalid invitation token");
             response.sendError(SC_FORBIDDEN);
             return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
-        User user = new User(email);
-        User inviter = new User(new Email(request.getParameter("invited-by")));
+        UserId userId = userMappingService.registerUser(email);
+        User user = new User(userId);
+        UserId inviter = new UserId(request.getParameter("invited-by"));
         userService.create(user);
-        Token authenticationToken = tokenService.generateToken(user, ONE_HOUR);
+        Token authenticationToken = tokenService.generateAuthenticationToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
-        response.sendRedirect(buildRedirect(email, inviter));
+        response.sendRedirect(buildRedirect(email, userId, inviter));
         LOG.info("User registered");
     }
 
     // The SPA finishes registration and then accepts the contact request, reading the inviter's
     // public main key off the invitee's own contact-request entry
     // (GET /users/{invitee}/contact-requests) - it does not travel in this URL.
-    private String buildRedirect(Email email, User inviter) {
-        return "/?email=" + email.address() + "&inviter=" + inviter.email().address();
+    private String buildRedirect(Email email, UserId userId, UserId inviter) {
+        return "/?email=" + email.address() + "&userId=" + userId.id() + "&inviter=" + inviter.id();
     }
 
     private Token extractToken(String requestUri) {

@@ -43,7 +43,6 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
-import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
 
 // Exercises RegistrationFilter (/registrations/*), the GET half of the registration flow that turns
@@ -69,13 +68,13 @@ public class RegistrationFilterTest {
         deleteQuietly(data);
         copyDirectory(TEST_DATA_DIRECTORY, data);
         // Joe must not exist yet - registration is what creates his account.
-        deleteQuietly(new File(data, "joe@imagey.cloud"));
+        deleteQuietly(new File(data, UserFactory.JOE_ID.id()));
     }
 
     @Test
     @DisplayName("Registration with a valid token creates the account and redirects with an auth cookie")
     public void registrationWithValidToken() throws IOException {
-        Token registrationToken = tokenService.generateToken(new User(new Email("joe@imagey.cloud")), MAX_VALUE);
+        Token registrationToken = tokenService.generateRegistrationToken(new Email("joe@imagey.cloud"), MAX_VALUE);
 
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort() + "/registrations/" + registrationToken.token())
@@ -90,15 +89,15 @@ public class RegistrationFilterTest {
         assertThat(setCookie).startsWith("token=");
         String tokenValue = setCookie.substring("token=".length(), setCookie.indexOf(';'));
         Optional<DecodedToken> decoded = tokenService.decode(new Token(tokenValue));
-        assertThat(decoded).get().extracting(t -> t.jwt().getSubject()).isEqualTo("joe@imagey.cloud");
+        assertThat(decoded).get().extracting(t -> t.jwt().getSubject()).isEqualTo(UserFactory.JOE_ID.id());
 
-        assertThat(new File(rootPath, "joe@imagey.cloud")).exists();
+        assertThat(new File(rootPath, UserFactory.JOE_ID.id())).exists();
     }
 
     @Test
     @DisplayName("Registration for an already registered user still redirects (create is idempotent)")
     public void registrationForExistingUser() {
-        Token registrationToken = tokenService.generateToken(new User(new Email("mary@imagey.cloud")), MAX_VALUE);
+        Token registrationToken = tokenService.generateRegistrationToken(new Email("mary@imagey.cloud"), MAX_VALUE);
 
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort() + "/registrations/" + registrationToken.token())
@@ -114,6 +113,19 @@ public class RegistrationFilterTest {
     public void registrationWithInvalidToken() {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort() + "/registrations/invalid.token.value")
+            .request().header("Origin", "https://secure-doc.store")
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A valid token of the wrong type is rejected at the registration endpoint")
+    public void registrationWithWrongTokenType() {
+        Token loginToken = tokenService.generateLoginToken(new Email("joe@imagey.cloud"), MAX_VALUE);
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/registrations/" + loginToken.token())
             .request().header("Origin", "https://secure-doc.store")
             .get();
 

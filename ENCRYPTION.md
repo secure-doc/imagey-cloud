@@ -6,6 +6,8 @@ Below is a detailed overview of the cryptographic protocols and algorithms used.
 
 ## 1. User Identity & Key Management
 
+An account is identified on the server by an opaque **UserId** (a random UUID assigned the first time an email address is seen), never by the address itself. The address is resolved to a UserId through a keyed-hash lookup table (`user-ids.json`, HMAC-SHA256 keyed by a runtime pepper); it is otherwise stored only inside the client-encrypted profile document. See ADR 0005-0008.
+
 Every user identity is backed by a two-tiered asymmetric key architecture (ECDH `P-256`): a **Device Key Pair** and a **Main (User) Key Pair**.
 
 ### A. Device Key Pair (Per Device)
@@ -48,7 +50,7 @@ Documents and their associated metadata are encrypted using symmetric cryptograp
 To allow users (including the owner themselves on different devices) to read a document, the symmetric Document Key must be securely distributed to them.
 
 - **Key Wrapping:** A document's Document Key is wrapped by the key of its *parent*: the folder it lives in (Root-Folder Key, sub-folder key, …), or — when shared into a chat — the chat's key. Folder/chat keys are wrapped symmetrically (**AES-GCM**, random 12-byte IV prepended); a key handed to another user's account is wrapped via **ECDH** (sender's Private Key + recipient's Public Key).
-- **Server Storage:** Each wrapped key is one JSON file `documents/{documentId}/keys/{kid}.json` — a serialized `{issuer, kid, sharedKey}`. `issuer` is the account whose wrapping key it is; `kid` is the parent document's id (folder/chat), `"0"` (a document's own self key), or a recipient's email (a key filed for that account). Slots are **write-once** (`POST .../keys`, create-only, `kid` taken from the body): there is no update flow, so re-filing an occupied slot with different content is a `409`.
+- **Server Storage:** Each wrapped key is one JSON file `documents/{documentId}/keys/{kid}.json` — a serialized `{issuer, kid, sharedKey}`. `issuer` is the **UserId** of the account whose wrapping key it is; `kid` is the parent document's id (folder/chat), `"0"` (a document's own self key), or a recipient's **UserId** (a key filed for that account). Slots are **write-once** (`POST .../keys`, create-only, `kid` taken from the body): there is no update flow, so re-filing an occupied slot with different content is a `409`.
 - **Roles:** The server knows only two roles. The **owner** is the account in the URL path. A **member** of a document is any account that has issued one of its keys, or - recursively - can reach the parent document a key wraps under (`kid`). The parent lives in that key's `issuer`'s tree, so the walk may cross from one account's tree into another's (a document contributed to someone else's shared folder). A member may read the document and its files, and may `POST` a new document into a folder they belong to (it lands in *their* tree, the folder's content update in the folder owner's); only the owner may `PUT`.
 - **Individual Encryption:** A key wrapped via ECDH is unique to the sender–recipient pair, so it must be wrapped individually for every account granted direct (non-folder) access.
 
@@ -88,20 +90,21 @@ they are not the durable contact list; they are deleted by the server once
 the handshake completes.
 
 1. **Send Request:** User A (the inviter) sends a contact request via
-   `POST /users/{A}/contact-requests` with `{ inviter: A, invitee: B,
-   publicKey: A's public main key }`. The server stores it with status
-   `INVITED`. If B doesn't have an Imagey account yet, the server emails B
-   a registration link instead of (or in addition to) storing the request
-   for later pickup. That email link is `/invitations/{token}` where the
-   signed `token` carries A's public main key as a claim
-   (`ContactService.invite`); following it, `InvitationFilter` redirects
-   into the SPA with `?inviter=A&inviterPublicKey=<A's public main key,
-   JSON + base64-encoded>` as query parameters, so that accepting the
-   request as part of registration (see `RegistrationDialog` /
-   `AuthenticationService.register`) doesn't require a separate public-key
-   fetch - A's public key travelled in the link itself.
+   `POST /users/{A-userId}/contact-requests` with `{ invitee: B's email,
+   inviterEmail: A's email, publicKey: A's public main key }`. The server
+   resolves (or mints) B's **UserId** so the pending request can be filed
+   in B's tree straight away, and stores it with status `INVITED`.
+   `inviterEmail` is used only to name A in the invitation mail sent to a
+   not-yet-registered B and is not stored. A's public main key is kept on
+   the request itself, so accepting it never needs a separate public-key
+   fetch. If B has no account yet, the server emails B an
+   `/invitations/{token}` link (`token` carries B's email as subject);
+   following it, `InvitationFilter` mints B's UserId and redirects into the
+   SPA with `?email=B&userId=<B's UserId>&inviter=<A's UserId>`, and
+   accepting the request is the last step of B's registration (see
+   `RegistrationDialog` / `AuthenticationService.register`).
 2. **Accept Request:** User B (the invitee) fetches their pending requests
-   via `GET /users/{B}/contact-requests` and accepts, or - if B just
+   via `GET /users/{B-userId}/contact-requests` and accepts, or - if B just
    registered via an invite link as described above - accepts as the last
    step of registration instead. Accepting:
    - Creates a new, empty chat Document as a child of B's own "chats"

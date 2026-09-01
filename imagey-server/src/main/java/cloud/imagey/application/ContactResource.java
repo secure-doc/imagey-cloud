@@ -22,11 +22,11 @@ import static jakarta.ws.rs.core.Response.noContent;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.json.bind.annotation.JsonbTypeAdapter;
 import jakarta.json.bind.annotation.JsonbTypeDeserializer;
 import jakarta.json.bind.annotation.JsonbTypeSerializer;
 import jakarta.ws.rs.BadRequestException;
@@ -72,40 +72,41 @@ public class ContactResource {
 
     @POST
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests")
+    @Path("{userId}/contact-requests")
     @Consumes(APPLICATION_JSON)
-    public Response requestContact(@PathParam("email") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
-        boolean created = contactService.invite(inviter, request.invitee(), request.publicKey());
-        if (created) {
-            UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
-            contactRequest.path(request.invitee().address());
-            return created(contactRequest.build()).build();
-        } else {
-            return noContent().build();
-        }
+    public Response requestContact(@PathParam("userId") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
+        Optional<User> invitee = contactService.invite(
+            inviter, request.inviterEmail(), request.invitee(), request.publicKey());
+        return invitee
+            .map(i -> {
+                UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
+                contactRequest.path(i.id().id());
+                return created(contactRequest.build()).build();
+            })
+            .orElseGet(() -> noContent().build());
     }
 
     @GET
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests")
+    @Path("{userId}/contact-requests")
     @Produces(APPLICATION_JSON)
-    public List<ContactExchange> getContactRequests(@PathParam("email") User user) {
+    public List<ContactExchange> getContactRequests(@PathParam("userId") User user) {
         return contactRepository.findContactRequests(user);
     }
 
     @DELETE
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests/{contact}")
-    public void declineInvitation(@PathParam("email") User user, @PathParam("contact") User contact) throws IOException {
+    @Path("{userId}/contact-requests/{contact}")
+    public void declineInvitation(@PathParam("userId") User user, @PathParam("contact") User contact) throws IOException {
         contactService.declineInvitation(user, contact);
     }
 
     @PUT
     @RolesAllowed("owner")
-    @Path("{email}/contact-requests/{contact}")
+    @Path("{userId}/contact-requests/{contact}")
     @Consumes(APPLICATION_JSON)
     public void updateContactRequest(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("contact") User contact,
         ContactRequestUpdate update) throws IOException {
 
@@ -119,8 +120,11 @@ public class ContactResource {
         }
     }
 
+    // inviterEmail is the caller's own address, used only to name the inviter in the invitation
+    // email of a not-yet-registered invitee (see ContactService.invite); it is never stored.
     public record ContactRequest(
-        @JsonbTypeAdapter(Email.Adapter.class) Email invitee,
+        Email invitee,
+        Email inviterEmail,
         @JsonbTypeSerializer(Serializer.class)
         @JsonbTypeDeserializer(Deserializer.class) PublicKey publicKey) {
     }

@@ -40,7 +40,7 @@ import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 
-@Path("{email}/devices")
+@Path("{userId}/devices")
 @ApplicationScoped
 public class ChallengeResource {
 
@@ -55,7 +55,7 @@ public class ChallengeResource {
     @PermitAll
     @Path("{deviceId}/challenges")
     @Produces(APPLICATION_JSON)
-    public Response createChallenge(@PathParam("email") User user, @PathParam("deviceId") DeviceId deviceId) {
+    public Response createChallenge(@PathParam("userId") User user, @PathParam("deviceId") DeviceId deviceId) {
         ChallengeResponse challenge = challengeService.createChallenge(user, deviceId);
         return Response.status(Response.Status.CREATED).entity(challenge).build();
     }
@@ -65,7 +65,7 @@ public class ChallengeResource {
     @Path("{deviceId}/authentications")
     @Consumes(APPLICATION_JSON)
     public Response verifyChallenge(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
         @QueryParam("trusted") @DefaultValue("false") boolean trusted,
         ChallengeSignature signature) {
@@ -79,7 +79,7 @@ public class ChallengeResource {
 
     private String buildCookie(User user, boolean trusted) {
         long validity = trusted ? TokenService.ONE_MONTH : TokenService.ONE_HOUR;
-        Token token = tokenService.generateToken(user, validity);
+        Token token = tokenService.generateAuthenticationToken(user, validity);
         String cookieHeader = "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/";
         if (trusted) {
             cookieHeader += "; Max-Age=2592000";

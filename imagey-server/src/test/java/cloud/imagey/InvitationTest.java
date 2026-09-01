@@ -54,7 +54,6 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
-import cloud.imagey.domain.user.User;
 import cloud.imagey.junit.GreenMail;
 
 @GreenMail
@@ -81,7 +80,7 @@ public class InvitationTest {
         }
         copyDirectory(TEST_DATA_DIRECTORY, data);
         marysToken = new Cookie.Builder("token")
-            .value(tokenService.generateToken(new User(new Email("mary@imagey.cloud")), ONE_HOUR).token())
+            .value(tokenService.generateAuthenticationToken(UserFactory.mary(), ONE_HOUR).token())
             .build();
     }
 
@@ -91,14 +90,14 @@ public class InvitationTest {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/mary@imagey.cloud/contact-requests")
+            .path("users/" + UserFactory.MARY_ID.id() + "/contact-requests")
             .request()
             .header("Origin", "https://secure-doc.store")
             .cookie(marysToken)
             .post(json("""
                 {
-                    "inviter": "mary@imagey.cloud",
                     "invitee": "luise@imagey.cloud",
+                    "inviterEmail": "mary@imagey.cloud",
                     "publicKey": {
                         "crv": "P-256", "ext": true, "key_ops": [], "kty": "EC",
                         "x": "O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4",
@@ -127,17 +126,21 @@ public class InvitationTest {
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         Optional<DecodedToken> decodedToken = tokenService.decode(new Token(tokenValue));
-        assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).isEqualTo("luise@imagey.cloud");
+        // The session cookie now carries the invitee's freshly minted userId, not their email.
+        assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).asString()
+            .isNotEqualTo("luise@imagey.cloud");
         URI location = response.getLocation();
         assertThat(location).isNotNull();
         String query = location.getQuery();
-        assertThat(query.split("&")).contains("inviter=mary@imagey.cloud");
         // The inviter's public main key does NOT travel in the link (that would land in browser
         // history / access logs). The invitee reads it off its own persisted contact-request
         // entry when it accepts the request during registration.
         Map<String, String> params = parseQuery(query);
         assertThat(params).doesNotContainKey("inviterPublicKey");
-        assertThat(params.keySet()).containsExactlyInAnyOrder("email", "inviter");
+        assertThat(params).containsEntry("email", "luise@imagey.cloud");
+        assertThat(params).containsEntry("inviter", UserFactory.MARY_ID.id());
+        assertThat(params).containsEntry("userId", decodedToken.get().jwt().getSubject());
+        assertThat(params.keySet()).containsExactlyInAnyOrder("email", "userId", "inviter");
     }
 
     private Map<String, String> parseQuery(String query) {
@@ -165,6 +168,22 @@ public class InvitationTest {
             .get();
 
         // Then
+        assertThat(response.getStatus()).isEqualTo(jakarta.ws.rs.core.Response.Status.FORBIDDEN.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Invitation with a valid token of the wrong type fails")
+    public void wrongTypeInvitationTokenFails() {
+        Token wrongToken = tokenService.generateRegistrationToken(new Email("luise@imagey.cloud"), ONE_HOUR);
+
+        String url = "http://localhost:" + config.getHttpPort() + "/invitations/" + wrongToken.token()
+            + "?invited-by=" + UserFactory.MARY_ID.id();
+        Response response = newClient()
+            .target(url)
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .get();
+
         assertThat(response.getStatus()).isEqualTo(jakarta.ws.rs.core.Response.Status.FORBIDDEN.getStatusCode());
     }
 

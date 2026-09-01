@@ -47,9 +47,9 @@ import org.junit.jupiter.api.Test;
 
 import cloud.imagey.domain.contact.Message;
 import cloud.imagey.domain.contact.MessageId;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 import cloud.imagey.infrastructure.jakartars.RecordListMessageBodyWriter;
 import cloud.imagey.infrastructure.jakartars.RecordMessageBodyReader;
 import cloud.imagey.infrastructure.jakartars.RecordMessageBodyWriter;
@@ -87,13 +87,13 @@ public class MessageResourceTest {
         }
         data.mkdirs();
 
-        owner = new User(new Email("owner@example.com"));
-        contact = new User(new Email("contact@example.com"));
+        owner = new User(new UserId("owner"));
+        contact = new User(new UserId("contact"));
 
         // The chat Document must exist in the owner's tree for messages to be accepted there
         // (MessageService guards against a member creating a stray messages folder in their own).
         writeStringToFile(
-            new File(data, "owner@example.com/documents/" + CHAT_ID + "/metadata.enc"),
+            new File(data, "owner/documents/" + CHAT_ID + "/metadata.enc"),
             "encrypted-chat-metadata",
             UTF_8);
 
@@ -101,15 +101,21 @@ public class MessageResourceTest {
         // issued, filed under the chat Document owned by `owner` - exactly what
         // ContactService.confirmReceipt syncs there in the real flow (kid = the chat id).
         writeStringToFile(
-            new File(data, "owner@example.com/documents/" + CHAT_ID + "/keys/" + CHAT_ID + ".json"),
-            "{\"issuer\":\"contact@example.com\",\"kid\":\"" + CHAT_ID + "\",\"sharedKey\":\"d3JhcHBlZA==\"}",
+            new File(data, "owner/documents/" + CHAT_ID + "/keys/" + CHAT_ID + ".json"),
+            "{\"issuer\":\"contact\",\"kid\":\"" + CHAT_ID + "\",\"sharedKey\":\"d3JhcHBlZA==\"}",
             UTF_8);
 
-        ownerCookie = new Cookie.Builder("token").value(tokenService.generateToken(owner, Integer.MAX_VALUE).token()).build();
+        ownerCookie = tokenCookie(owner);
         ownerClient = messages(owner, ownerCookie);
 
-        contactCookie = new Cookie.Builder("token").value(tokenService.generateToken(contact, Integer.MAX_VALUE).token()).build();
+        contactCookie = tokenCookie(contact);
         contactClient = messages(contact, contactCookie);
+    }
+
+    private Cookie tokenCookie(User user) {
+        return new Cookie.Builder("token")
+            .value(tokenService.generateAuthenticationToken(user, Integer.MAX_VALUE).token())
+            .build();
     }
 
     private TestClient messages(User user, Cookie cookie) {
@@ -119,7 +125,7 @@ public class MessageResourceTest {
                 .register(RecordListMessageBodyWriter.class)
                 .register(RecordMessageBodyWriter.class)
                 .target("http://localhost:" + config.getHttpPort())
-                .path("users/owner@example.com/documents/" + CHAT_ID + "/messages");
+                .path("users/owner/documents/" + CHAT_ID + "/messages");
             if (sinceId != null) {
                 target = target.queryParam("sinceId", sinceId);
             }
@@ -132,7 +138,7 @@ public class MessageResourceTest {
     void sendMessageToNonExistentChat() {
         Response response = newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/owner@example.com/documents/no-such-chat/messages")
+            .path("users/owner/documents/no-such-chat/messages")
             .request()
             .cookie(ownerCookie)
             .post(text("encrypted-content"));
@@ -146,12 +152,12 @@ public class MessageResourceTest {
         Response response = contactClient.messages(null).post(text("encrypted-content"));
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
         assertThat(response.getLocation().toString())
-            .matches(".*/users/owner@example.com/documents/" + CHAT_ID + "/messages/.*");
+            .matches(".*/users/owner/documents/" + CHAT_ID + "/messages/.*");
 
         List<Message> messages = ownerClient.messages(null).get(new GenericType<List<Message>>() { });
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content().value()).isEqualTo("encrypted-content");
-        assertThat(messages.get(0).sender().email().address()).isEqualTo("contact@example.com");
+        assertThat(messages.get(0).sender().id().id()).isEqualTo("contact");
     }
 
     @Test

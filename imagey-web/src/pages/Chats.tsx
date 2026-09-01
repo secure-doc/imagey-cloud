@@ -26,13 +26,13 @@ export default function Chats({ id }: { id: string }) {
 export function ChatsList({
   id,
   className,
-  activeContactEmail,
+  activeContactUserId,
   onLoaded,
   onLoadError,
 }: {
   id: string;
   className?: string;
-  activeContactEmail?: string;
+  activeContactUserId?: string;
   // Reports the loaded contacts and the "chats" document's own key back to
   // the caller, once known - lets Chat.tsx reuse this fetch instead of
   // loading the same chats document a second time itself (it needs both to
@@ -155,6 +155,7 @@ export function ChatsList({
       try {
         await contactRepository.sendContactRequest(
           user,
+          authentication.email ?? "",
           email,
           mainKeyPair.publicKey,
         );
@@ -176,7 +177,7 @@ export function ChatsList({
         className ? className + " col scroll s12 m4 l4" : "col scroll s12 m4 l4"
       }
       style={
-        activeContactEmail
+        activeContactUserId
           ? { borderRight: "1px solid var(--surface-variant)" }
           : undefined
       }

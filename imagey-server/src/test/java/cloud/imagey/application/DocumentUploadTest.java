@@ -48,10 +48,10 @@ import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 import cloud.imagey.junit.GreenMail;
 
 /**
@@ -95,8 +95,8 @@ public class DocumentUploadTest {
         }
         data.mkdirs();
 
-        user = new User(new Email("owner@example.com"));
-        userCookie = new Cookie.Builder("token").value(tokenService.generateToken(user, Integer.MAX_VALUE).token()).build();
+        user = new User(new UserId("owner@example.com"));
+        userCookie = new Cookie.Builder("token").value(tokenService.generateAuthenticationToken(user, Integer.MAX_VALUE).token()).build();
 
         // The folder the document will be uploaded into has to exist beforehand.
         documentRepository.persist(user, new DocumentId(FOLDER_ID),
@@ -107,7 +107,7 @@ public class DocumentUploadTest {
     @DisplayName("The owner's upload stores the document in their tree and updates the folder")
     void uploadAddsDocumentToFolder() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -122,7 +122,7 @@ public class DocumentUploadTest {
         String currentETag = documentRepository.getETag(user, new DocumentId(FOLDER_ID)).orElseThrow();
 
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID, currentETag)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID, currentETag)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -137,7 +137,7 @@ public class DocumentUploadTest {
 
         String weakETag = "W/\"" + currentETag + "\"";
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID, weakETag)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID, weakETag)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -148,7 +148,7 @@ public class DocumentUploadTest {
     @DisplayName("An upload carrying a stale folder ETag is rejected with 412 and nothing is written")
     void uploadWithStaleFolderETag() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID, "\"stale\"")),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID, "\"stale\"")),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -166,7 +166,7 @@ public class DocumentUploadTest {
             new EncryptedContent("existing-document-metadata".getBytes(UTF_8)));
 
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -179,7 +179,7 @@ public class DocumentUploadTest {
     @DisplayName("A one-character folder ETag is treated as opaque and rejected with 412")
     void uploadWithSingleCharFolderETag() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID, "\"")),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID, "\"")),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -190,7 +190,7 @@ public class DocumentUploadTest {
     @DisplayName("A folder ETag with only a leading quote is treated as opaque and rejected with 412")
     void uploadWithUnbalancedQuoteFolderETag() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID, "\"abc")),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID, "\"abc")),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -201,7 +201,7 @@ public class DocumentUploadTest {
     @DisplayName("The uploaded content files are stored under the new document")
     void uploadStoresContentFiles() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT),
             filePart("files", "image", "the-image-bytes"),
@@ -209,7 +209,7 @@ public class DocumentUploadTest {
             filePart("files", "thumbnail", "the-thumbnail-bytes")));
 
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(CREATED);
-        File filesDir = new File(new File(new File(rootPath, user.email().address()), "documents/" + DOCUMENT_ID), "files");
+        File filesDir = new File(new File(new File(rootPath, user.id().id()), "documents/" + DOCUMENT_ID), "files");
         assertThat(filesDir.list()).containsExactlyInAnyOrder("image", "preview", "thumbnail");
     }
 
@@ -227,7 +227,7 @@ public class DocumentUploadTest {
     @DisplayName("Missing folder part leads to 400")
     void missingFolderContent() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("document", DOCUMENT_CONTENT)));
 
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(BAD_REQUEST);
@@ -237,7 +237,7 @@ public class DocumentUploadTest {
     @DisplayName("Missing document part leads to 400")
     void missingDocumentContent() {
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT)));
 
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(BAD_REQUEST);
@@ -247,7 +247,7 @@ public class DocumentUploadTest {
     @DisplayName("Metadata without folderOwner leads to 400")
     void metadataWithoutFolderOwner() {
         String metadata = "{\"folderId\":\"" + FOLDER_ID + "\",\"documentId\":\"" + DOCUMENT_ID + "\",\"key\":"
-            + keyJson(user.email().address(), FOLDER_ID) + "}";
+            + keyJson(user.id().id(), FOLDER_ID) + "}";
 
         Response response = upload(fullBody(
             jsonPart("metadata", metadata),
@@ -260,8 +260,8 @@ public class DocumentUploadTest {
     @Test
     @DisplayName("Metadata without folderId leads to 400")
     void metadataWithoutFolderId() {
-        String metadata = "{\"folderOwner\":\"" + user.email().address() + "\",\"documentId\":\"" + DOCUMENT_ID
-            + "\",\"key\":" + keyJson(user.email().address(), FOLDER_ID) + "}";
+        String metadata = "{\"folderOwner\":\"" + user.id().id() + "\",\"documentId\":\"" + DOCUMENT_ID
+            + "\",\"key\":" + keyJson(user.id().id(), FOLDER_ID) + "}";
 
         Response response = upload(fullBody(
             jsonPart("metadata", metadata),
@@ -274,8 +274,8 @@ public class DocumentUploadTest {
     @Test
     @DisplayName("Metadata without documentId leads to 400")
     void metadataWithoutDocumentId() {
-        String metadata = "{\"folderOwner\":\"" + user.email().address() + "\",\"folderId\":\"" + FOLDER_ID
-            + "\",\"key\":" + keyJson(user.email().address(), FOLDER_ID) + "}";
+        String metadata = "{\"folderOwner\":\"" + user.id().id() + "\",\"folderId\":\"" + FOLDER_ID
+            + "\",\"key\":" + keyJson(user.id().id(), FOLDER_ID) + "}";
 
         Response response = upload(fullBody(
             jsonPart("metadata", metadata),
@@ -288,7 +288,7 @@ public class DocumentUploadTest {
     @Test
     @DisplayName("Metadata without a shared key leads to 400")
     void metadataWithoutKey() {
-        String metadata = "{\"folderOwner\":\"" + user.email().address() + "\",\"folderId\":\"" + FOLDER_ID
+        String metadata = "{\"folderOwner\":\"" + user.id().id() + "\",\"folderId\":\"" + FOLDER_ID
             + "\",\"documentId\":\"" + DOCUMENT_ID + "\"}";
 
         Response response = upload(fullBody(
@@ -315,7 +315,7 @@ public class DocumentUploadTest {
     void keyKidMismatch() {
         String wrongKid = "99999999-9999-9999-9999-999999999999";
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), wrongKid)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), wrongKid)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -325,12 +325,12 @@ public class DocumentUploadTest {
     @Test
     @DisplayName("A member uploads into someone else's shared folder - document in the member's tree, folder updated in the owner's")
     void memberUploadsIntoSharedFolder() {
-        User member = new User(new Email("member@example.com"));
+        User member = new User(new UserId("member@example.com"));
         documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
-            member, new Kid(member.email().address()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
 
         Response response = uploadAs(member, fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -342,10 +342,10 @@ public class DocumentUploadTest {
     @Test
     @DisplayName("A user who is neither owner nor folder member cannot upload and gets 403")
     void nonMemberCannotUpload() {
-        User stranger = new User(new Email("stranger@example.com"));
+        User stranger = new User(new UserId("stranger@example.com"));
 
         Response response = uploadAs(stranger, fullBody(
-            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.email().address(), FOLDER_ID)),
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -358,7 +358,7 @@ public class DocumentUploadTest {
         String unknownFolder = "00000000-0000-0000-0000-000000000000";
 
         Response response = upload(fullBody(
-            jsonPart("metadata", metadataJson(user, unknownFolder, DOCUMENT_ID, user.email().address(), unknownFolder)),
+            jsonPart("metadata", metadataJson(user, unknownFolder, DOCUMENT_ID, user.id().id(), unknownFolder)),
             binaryPart("folder", FOLDER_CONTENT),
             binaryPart("document", DOCUMENT_CONTENT)));
 
@@ -372,7 +372,7 @@ public class DocumentUploadTest {
     private Response uploadAs(User caller, String body) {
         return newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(caller.email().address()).path("documents")
+            .path("users").path(caller.id().id()).path("documents")
             .request()
             .cookie(cookieFor(caller))
             .post(entity(body, "multipart/form-data; boundary=" + BOUNDARY));
@@ -381,7 +381,7 @@ public class DocumentUploadTest {
     private byte[] getDocument(User owner, String documentId) {
         return newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users").path(owner.email().address()).path("documents").path(documentId)
+            .path("users").path(owner.id().id()).path("documents").path(documentId)
             .request("application/octet-stream")
             .cookie(cookieFor(owner))
             .get(byte[].class);
@@ -389,7 +389,7 @@ public class DocumentUploadTest {
 
     private Cookie cookieFor(User caller) {
         return user.equals(caller) ? userCookie
-            : new Cookie.Builder("token").value(tokenService.generateToken(caller, Integer.MAX_VALUE).token()).build();
+            : new Cookie.Builder("token").value(tokenService.generateAuthenticationToken(caller, Integer.MAX_VALUE).token()).build();
     }
 
     private static String metadataJson(User folderOwner, String folderId, String documentId, String issuer, String kid) {
@@ -398,7 +398,7 @@ public class DocumentUploadTest {
 
     private static String metadataJson(
         User folderOwner, String folderId, String documentId, String issuer, String kid, String folderETag) {
-        return "{\"folderOwner\":\"" + folderOwner.email().address() + "\","
+        return "{\"folderOwner\":\"" + folderOwner.id().id() + "\","
             + "\"folderId\":\"" + folderId + "\","
             + (folderETag == null ? "" : "\"folderETag\":\"" + folderETag.replace("\"", "\\\"") + "\",")
             + "\"documentId\":\"" + documentId + "\","

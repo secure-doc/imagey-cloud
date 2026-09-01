@@ -107,12 +107,12 @@ public class DocumentService {
         }
 
         LOG.info("Stored document {} for {} in folder {}/{}.",
-            documentId.id(), caller.email().address(), folderOwner.email().address(), folderId.id());
+            documentId.id(), caller.id().id(), folderOwner.id().id(), folderId.id());
         return documentRepository.etagOf(upload.folderContent());
     }
 
     private Object folderLock(User folderOwner, DocumentId folderId) {
-        int stripe = Math.floorMod(Objects.hash(folderOwner.email().address(), folderId.id()), FOLDER_LOCK_STRIPES);
+        int stripe = Math.floorMod(Objects.hash(folderOwner.id().id(), folderId.id()), FOLDER_LOCK_STRIPES);
         return folderLocks[stripe];
     }
 
@@ -141,8 +141,10 @@ public class DocumentService {
     }
 
     private static void requireComplete(DocumentUpload upload) {
-        if (upload.folderOwner() == null || upload.folderId() == null || upload.documentId() == null
-            || upload.sharedKey() == null || upload.folderContent() == null || upload.documentContent() == null) {
+        // folderContent / documentContent come from required multipart parts - a missing part is
+        // already a 400 from the multipart provider before this method runs, so they are never null here.
+        if (upload.folderOwner() == null || upload.folderId() == null
+            || upload.documentId() == null || upload.sharedKey() == null) {
             throw new ValidationException("folderOwner, folderId, documentId, key, folder and document are all required.");
         }
     }

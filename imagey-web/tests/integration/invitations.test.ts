@@ -41,7 +41,7 @@ test("accept open invitations", async ({ page }) => {
     .uponReceiving("a request of mary to accept bills invitation")
     .withRequest(
       "PUT",
-      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       (r) => {
         r.headers({
           "Content-Type": "application/json",
@@ -49,8 +49,8 @@ test("accept open invitations", async ({ page }) => {
         // We don't exact-match the encrypted key/chatId because they're
         // generated dynamically (see ContactService.acceptContactRequest).
         r.jsonBody({
-          inviter: "bill@imagey.cloud",
-          invitee: "mary@imagey.cloud",
+          inviter: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+          invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           chatId: MatchersV3.string("new-chat-id"),
@@ -84,7 +84,9 @@ test("accept open invitations", async ({ page }) => {
       .locator("..");
     await expect(invitationPanel).toBeVisible();
 
-    await expect(invitationPanel).toContainText("bill@imagey.cloud");
+    await expect(invitationPanel).toContainText(
+      "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    );
 
     // Act: Accept Alice
     const acceptAliceBtn = invitationPanel.getByRole("button", {
@@ -107,7 +109,7 @@ test("decline open invitations", async ({ page }) => {
     .uponReceiving("a request of mary to decline bills invitation")
     .withRequest(
       "DELETE",
-      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
     )
     .willRespondWith(204);
 
@@ -124,7 +126,9 @@ test("decline open invitations", async ({ page }) => {
       .locator("..");
     await expect(invitationPanel).toBeVisible();
 
-    await expect(invitationPanel).toContainText("bill@imagey.cloud");
+    await expect(invitationPanel).toContainText(
+      "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    );
 
     // Act: Decline Alice
     const declineAliceBtn = invitationPanel.getByRole("button", {
@@ -161,7 +165,7 @@ test("accept open invitations fails", async ({ page }) => {
     // so we don't pollute the Pact contract!
     let acceptPutAttempted = false;
     await page.route(
-      "**/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       async (route) => {
         if (route.request().method() === "PUT") {
           acceptPutAttempted = true;
@@ -216,7 +220,7 @@ test("decline open invitations fails", async ({ page }) => {
     // Override the DELETE request with Playwright's page.route to return 500
     let declineDeleteAttempted = false;
     await page.route(
-      "**/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       async (route) => {
         if (route.request().method() === "DELETE") {
           declineDeleteAttempted = true;
@@ -262,16 +266,20 @@ test("send contact request", async ({ page }) => {
   const builder = provider
     .addInteraction()
     .uponReceiving("a request of mary to send an invitation to bill")
-    .withRequest("POST", "/users/mary@imagey.cloud/contact-requests", (r) => {
-      r.headers({
-        "Content-Type": "application/json",
-      });
-      r.jsonBody({
-        inviter: "mary@imagey.cloud",
-        invitee: "bill@imagey.cloud",
-        publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-      });
-    })
+    .withRequest(
+      "POST",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => {
+        r.headers({
+          "Content-Type": "application/json",
+        });
+        r.jsonBody({
+          invitee: "bill@imagey.cloud",
+          inviterEmail: "mary@imagey.cloud",
+          publicKey: MatchersV3.like(TestData.mary.publicMainKey),
+        });
+      },
+    )
     .willRespondWith(201);
 
   await builder.executeTest(async (mockServer) => {

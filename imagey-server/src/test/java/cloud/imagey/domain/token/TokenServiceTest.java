@@ -108,7 +108,7 @@ public class TokenServiceTest {
         field.set(tokenService, Base64.getEncoder().encodeToString("short-secret".getBytes()));
 
         try {
-            tokenService.generateToken(new cloud.imagey.domain.user.User(new cloud.imagey.domain.mail.Email("mary@imagey.cloud")), 10000);
+            tokenService.generateAuthenticationToken(new cloud.imagey.domain.user.User(new cloud.imagey.domain.user.UserId("mary")), 10000);
             org.junit.jupiter.api.Assertions.fail("Should have thrown IllegalStateException");
         } catch (IllegalStateException e) {
             assertThat(e.getCause()).isInstanceOf(com.nimbusds.jose.JOSEException.class);

@@ -22,9 +22,9 @@ import jakarta.json.bind.annotation.JsonbCreator;
 import jakarta.json.bind.annotation.JsonbProperty;
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 public record EncryptedSharedKey(
     @JsonbProperty("issuer") @JsonbTypeAdapter(User.Adapter.class) User issuer,
@@ -44,6 +44,6 @@ public record EncryptedSharedKey(
         @JsonbProperty("issuer") String issuer,
         @JsonbProperty("kid") String kid,
         @JsonbProperty("sharedKey") String sharedKey) {
-        this(new User(new Email(issuer)), new Kid(kid), new EncryptedSymmetricKey(sharedKey));
+        this(new User(new UserId(issuer)), new Kid(kid), new EncryptedSymmetricKey(sharedKey));
     }
 }

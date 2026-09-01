@@ -3,9 +3,11 @@ import { deviceRepository } from "../device/DeviceRepository";
 import { authenticationService } from "./AuthenticationService";
 import { useTranslation } from "react-i18next";
 import { deviceService } from "../device/DeviceService";
+import { UserId } from "./UserId";
 
 interface DeviceSetupDialogProperties {
-  email: string;
+  userId: UserId;
+  email?: string;
   deviceId: string;
   onPrivateKeysDecrypted: (
     privateMainKey: JsonWebKey,
@@ -15,6 +17,7 @@ interface DeviceSetupDialogProperties {
 }
 
 export default function DeviceSetupDialog({
+  userId,
   email,
   deviceId,
   onPrivateKeysDecrypted,
@@ -42,7 +45,7 @@ export default function DeviceSetupDialog({
           .unlockLocalDeviceKey(deviceId, password)
           .then((privateDeviceKey) =>
             authenticationService
-              .loadPrivateMainKey(email, deviceId, privateDeviceKey)
+              .loadPrivateMainKey(userId, deviceId, privateDeviceKey)
               .then((privateMainKey) => ({ privateMainKey, privateDeviceKey })),
           )
       }

@@ -39,7 +39,7 @@ public class UserRepository extends AbstractUserFileRepository {
     private static final Charset UTF_8 = Charset.forName("UTF-8");
 
     public void persist(User user) {
-        File userHome = createNewFile(rootPath(), user.email().address());
+        File userHome = createNewFile(rootPath(), user.id().id());
         mkdir(userHome);
     }
 

@@ -24,8 +24,10 @@ test("mary registers new device", async ({ page }) => {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -35,8 +37,9 @@ test("mary registers new device", async ({ page }) => {
     .withRequest(
       "POST",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/public-keys/",
       }),
       (r) =>
         r.headers({ "Content-Type": "application/json" }).jsonBody({
@@ -59,8 +62,9 @@ test("mary registers new device", async ({ page }) => {
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/public-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
@@ -77,8 +81,9 @@ test("mary registers new device", async ({ page }) => {
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/private-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
@@ -108,7 +113,9 @@ test("mary registers new device", async ({ page }) => {
       });
       page.on("pageerror", (err) => console.log("PAGE ERROR:", err));
       page.on("console", (msg) => console.log("CONSOLE:", msg.text()));
-      await page.goto("/?email=mary@imagey.cloud");
+      await page.goto(
+        "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
@@ -146,8 +153,10 @@ test("mary unlocks new device", async ({ page }) => {
     .addInteraction()
     .given("marys second device registered")
     .uponReceiving("a request of mary to get devices")
-    .withRequest("GET", "/users/mary@imagey.cloud/devices", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
@@ -162,7 +171,7 @@ test("mary unlocks new device", async ({ page }) => {
     .uponReceiving("a request of mary to get public key of second device")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -177,7 +186,7 @@ test("mary unlocks new device", async ({ page }) => {
     )
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/private-keys/`,
       (r) =>
         r.headers({ "Content-Type": "application/json" }).jsonBody({
           kid: "0",
@@ -253,8 +262,10 @@ test("mary logs into new device", async ({ page }) => {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -266,7 +277,7 @@ test("mary logs into new device", async ({ page }) => {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -281,7 +292,7 @@ test("mary logs into new device", async ({ page }) => {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -298,7 +309,7 @@ test("mary logs into new device", async ({ page }) => {
     .uponReceiving("a request of mary to get public key of second device")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -316,7 +327,7 @@ test("mary logs into new device", async ({ page }) => {
     .uponReceiving("a request of mary to get public key of first device")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -347,7 +358,9 @@ test("mary logs into new device", async ({ page }) => {
       });
       page.on("pageerror", (err) => console.log("PAGE ERROR:", err));
       page.on("console", (msg) => console.log("CONSOLE:", msg.text()));
-      await page.goto("/?email=mary@imagey.cloud");
+      await page.goto(
+        "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
@@ -383,8 +396,10 @@ test("mary successfully activates newly registered device after unlocking", asyn
     .uponReceiving(
       "a request of mary to get public key for successful unlock retry",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -393,8 +408,10 @@ test("mary successfully activates newly registered device after unlocking", asyn
     .uponReceiving(
       "a second request of mary to get public key for successful unlock retry",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -406,8 +423,9 @@ test("mary successfully activates newly registered device after unlocking", asyn
     .withRequest(
       "POST",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/public-keys/",
       }),
       (r) =>
         r.headers({ "Content-Type": "application/json" }).jsonBody({
@@ -430,7 +448,7 @@ test("mary successfully activates newly registered device after unlocking", asyn
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -446,8 +464,9 @@ test("mary successfully activates newly registered device after unlocking", asyn
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/public-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
@@ -465,8 +484,9 @@ test("mary successfully activates newly registered device after unlocking", asyn
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/private-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
@@ -501,7 +521,9 @@ test("mary successfully activates newly registered device after unlocking", asyn
       });
       page.on("pageerror", (err) => console.log("PAGE ERROR:", err));
       page.on("console", (msg) => console.log("CONSOLE:", msg.text()));
-      await page.goto("/?email=mary@imagey.cloud");
+      await page.goto(
+        "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();

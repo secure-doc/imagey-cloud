@@ -22,8 +22,8 @@ import jakarta.json.bind.annotation.JsonbCreator;
 import jakarta.json.bind.annotation.JsonbProperty;
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 public record Message(
     @JsonbProperty("id") @JsonbTypeAdapter(MessageId.Adapter.class) MessageId id,
@@ -39,7 +39,7 @@ public record Message(
         @JsonbProperty("content") String content) {
 
         this(ofNullable(messageId).map(MessageId::new).orElse(null),
-            new User(new Email(sender)),
+            new User(new UserId(sender)),
             ofNullable(channel).map(Channel::new).orElse(null),
             new MessageContent(content));
     }

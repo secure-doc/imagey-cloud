@@ -39,7 +39,10 @@ import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.token.TokenService.TokenType;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
+import cloud.imagey.domain.user.UserMappingService;
 import cloud.imagey.domain.user.UserRepository;
 
 @ApplicationScoped
@@ -51,6 +54,8 @@ public class AuthenticationFilter extends HttpFilter {
     private TokenService tokenService;
     @Inject
     private UserRepository userRepository;
+    @Inject
+    private UserMappingService userMappingService;
 
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -58,21 +63,27 @@ public class AuthenticationFilter extends HttpFilter {
         LOG.info("Authentication started");
         Token authenticationToken = extractToken(request.getRequestURI());
         Optional<DecodedToken> decoded = tokenService.decode(authenticationToken);
-        if (decoded.isEmpty()) {
-            LOG.info("Decoding not successful");
+        if (decoded.isEmpty() || !decoded.get().isOfType(TokenType.LOGIN)) {
+            LOG.info("Decoding not successful or wrong token type");
             response.sendError(SC_FORBIDDEN);
             return;
         }
         Email email = new Email(decoded.get().jwt().getSubject());
-        User user = new User(email);
+        Optional<UserId> userId = userMappingService.findUserId(email);
+        if (userId.isEmpty()) {
+            LOG.info("No user mapping for the token subject");
+            response.sendError(SC_NOT_FOUND);
+            return;
+        }
+        User user = new User(userId.get());
         if (!userRepository.exists(user)) {
             LOG.info("User not found");
             response.sendError(SC_NOT_FOUND);
             return;
         }
-        Token token = tokenService.generateToken(user, ONE_HOUR);
+        Token token = tokenService.generateAuthenticationToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/");
-        response.sendRedirect("/?email=" + email.address());
+        response.sendRedirect("/?email=" + email.address() + "&userId=" + user.id().id());
     }
 
     private Token extractToken(String requestUri) {

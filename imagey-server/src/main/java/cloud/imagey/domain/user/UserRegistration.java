@@ -21,15 +21,14 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedPrivateKey;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.PublicKey;
-import cloud.imagey.domain.mail.Email;
 
 // Registration bootstraps four documents at once - settings, documentList, chatList and profile -
-// each with its own id (settings always uses the user's own email, see UserService.register), a
+// each with its own id (settings always uses the user's own userId, see UserService.register), a
 // self-key (EncryptedSharedKey, whose kid is chosen by the client - see
 // AuthenticationService.ts/AuthenticationRepository.ts) and its encrypted content.
 public record UserRegistration(
     DeviceId deviceId,
-    Email email,
+    UserId userId,
     EncryptedPrivateKey encryptedPrivateKey,
     PublicKey mainPublicKey,
     PublicKey devicePublicKey,

@@ -42,9 +42,9 @@ import org.junit.jupiter.api.Test;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 import cloud.imagey.junit.GreenMail;
 
 // Covers the metadata GET/PUT of DocumentResource. The multipart upload contract lives in
@@ -74,8 +74,8 @@ public class DocumentResourceTest {
         }
         data.mkdirs();
 
-        user = new User(new Email("owner@example.com"));
-        userCookie = new Cookie.Builder("token").value(tokenService.generateToken(user, Integer.MAX_VALUE).token()).build();
+        user = new User(new UserId("owner@example.com"));
+        userCookie = new Cookie.Builder("token").value(tokenService.generateAuthenticationToken(user, Integer.MAX_VALUE).token()).build();
     }
 
     @Test
@@ -109,7 +109,7 @@ public class DocumentResourceTest {
 
     private jakarta.ws.rs.client.Invocation.Builder document(DocumentId documentId) {
         return newClient().target("http://localhost:" + config.getHttpPort())
-            .path("users").path(user.email().address()).path("documents").path(documentId.id())
+            .path("users").path(user.id().id()).path("documents").path(documentId.id())
             .request()
             .cookie(userCookie);
     }

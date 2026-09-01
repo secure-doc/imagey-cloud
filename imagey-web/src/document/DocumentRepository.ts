@@ -11,7 +11,7 @@ export class PreconditionFailedError extends Error {
 
 export const documentRepository = {
   uploadDocument: async (
-    email: string,
+    userId: string,
     folderOwner: string,
     folderId: string,
     folderContent: ArrayBuffer,
@@ -33,7 +33,7 @@ export const documentRepository = {
     // "metadata" part with every scalar value, plus the opaque encrypted blobs as their own
     // binary parts. The content type on the JSON blob is mandatory - a plain Blob defaults to
     // application/octet-stream, which CXF routes to the wrong MessageBodyReader.
-    // `email` is the caller (the new document lands in their tree); `folderOwner` is whose tree the
+    // `userId` is the caller (the new document lands in their tree); `folderOwner` is whose tree the
     // parent folder lives in - the same account when adding to one's own folder.
     formData.append(
       "metadata",
@@ -66,7 +66,7 @@ export const documentRepository = {
       );
     }
 
-    const response = await fetch(`/users/${email}/documents`, {
+    const response = await fetch(`/users/${userId}/documents`, {
       method: "POST",
       credentials: "same-origin",
       body: formData,
@@ -86,10 +86,10 @@ export const documentRepository = {
   },
 
   loadDocument: async (
-    email: string,
+    userId: string,
     documentId: string,
   ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
-    const url = `/users/${email}/documents/${documentId}`;
+    const url = `/users/${userId}/documents/${documentId}`;
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -105,12 +105,12 @@ export const documentRepository = {
   },
 
   updateDocumentMetadata: async (
-    email: string,
+    userId: string,
     documentId: string,
     metadata: ArrayBuffer,
     etag?: string | null,
   ): Promise<string | null> => {
-    const response = await fetch(`/users/${email}/documents/${documentId}`, {
+    const response = await fetch(`/users/${userId}/documents/${documentId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/octet-stream",
@@ -130,13 +130,13 @@ export const documentRepository = {
   },
 
   storeContent: async (
-    email: string,
+    userId: string,
     documentId: string,
     contentId: string,
     content: ArrayBuffer,
   ): Promise<void> => {
     const response = await fetch(
-      `/users/${email}/documents/${documentId}/files/${contentId}`,
+      `/users/${userId}/documents/${documentId}/files/${contentId}`,
       {
         method: "PUT",
         headers: {
@@ -150,7 +150,7 @@ export const documentRepository = {
   },
 
   loadKey: async (
-    email: string,
+    userId: string,
     documentId: string,
     kid: string,
   ): Promise<{
@@ -159,9 +159,9 @@ export const documentRepository = {
     kid: string;
     sharedKey: string;
   }> => {
-    const targetKid = kid ?? email;
+    const targetKid = kid ?? userId;
     const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/keys/" + targetKid,
+      "/users/" + userId + "/documents/" + documentId + "/keys/" + targetKid,
       {
         method: "GET",
         headers: {
@@ -174,11 +174,11 @@ export const documentRepository = {
     return resolve(response, () => response.json());
   },
   loadContent: async (
-    email: string,
+    userId: string,
     documentId: string,
     contentId: string,
   ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
-    const path = `/users/${email}/documents/${documentId}/files/${contentId}`;
+    const path = `/users/${userId}/documents/${documentId}/files/${contentId}`;
     const response = await fetch(path, {
       method: "GET",
       headers: {
@@ -192,12 +192,12 @@ export const documentRepository = {
   },
 
   storeSharedKey: async (
-    email: string,
+    userId: string,
     documentId: string,
     key: { issuer: string; kid: string; sharedKey: string },
   ): Promise<void> => {
     const response = await fetch(
-      "/users/" + email + "/documents/" + documentId + "/keys",
+      "/users/" + userId + "/documents/" + documentId + "/keys",
       {
         method: "POST",
         headers: {

@@ -45,7 +45,7 @@ test("navigate to chats", async ({ page }) => {
       response
         .url()
         .includes(
-          `/users/mary@imagey.cloud/documents/${TestData.mary.settings!.chats}/keys/`,
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}/keys/`,
         ),
     );
     await chatsLink.click();
@@ -53,7 +53,7 @@ test("navigate to chats", async ({ page }) => {
     // Then
     await expect(
       page.getByRole("heading", {
-        name: "bill@imagey.cloud",
+        name: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       }),
     ).toBeVisible();
     await chatsKeyResponse;
@@ -82,7 +82,7 @@ test("accept open invitations", async ({ page }) => {
     .uponReceiving("a request of mary to accept bills invitation")
     .withRequest(
       "PUT",
-      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       (r) => {
         r.headers({
           "Content-Type": "application/json",
@@ -90,8 +90,8 @@ test("accept open invitations", async ({ page }) => {
         // We don't exact-match the encrypted key/chatId because they're
         // generated dynamically (see ContactService.acceptContactRequest).
         r.jsonBody({
-          inviter: "bill@imagey.cloud",
-          invitee: "mary@imagey.cloud",
+          inviter: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+          invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           chatId: MatchersV3.string("new-chat-id"),
@@ -131,11 +131,13 @@ test("accept open invitations", async ({ page }) => {
     // Then Invitation Visible
     const invitationPanel = page
       .getByRole("heading", {
-        name: "bill@imagey.cloud",
+        name: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       })
       .locator("../..");
     await expect(invitationPanel).toBeVisible();
-    await expect(invitationPanel).toContainText("bill@imagey.cloud");
+    await expect(invitationPanel).toContainText(
+      "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    );
 
     // Act: Accept Laura
     const acceptLauraBtn = invitationPanel.getByRole("button", {
@@ -160,7 +162,7 @@ test("decline open invitations", async ({ page }) => {
     .uponReceiving("a request of mary to decline bills invitation")
     .withRequest(
       "DELETE",
-      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
     )
     .willRespondWith(204);
 
@@ -183,11 +185,13 @@ test("decline open invitations", async ({ page }) => {
     // Then Invitation Visible
     const invitationPanel = page
       .getByRole("heading", {
-        name: "bill@imagey.cloud",
+        name: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       })
       .locator("../..");
     await expect(invitationPanel).toBeVisible();
-    await expect(invitationPanel).toContainText("bill@imagey.cloud");
+    await expect(invitationPanel).toContainText(
+      "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    );
 
     // Act: Decline Laura
     const declineAliceBtn = invitationPanel.getByRole("button", {
@@ -233,7 +237,7 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
     .uponReceiving("a request of mary to store the picked-up contact")
     .withRequest(
       "PUT",
-      `/users/mary@imagey.cloud/documents/${TestData.mary.settings!.chats}`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}`,
       (r) => {
         r.headers({ "Content-Type": "application/octet-stream" });
       },
@@ -246,18 +250,18 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
     .uponReceiving("a request of mary to confirm receipt of bills contact")
     .withRequest(
       "PUT",
-      "/users/mary@imagey.cloud/contact-requests/bill@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       (r) => {
         r.headers({ "Content-Type": "application/json" });
         // chatKey is the chat Document key re-wrapped under Mary's own
         // chats-document key (issuer = Mary); the server files it under the
         // chat Document in Bill's tree so Mary keeps access to the chat.
         r.jsonBody({
-          inviter: "mary@imagey.cloud",
-          invitee: "bill@imagey.cloud",
+          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          invitee: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
           status: "RECEIVED",
           chatKey: {
-            issuer: MatchersV3.string("mary@imagey.cloud"),
+            issuer: MatchersV3.string("d20cf443-4f96-418f-a957-c8cbef8677c3"),
             kid: MatchersV3.string(TestData.mary.settings!.chats),
             sharedKey: MatchersV3.string("ZHVtbXktY2hhdC1rZXk="),
           },
@@ -285,7 +289,9 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
     // Bill shows up as a contact automatically. .first() because the
     // contact list item shows the email twice (heading + subtitle) - same
     // pattern used for other contacts elsewhere in this suite.
-    await expect(page.getByText("bill@imagey.cloud").first()).toBeVisible();
+    await expect(
+      page.getByText("a358c2ed-07d4-4a25-a7db-d860d5c0b895").first(),
+    ).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

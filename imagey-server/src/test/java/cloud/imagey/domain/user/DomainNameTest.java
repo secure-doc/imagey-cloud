@@ -82,4 +82,14 @@ class DomainNameTest {
         DomainName domain = new DomainName(null);
         assertEquals("imagey.cloud", domain.getHost());
     }
+
+    @Test
+    void testStartUrlReturnsValue() {
+        assertEquals("https://secure-doc.store", new DomainName("https://secure-doc.store").startUrl());
+    }
+
+    @Test
+    void testStartUrlNullFallback() {
+        assertEquals("https://imagey.cloud", new DomainName(null).startUrl());
+    }
 }

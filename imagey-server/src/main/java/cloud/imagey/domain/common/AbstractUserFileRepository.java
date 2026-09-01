@@ -28,8 +28,8 @@ import cloud.imagey.infrastructure.common.AbstractFileRepository;
  */
 public abstract class AbstractUserFileRepository extends AbstractFileRepository {
 
-    /** The storage tree of {@code user}, {@code <root.path>/<email>}. */
+    /** The storage tree of {@code user}, {@code <root.path>/<userId>}. */
     protected File getUserHome(User user) {
-        return getUserHome(user.email().address());
+        return getUserHome(user.id().id());
     }
 }

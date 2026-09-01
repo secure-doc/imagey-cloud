@@ -9,18 +9,18 @@ import DocumentMetadata from "../document/DocumentMetadata";
 import ImageList from "../components/ImageList";
 
 interface SendMessageFormProps {
-  userEmail: string;
-  contactEmail: string;
-  ownerEmail: string;
+  userId: string;
+  contactUserId: string;
+  ownerId: string;
   chatId: string;
   sharedKey: JsonWebKey;
   onMessageSent: (message: Message) => void;
 }
 
 export function SendMessageForm({
-  userEmail,
-  contactEmail,
-  ownerEmail,
+  userId,
+  contactUserId,
+  ownerId,
   chatId,
   sharedKey,
   onMessageSent,
@@ -35,13 +35,13 @@ export function SendMessageForm({
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    if (showDialog && !documents && userEmail && settingsKey) {
+    if (showDialog && !documents && userId && settingsKey) {
       documentService
-        .loadFolderChildren(userEmail, documentsId, userEmail, settingsKey)
+        .loadFolderChildren(userId, documentsId, userId, settingsKey)
         .then((docs) => setDocuments(docs))
         .catch(console.error);
     }
-  }, [showDialog, documents, userEmail, documentsId, settingsKey]);
+  }, [showDialog, documents, userId, documentsId, settingsKey]);
 
   useEffect(() => {
     if (showDialog) {
@@ -53,15 +53,14 @@ export function SendMessageForm({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !userEmail || !contactEmail || !sharedKey)
-      return;
+    if (!inputMessage.trim() || !userId || !contactUserId || !sharedKey) return;
 
     const messageText = inputMessage;
     setInputMessage("");
     try {
       const newMessage = await messageService.sendEncryptedMessage(
-        userEmail,
-        ownerEmail,
+        userId,
+        ownerId,
         chatId,
         messageText,
         sharedKey,
@@ -77,21 +76,21 @@ export function SendMessageForm({
     setShowDialog(false);
     try {
       await documentService.shareDocument(
-        userEmail,
+        userId,
         document,
-        contactEmail,
+        contactUserId,
         sharedKey,
       );
 
       const payload = JSON.stringify({
         type: "shared-document",
         documentId: document.documentId,
-        owner: userEmail,
+        owner: userId,
       });
 
       const newMessage = await messageService.sendEncryptedMessage(
-        userEmail,
-        ownerEmail,
+        userId,
+        ownerId,
         chatId,
         payload,
         sharedKey,

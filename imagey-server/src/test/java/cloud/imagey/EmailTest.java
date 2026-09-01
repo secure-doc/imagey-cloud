@@ -48,19 +48,16 @@ public class EmailTest {
 
     @Test
     public void emailServerNotAccessible() throws IOException, MessagingException {
-        // Given
-        String verificationPath = "users/joe@imagey.cloud/verifications";
-
         // Force an invalid port so MailService fails even if Docker Greenmail is running on 3025
         System.setProperty("smtp.port", "12345");
         try {
             // When
             Response response = newClient()
                 .target("http://localhost:" + config.getHttpPort())
-                .path(verificationPath)
+                .path("users/verifications")
                 .request()
                 .header("Origin", "https://secure-doc.store")
-                .post(json(""));
+                .post(json("{\"email\":\"joe@imagey.cloud\"}"));
 
             // Then
             assertThat(response.getStatus()).isEqualTo(SERVICE_UNAVAILABLE.getStatusCode());
