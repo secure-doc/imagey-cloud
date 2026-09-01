@@ -46,27 +46,19 @@ test("new user enters wrong email", async ({ page }) => {
 });
 
 test("new user visits page", async ({ page }) => {
-  // Given
-  provider
-    .addInteraction()
-    .uponReceiving("a request of joe to verify his email")
-    .withRequest("POST", "/users/joe@imagey.cloud/verifications/", (r) =>
-      r.headers({
-        "Content-Type": "application/json",
-      }),
-    )
-    .willRespondWith(201);
-
+  // Given: a brand-new visitor has no userId, so the client never looks up a
+  // public key - it just asks the server to mail a verification link.
   await provider
     .addInteraction()
-    .given("User is unauthenticated")
-    .uponReceiving("a request of unauthenticated joe to get public key")
-    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        "Content-Type": "application/json",
-      }),
+    .uponReceiving("a request of joe to verify his email")
+    .withRequest("POST", "/users/verifications", (r) =>
+      r
+        .headers({
+          "Content-Type": "application/json",
+        })
+        .jsonBody({ email: "joe@imagey.cloud" }),
     )
-    .willRespondWith(401)
+    .willRespondWith(201)
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
@@ -84,21 +76,17 @@ test("new user visits page", async ({ page }) => {
 });
 
 test("existing user visits page with new device", async ({ page }) => {
-  // Given
-  provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        "Content-Type": "application/json",
-      }),
-    )
-    .willRespondWith(401);
-
+  // Given: no userId in local storage or on the URL, so the client cannot
+  // resolve the account - it goes straight to the email/verification flow
+  // without ever looking up a public key.
   await provider
     .addInteraction()
     .uponReceiving("a request of mary to login")
-    .withRequest("POST", "/users/mary@imagey.cloud/verifications/")
+    .withRequest("POST", "/users/verifications", (r) =>
+      r
+        .headers({ "Content-Type": "application/json" })
+        .jsonBody({ email: "mary@imagey.cloud" }),
+    )
     .willRespondWith(202)
     .executeTest(async (mockServer) => {
       // When
@@ -122,10 +110,13 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
     .addInteraction()
     .given("User has invalid token")
     .uponReceiving("a request of mary to get symmetric key")
-    .withRequest("GET", "/users/mary@imagey.cloud/symmetric-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/symmetric-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(403);
 
@@ -159,7 +150,7 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
           encryptedPrivateKey: Matchers.string("dummyEncryptedPrivateKey"),
           settings: Matchers.string("e30="),
           settingsSharedKey: {
-            issuer: "mary@imagey.cloud",
+            issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
             kid: "0",
             sharedKey: Matchers.string("ZHVtbXlTaGFyZWRLZXk="),
           },
@@ -170,11 +161,17 @@ test.skip("existing user visits page with invalid token", async ({ page }) => {
       // When
       await setupMockServer(page, mockServer);
       await page.evaluate(() =>
-        localStorage.setItem("imagey.user", "mary@imagey.cloud"),
+        localStorage.setItem(
+          "imagey.user",
+          "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        ),
       );
       await page.evaluate(
         (deviceId) =>
-          localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+          localStorage.setItem(
+            "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+            deviceId,
+          ),
         TestData.mary.devices[0].deviceId,
       );
       await page.goto("/");
@@ -195,10 +192,13 @@ test("new user clicks registration link", async ({ page }) => {
   provider
     .addInteraction()
     .uponReceiving("a request of registering joe to get public key")
-    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(404);
 
@@ -230,7 +230,9 @@ test("new user clicks registration link", async ({ page }) => {
   // one of Mary's fixed fixtures, and the crypto.subtle.decrypt override
   // below for how the one undecryptable envelope (wrapped under joe's
   // randomly-generated, in-browser mainKeyPair) is handled.
-  const { settingsKeyJwk } = await prepareFreshUserSettings("joe@imagey.cloud");
+  const { settingsKeyJwk } = await prepareFreshUserSettings(
+    "35c34cb3-559d-4001-a67b-23259e45e69e",
+  );
   // The chats document (with an empty contacts list) is already mocked by
   // prepareFreshUserSettings() above, same as the document list.
 
@@ -238,10 +240,13 @@ test("new user clicks registration link", async ({ page }) => {
     .addInteraction()
     .given("Joe is registered")
     .uponReceiving("a request of joe to get contact requests")
-    .withRequest("GET", "/users/joe@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]))
     .executeTest(async (mockServer) => {
@@ -258,7 +263,9 @@ test("new user clicks registration link", async ({ page }) => {
           }
         };
       }, settingsKeyJwk);
-      await page.goto("/?email=joe@imagey.cloud");
+      await page.goto(
+        "/?email=joe@imagey.cloud&userId=35c34cb3-559d-4001-a67b-23259e45e69e",
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
@@ -301,8 +308,8 @@ test("new user registers via invite link and accepts the invitation", async ({
     .willRespondWith(302, (r) =>
       r.headers({
         Location: MatchersV3.regex(
-          "/\\?email=joe@imagey\\.cloud&inviter=mary@imagey\\.cloud",
-          `/?email=joe@imagey.cloud&inviter=mary@imagey.cloud`,
+          "/\\?email=joe@imagey\\.cloud&userId=35c34cb3-559d-4001-a67b-23259e45e69e&inviter=d20cf443-4f96-418f-a957-c8cbef8677c3",
+          `/?email=joe@imagey.cloud&userId=35c34cb3-559d-4001-a67b-23259e45e69e&inviter=d20cf443-4f96-418f-a957-c8cbef8677c3`,
         ),
       }),
     );
@@ -312,10 +319,13 @@ test("new user registers via invite link and accepts the invitation", async ({
     .uponReceiving(
       "a request of registering joe (invited by mary) to get public key",
     )
-    .withRequest("GET", "/users/joe@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(404);
 
@@ -334,7 +344,9 @@ test("new user registers via invite link and accepts the invitation", async ({
     )
     .willRespondWith(200);
 
-  const { settingsKeyJwk } = await prepareFreshUserSettings("joe@imagey.cloud");
+  const { settingsKeyJwk } = await prepareFreshUserSettings(
+    "35c34cb3-559d-4001-a67b-23259e45e69e",
+  );
 
   // Accepting mary's invitation as the last step of registration also
   // creates the chat's own Document - same shape as
@@ -342,18 +354,22 @@ test("new user registers via invite link and accepts the invitation", async ({
   provider
     .addInteraction()
     .uponReceiving("a request to create joes chat with mary on registration")
-    .withRequest("POST", "/users/joe@imagey.cloud/documents", (r) => {
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=.*",
-        ),
-      });
-    })
+    .withRequest(
+      "POST",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
-          "/users/joe@imagey.cloud/documents/new-chat-id",
+          "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/new-chat-id",
         ),
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
@@ -373,7 +389,7 @@ test("new user registers via invite link and accepts the invitation", async ({
     )
     .withRequest(
       "PUT",
-      "/users/joe@imagey.cloud/contact-requests/mary@imagey.cloud",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/contact-requests/d20cf443-4f96-418f-a957-c8cbef8677c3",
       (r) => {
         r.headers({
           "Content-Type": "application/json",
@@ -381,8 +397,8 @@ test("new user registers via invite link and accepts the invitation", async ({
         // The encrypted key/chatId are generated dynamically (see
         // ContactService.acceptContactRequest) - only assert the shape.
         r.jsonBody({
-          inviter: "mary@imagey.cloud",
-          invitee: "joe@imagey.cloud",
+          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          invitee: "35c34cb3-559d-4001-a67b-23259e45e69e",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           chatId: MatchersV3.string("new-chat-id"),
@@ -396,16 +412,19 @@ test("new user registers via invite link and accepts the invitation", async ({
     .addInteraction()
     .given("mary has invited joe")
     .uponReceiving("a request of joe to get contact requests after registering")
-    .withRequest("GET", "/users/joe@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          inviter: "mary@imagey.cloud",
-          invitee: "joe@imagey.cloud",
+          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          invitee: "35c34cb3-559d-4001-a67b-23259e45e69e",
           status: "INVITED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
         },
@@ -429,7 +448,9 @@ test("new user registers via invite link and accepts the invitation", async ({
       // Follow the emailed link; the mock server answers 302 and the browser
       // lands on the SPA with ?email/?inviter set.
       await page.goto("/invitations/pact-invitation-token");
-      await expect(page).toHaveURL(/inviter=mary@imagey\.cloud/);
+      await expect(page).toHaveURL(
+        /inviter=d20cf443-4f96-418f-a957-c8cbef8677c3/,
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
@@ -456,8 +477,10 @@ test("mary logges in with new device", async ({ page }) => {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
   provider
@@ -466,8 +489,9 @@ test("mary logges in with new device", async ({ page }) => {
     .withRequest(
       "POST",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/public-keys/",
       }),
       (r) =>
         r.headers({ "Content-Type": "application/json" }).jsonBody({
@@ -489,8 +513,9 @@ test("mary logges in with new device", async ({ page }) => {
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/public-keys/0",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/public-keys/0`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/public-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
@@ -506,8 +531,9 @@ test("mary logges in with new device", async ({ page }) => {
     .withRequest(
       "GET",
       Matchers.regex({
-        generate: `/users/mary@imagey.cloud/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
-        matcher: "/users/mary@imagey\\.cloud/devices/.+/private-keys/0",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/private-keys/0`,
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/private-keys/0",
       }),
       (r) => r.headers({ Accept: "application/json" }),
     )
@@ -515,7 +541,9 @@ test("mary logges in with new device", async ({ page }) => {
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
-      await page.goto("/?email=mary@imagey.cloud");
+      await page.goto(
+        "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
@@ -552,7 +580,9 @@ test("existing user clicks login link on existing device", async ({ page }) => {
     await page.evaluate(() =>
       localStorage.setItem("imagey.user", "bob@imagey.cloud"),
     );
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
 
     await inputMarysPassword(page);
 
@@ -563,6 +593,36 @@ test("existing user clicks login link on existing device", async ({ page }) => {
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
+});
+
+test("unauthenticated with a userId but no device and no email falls back to the email dialog", async ({
+  page,
+}) => {
+  // Given: the redirect carried only ?userId= (no ?email=), this browser has
+  // never held a device for the account, and the public-key lookup says the
+  // session is not authenticated. With nothing else to go on, the component
+  // asks for the address again so the mail flow can restart.
+  await provider
+    .addInteraction()
+    .given("User has invalid token")
+    .uponReceiving(
+      "a request of an unauthenticated user to get their public key",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(401)
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await page.goto("/?userId=d20cf443-4f96-418f-a957-c8cbef8677c3");
+
+      // Then
+      await expect(page.getByPlaceholder("email@imagey.cloud")).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
 });
 
 test("visit page on existing device", async ({ page }) => {
@@ -596,8 +656,10 @@ test("visit page on existing device with wrong password", async ({ page }) => {
   await provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey))
     .executeTest(async (mockServer) => {
@@ -624,15 +686,14 @@ test("login with missing email", async ({ page }) => {
   const provider = await prepareMarysContactRequests();
 
   await provider.executeTest(async (mockServer) => {
-    // When
+    // When: the stored account id is gone, but Mary follows the login link from
+    // her mailbox - the server resolves her address and puts the id back on the
+    // redirect, so the client can pick up where it left off.
     await setupMockServer(page, mockServer);
     await page.evaluate(() => localStorage.removeItem("imagey.user"));
-    await page.goto("/");
-    const emailInput = page.getByPlaceholder("email@imagey.cloud");
-    await expect(emailInput).toBeVisible();
-
-    await emailInput.fill("mary@imagey.cloud");
-    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
 
     await inputMarysPassword(page);
 
@@ -650,21 +711,30 @@ test("login with lost private key", async ({ page }) => {
   await provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey))
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
       await page.evaluate(() =>
-        localStorage.setItem("imagey.user", "mary@imagey.cloud"),
+        localStorage.setItem(
+          "imagey.user",
+          "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        ),
       );
       await page.evaluate(
         (deviceId) =>
-          localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+          localStorage.setItem(
+            "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+            deviceId,
+          ),
         TestData.mary.devices[0].deviceId,
       );
       await page.goto("/");
@@ -682,15 +752,19 @@ test("switch user using wrong user button", async ({ page }) => {
   await provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key for switch user")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey))
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
       // Pass email as query param, this will open DeviceRegistrationDialog (since deviceId is missing)
-      await page.goto("/?email=mary@imagey.cloud");
+      await page.goto(
+        "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+      );
 
       // Verify we are on DeviceRegistrationDialog (Password input is visible)
       const passwordInput = page.getByLabel("Password", { exact: true });
@@ -731,8 +805,10 @@ test("existing user authenticates via challenge-response on existing device", as
     .uponReceiving(
       "a request to get public key, returning 401 to trigger challenge",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(401);
 
@@ -743,7 +819,7 @@ test("existing user authenticates via challenge-response on existing device", as
     .uponReceiving("a request for a challenge")
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/challenges`,
     )
     .willRespondWith(201, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody({
@@ -764,7 +840,7 @@ test("existing user authenticates via challenge-response on existing device", as
     .uponReceiving("a request to authenticate with a challenge signature")
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/authentications`,
       (r) =>
         r.headers({ "Content-Type": "application/json" }).jsonBody({
           signature: Matchers.string("any-signature"),
@@ -783,7 +859,7 @@ test("existing user authenticates via challenge-response on existing device", as
     .uponReceiving("a request to get private key after authentication")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -799,11 +875,14 @@ test("existing user authenticates via challenge-response on existing device", as
     .given("marys second device registered")
     .given("marys second device unlocked")
     .uponReceiving("a request to get public main key after authentication")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-        Cookie: Matchers.like("Authorization="),
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+          Cookie: Matchers.like("Authorization="),
+        }),
     )
     .willRespondWith(200, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody(
@@ -823,7 +902,7 @@ test("existing user authenticates via challenge-response on existing device", as
     .uponReceiving("a request to get public device key after authentication")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -855,8 +934,10 @@ test("existing user authenticates via challenge-response on existing device", as
     .given("marys second device registered")
     .given("marys second device unlocked")
     .uponReceiving("a request of mary to get contact requests after challenge")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]))
     .executeTest(async (mockServer) => {
@@ -871,7 +952,7 @@ test("existing user authenticates via challenge-response on existing device", as
       await passwordInput.fill("MarysPassword123");
 
       const authenticationsResponse = page.waitForResponse(
-        "**/users/mary@imagey.cloud/devices/*/authentications*",
+        "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/*/authentications*",
       );
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
@@ -908,8 +989,10 @@ test("existing user authenticates via challenge-response and selects keep me log
     .uponReceiving(
       "a request to get public key, returning 401 to trigger challenge with keep me logged in",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(401);
 
@@ -920,7 +1003,7 @@ test("existing user authenticates via challenge-response and selects keep me log
     .uponReceiving("a request for a challenge with keep me logged in")
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/challenges`,
     )
     .willRespondWith(201, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody({
@@ -943,7 +1026,7 @@ test("existing user authenticates via challenge-response and selects keep me log
     )
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/authentications`,
       (r) =>
         r
           .query({ trusted: "true" })
@@ -966,7 +1049,7 @@ test("existing user authenticates via challenge-response and selects keep me log
     .uponReceiving("a request to store recovery key")
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
       (r) =>
         r
           .headers({ "Content-Type": "application/json" })
@@ -983,7 +1066,7 @@ test("existing user authenticates via challenge-response and selects keep me log
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
@@ -1001,11 +1084,14 @@ test("existing user authenticates via challenge-response and selects keep me log
     .uponReceiving(
       "a request to get public main key after authentication with keep me logged in",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-        Cookie: Matchers.like("Authorization="),
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+          Cookie: Matchers.like("Authorization="),
+        }),
     )
     .willRespondWith(200, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody(
@@ -1027,7 +1113,7 @@ test("existing user authenticates via challenge-response and selects keep me log
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1062,8 +1148,10 @@ test("existing user authenticates via challenge-response and selects keep me log
     .uponReceiving(
       "a request of mary to get contact requests after challenge with keep me logged in",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]))
     .executeTest(async (mockServer) => {
@@ -1084,10 +1172,10 @@ test("existing user authenticates via challenge-response and selects keep me log
       await keepLoggedInCheckbox.check({ force: true });
 
       const authenticationsResponse = page.waitForResponse(
-        "**/users/mary@imagey.cloud/devices/*/authentications*",
+        "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/*/authentications*",
       );
       const recoveryKeyResponse = page.waitForResponse(
-        "**/users/mary@imagey.cloud/devices/*/recovery-key",
+        "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/*/recovery-key",
       );
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
@@ -1111,8 +1199,10 @@ test("existing user authenticates via challenge-response but provides wrong pass
     .uponReceiving(
       "a request to get public key, returning 401 to trigger challenge for wrong password",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(401);
 
@@ -1123,7 +1213,7 @@ test("existing user authenticates via challenge-response but provides wrong pass
     .uponReceiving("a request for a challenge with wrong password")
     .withRequest(
       "POST",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/challenges`,
     )
     .willRespondWith(201, (r) =>
       r.headers({ "Content-Type": "application/json" }).jsonBody({
@@ -1158,11 +1248,16 @@ test("passwords do not match shows error", async ({ page }) => {
   await provider
     .addInteraction()
     .uponReceiving("a request to get public key for unknown user")
-    .withRequest("GET", "/users/unknown@imagey.cloud/public-keys/0")
+    .withRequest(
+      "GET",
+      "/users/00000000-0000-4000-8000-000000000002/public-keys/0",
+    )
     .willRespondWith(404)
     .executeTest(async (mockServer) => {
       await setupMockServer(page, mockServer);
-      await page.goto("/?email=unknown@imagey.cloud");
+      await page.goto(
+        "/?email=unknown@imagey.cloud&userId=00000000-0000-4000-8000-000000000002",
+      );
 
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
@@ -1184,10 +1279,13 @@ test("unlockLocalDeviceKey fails if private key missing locally", async ({
   const builder = provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key for unlock error")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -1197,7 +1295,9 @@ test("unlockLocalDeviceKey fails if private key missing locally", async ({
     // Use an existing device (this sets localStorage with keys and deviceId)
     await setupMarysDevice(page);
 
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
 
     const passwordInput = page.getByLabel("Password", { exact: true });
     await expect(passwordInput).toBeVisible();
@@ -1230,8 +1330,10 @@ test("existing user auto-logs in with stored recovery key", async ({
     .addInteraction()
     .given("marys second device registered with recovery key")
     .uponReceiving("a request to get public key for auto login")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -1241,7 +1343,7 @@ test("existing user auto-logs in with stored recovery key", async ({
     .uponReceiving("a request to fetch recovery key for auto login")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
     )
     .willRespondWith(200, (r) =>
       r.body("application/json", Buffer.from('"any-recovery-key"')),
@@ -1253,7 +1355,7 @@ test("existing user auto-logs in with stored recovery key", async ({
     .uponReceiving("a request to get public device key for auto login")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
     )
     .willRespondWith(200, (r) =>
       r.jsonBody(
@@ -1274,7 +1376,7 @@ test("existing user auto-logs in with stored recovery key", async ({
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
@@ -1326,8 +1428,10 @@ test("existing user fails auto-login due to wrong recovery key", async ({
     .addInteraction()
     .given("marys second device registered")
     .uponReceiving("a request to get public key for failed auto login")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({ Accept: "application/json" }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -1337,7 +1441,7 @@ test("existing user fails auto-login due to wrong recovery key", async ({
     .uponReceiving("a request to fetch recovery key returning 404")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
     )
     .willRespondWith(404)
     .executeTest(async (mockServer) => {

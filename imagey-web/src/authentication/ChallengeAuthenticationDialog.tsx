@@ -1,9 +1,11 @@
 import PasswordDialog from "./PasswordDialog";
 import { authenticationService } from "./AuthenticationService";
 import { useTranslation } from "react-i18next";
+import { UserId } from "./UserId";
 
 interface ChallengeAuthenticationDialogProperties {
-  email: string;
+  userId: UserId;
+  email?: string;
   deviceId: string;
   onAuthenticated: (
     privateMainKey: JsonWebKey,
@@ -13,6 +15,7 @@ interface ChallengeAuthenticationDialogProperties {
 }
 
 export default function ChallengeAuthenticationDialog({
+  userId,
   email,
   deviceId,
   onAuthenticated,
@@ -30,7 +33,7 @@ export default function ChallengeAuthenticationDialog({
       onWrongUser={onWrongUser}
       validatePassword={(password, keepLoggedIn) =>
         authenticationService.authenticateWithChallenge(
-          email,
+          userId,
           deviceId,
           password,
           keepLoggedIn,

@@ -38,16 +38,14 @@ import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.Provider;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.token.TokenService.TokenType;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 import cloud.imagey.infrastructure.common.BoundedLruCache;
 
 @Provider
@@ -55,7 +53,6 @@ import cloud.imagey.infrastructure.common.BoundedLruCache;
 @Priority(AUTHENTICATION)
 public class RolesFilter implements ContainerRequestFilter {
 
-    private static final Logger LOG = LogManager.getLogger(RolesFilter.class);
     private static final int MEMBERSHIP_CACHE_SIZE = 10_000;
 
     // Positive member decisions per (owner, document, caller). Negatives are never cached - a
@@ -77,7 +74,9 @@ public class RolesFilter implements ContainerRequestFilter {
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
         Optional<Cookie> cookie = ofNullable(requestContext.getCookies().get("token"));
-        Optional<DecodedToken> decodedToken = cookie.flatMap(c -> tokenService.decode(new Token(c.getValue())));
+        Optional<DecodedToken> decodedToken = cookie
+            .flatMap(c -> tokenService.decode(new Token(c.getValue())))
+            .filter(token -> token.isOfType(TokenType.AUTHENTICATION));
         setupPrincipal(requestContext, decodedToken);
     }
 
@@ -86,7 +85,7 @@ public class RolesFilter implements ContainerRequestFilter {
             .stream()
             .findFirst()
             .map(PathSegment::getPath)
-            .map(Email::new)
+            .map(UserId::new)
             .map(User::new)
             .orElse(null);
     }
@@ -113,7 +112,7 @@ public class RolesFilter implements ContainerRequestFilter {
         User user = extractUser(requestContext.getUriInfo());
         String principalName = decodedToken.get().jwt().getSubject();
         requestContext.setSecurityContext(forPrincipal(principalName,
-            (role) -> hasRole(new User(new Email(principalName)), user, requestContext.getUriInfo(), role)));
+            (role) -> hasRole(new User(new UserId(principalName)), user, requestContext.getUriInfo(), role)));
         Supplier<Principal> principalSupplier = requestContext.getSecurityContext()::getUserPrincipal;
         request.setAttribute(Principal.class.getName() + ".supplier", principalSupplier);
     }
@@ -121,14 +120,16 @@ public class RolesFilter implements ContainerRequestFilter {
     private boolean hasRole(User currentPrincipal, User contextUser, UriInfo uriInfo, String role) {
         if ("owner".equals(role)) {
             return currentPrincipal.equals(contextUser);
-        } else if ("member".equals(role)) {
-            return contextUser != null && extractDocumentId(uriInfo)
-                .map(documentId -> isMember(contextUser, documentId, currentPrincipal))
-                .orElse(false);
-        } else {
-            LOG.warn("Unknown role {} requested - denying access", role);
+        }
+        if (!"member".equals(role)) {
+            // Only "owner"/"member" are used across the resources (see @RolesAllowed). Deny anything
+            // else explicitly rather than let it fall through to the key-chain check - a future
+            // @RolesAllowed("admin") or a typo must not be evaluated as a member probe.
             return false;
         }
+        return contextUser != null && extractDocumentId(uriInfo)
+            .map(documentId -> isMember(contextUser, documentId, currentPrincipal))
+            .orElse(false);
     }
 
     private boolean isMember(User owner, DocumentId documentId, User member) {

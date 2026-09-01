@@ -6,7 +6,7 @@ import {
 } from "@pact-foundation/pact";
 import { webcrypto } from "node:crypto";
 import * as fs from "fs";
-import { TestData } from "./testdata";
+import { TestData, shortName, LAURA_ID } from "./testdata";
 
 // --- Chats/contact-requests test helpers -----------------------------------
 // Contacts/chats are (like documents, folders and the profile) their own
@@ -60,6 +60,19 @@ export async function aesGcmEncrypt(
     plaintext,
   );
   return Buffer.concat([Buffer.from(iv), Buffer.from(encrypted)]);
+}
+
+// Encrypts a chat message body under the fixed chat-document key the chat
+// mocks use (KNOWN_CHAT_KEY), producing the base64 `content` field the server
+// would return - matching cryptoService.encryptMessage on the app side.
+export async function encryptKnownChatMessage(
+  plaintext: string,
+): Promise<string> {
+  const encrypted = await aesGcmEncrypt(
+    KNOWN_CHAT_KEY,
+    new TextEncoder().encode(plaintext),
+  );
+  return encrypted.toString("base64");
 }
 
 async function aesGcmDecrypt(
@@ -192,7 +205,7 @@ function getAlicesSettings(): Promise<{
     alicesSettingsPromise = (async () => {
       const keyEnvelope = JSON.parse(
         fs.readFileSync(
-          "tests/images/encrypted/alice@imagey.cloud/keys/0.json",
+          "tests/images/encrypted/10ad1cce-816b-4e12-b94d-7ef824c0d162/keys/0.json",
           "utf-8",
         ),
       );
@@ -202,7 +215,7 @@ function getAlicesSettings(): Promise<{
         TestData.alice.privateMainKey!,
       );
       const encryptedSettingsDocument = fs.readFileSync(
-        "tests/images/encrypted/alice@imagey.cloud/document.enc",
+        "tests/images/encrypted/10ad1cce-816b-4e12-b94d-7ef824c0d162/document.enc",
       );
       const decrypted = await aesGcmDecrypt(
         settingsKey,
@@ -275,7 +288,7 @@ export async function prepareMarysChatsDocument(
   chatsDocumentKey?: JsonWebKey,
 ): Promise<JsonWebKey> {
   return mockChatsDocument(
-    "mary@imagey.cloud",
+    "d20cf443-4f96-418f-a957-c8cbef8677c3",
     TestData.mary.settings!.chats,
     TestData.mary.settingsKey!,
     contacts,
@@ -290,7 +303,7 @@ export async function prepareBillsChatsDocument(
   chatsDocumentKey?: JsonWebKey,
 ): Promise<JsonWebKey> {
   return mockChatsDocument(
-    "bill@imagey.cloud",
+    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
     TestData.bill.settings!.chats,
     TestData.bill.settingsKey!,
     contacts,
@@ -306,7 +319,7 @@ export async function prepareAlicesChatsDocument(
 ): Promise<JsonWebKey> {
   const { settingsKey, chatsId } = await getAlicesSettings();
   return mockChatsDocument(
-    "alice@imagey.cloud",
+    "10ad1cce-816b-4e12-b94d-7ef824c0d162",
     chatsId,
     settingsKey,
     contacts,
@@ -470,8 +483,8 @@ export async function prepareMarysChatOwnedByAlice(
 ): Promise<JsonWebKey> {
   const key = chatDocumentKey ?? (await generateAesGcmKeyJwk());
   await mockChatDocumentSharedViaSync({
-    ownerEmail: "alice@imagey.cloud",
-    viewerEmail: "mary@imagey.cloud",
+    ownerEmail: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+    viewerEmail: "d20cf443-4f96-418f-a957-c8cbef8677c3",
     viewerChatsDocumentKey: chatsDocumentKey,
     chatId,
     given,
@@ -488,18 +501,22 @@ export async function prepareMarysChatCreation() {
   return provider
     .addInteraction()
     .uponReceiving("a request of mary to create a chat document")
-    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=.*",
-        ),
-      });
-    })
+    .withRequest(
+      "POST",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
-          "/users/mary@imagey.cloud/documents/new-chat-id",
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-chat-id",
         ),
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
@@ -532,7 +549,9 @@ export async function clearLocalStorage(page: Page) {
   await page.goto("/index.html?empty");
   await page.evaluate(() => localStorage.removeItem("imagey.user"));
   await page.evaluate(() =>
-    localStorage.removeItem("imagey.deviceIds[mary@imagey.cloud]"),
+    localStorage.removeItem(
+      "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+    ),
   );
   await page.evaluate(() =>
     localStorage.removeItem("imagey.deviceIds[bob@imagey.cloud]"),
@@ -541,10 +560,14 @@ export async function clearLocalStorage(page: Page) {
     localStorage.removeItem("imagey.deviceIds[chris@imagey.cloud]"),
   );
   await page.evaluate(() =>
-    localStorage.removeItem("imagey.deviceIds[alice@imagey.cloud]"),
+    localStorage.removeItem(
+      "imagey.deviceIds[10ad1cce-816b-4e12-b94d-7ef824c0d162]",
+    ),
   );
   await page.evaluate(() =>
-    localStorage.removeItem("imagey.deviceIds[bill@imagey.cloud]"),
+    localStorage.removeItem(
+      "imagey.deviceIds[a358c2ed-07d4-4a25-a7db-d860d5c0b895]",
+    ),
   );
   await page.evaluate(() =>
     localStorage.removeItem("imagey.devices[1234].key"),
@@ -603,7 +626,8 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
 
         if (
           request.method() === "GET" &&
-          requestUrl.pathname === "/users/mary@imagey.cloud/profile"
+          requestUrl.pathname ===
+            "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/profile"
         ) {
           await route.fulfill({ status: 404 });
           return;
@@ -642,7 +666,7 @@ export async function prepareMarysSettingsDocument() {
     .uponReceiving("a request of mary to get settings document")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/d20cf443-4f96-418f-a957-c8cbef8677c3",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -651,7 +675,7 @@ export async function prepareMarysSettingsDocument() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "tests/images/encrypted/mary@imagey.cloud/document.enc",
+        "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/document.enc",
       ),
     );
   provider
@@ -659,7 +683,7 @@ export async function prepareMarysSettingsDocument() {
     .uponReceiving("a request of mary to get settings key")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -668,19 +692,25 @@ export async function prepareMarysSettingsDocument() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+        "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0.json",
       ),
     );
 }
 
-export async function prepareMarysLogin(page: Page) {
+export async function prepareMarysLogin(
+  page: Page,
+  storeEmail: boolean = true,
+) {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
   provider
@@ -688,7 +718,7 @@ export async function prepareMarysLogin(page: Page) {
     .uponReceiving("a request of mary to get public device key")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -705,7 +735,7 @@ export async function prepareMarysLogin(page: Page) {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -720,17 +750,20 @@ export async function prepareMarysLogin(page: Page) {
     );
   await prepareMarysSettingsDocument();
 
-  await setupMarysDevice(page);
+  await setupMarysDevice(page, storeEmail);
 }
 
 export async function prepareBillsLogin(page: Page) {
   provider
     .addInteraction()
     .uponReceiving("a request of bill to get public key")
-    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
   provider
@@ -738,7 +771,7 @@ export async function prepareBillsLogin(page: Page) {
     .uponReceiving("a request of bill to get public device key")
     .withRequest(
       "GET",
-      `/users/bill@imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/public-keys/0`,
+      `/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/devices/${TestData.bill.devices[0].deviceId}/public-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -755,7 +788,7 @@ export async function prepareBillsLogin(page: Page) {
     )
     .withRequest(
       "GET",
-      `/users/bill@imagey.cloud/devices/${TestData.bill.devices[0].deviceId}/private-keys/0`,
+      `/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/devices/${TestData.bill.devices[0].deviceId}/private-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -773,7 +806,7 @@ export async function prepareBillsLogin(page: Page) {
     .uponReceiving("a request of bill to get settings document")
     .withRequest(
       "GET",
-      "/users/bill@imagey.cloud/documents/bill@imagey.cloud",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -782,7 +815,7 @@ export async function prepareBillsLogin(page: Page) {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "tests/images/encrypted/bill@imagey.cloud/document.enc",
+        "tests/images/encrypted/a358c2ed-07d4-4a25-a7db-d860d5c0b895/document.enc",
       ),
     );
   provider
@@ -790,7 +823,7 @@ export async function prepareBillsLogin(page: Page) {
     .uponReceiving("a request of bill to get settings key")
     .withRequest(
       "GET",
-      "/users/bill@imagey.cloud/documents/bill@imagey.cloud/keys/0",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/a358c2ed-07d4-4a25-a7db-d860d5c0b895/keys/0",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -799,7 +832,7 @@ export async function prepareBillsLogin(page: Page) {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        "tests/images/encrypted/bill@imagey.cloud/keys/0.json",
+        "tests/images/encrypted/a358c2ed-07d4-4a25-a7db-d860d5c0b895/keys/0.json",
       ),
     );
   await setupBillsDevice(page);
@@ -811,7 +844,7 @@ export async function prepareMarysDocuments() {
     .uponReceiving("a request of mary to get document root")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -828,7 +861,7 @@ export async function prepareMarysDocuments() {
     .uponReceiving("a request of mary to get document root key")
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/d20cf443-4f96-418f-a957-c8cbef8677c3",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -837,7 +870,7 @@ export async function prepareMarysDocuments() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/mary@imagey.cloud.json",
+        "tests/images/encrypted/68980188-577d-4d2f-9e36-a6b32b25cd3a/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json",
       ),
     );
   provider
@@ -847,7 +880,7 @@ export async function prepareMarysDocuments() {
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -866,7 +899,7 @@ export async function prepareMarysDocuments() {
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -885,7 +918,7 @@ export async function prepareMarysDocuments() {
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/f9910aa7-4db6-4b02-b596-c3ccf872ae98/files/330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -904,7 +937,7 @@ export async function prepareMarysDocuments() {
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -923,7 +956,7 @@ export async function prepareMarysDocuments() {
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys/68980188-577d-4d2f-9e36-a6b32b25cd3a",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -942,7 +975,7 @@ export async function prepareMarysDocuments() {
     )
     .withRequest(
       "GET",
-      "/users/mary@imagey.cloud/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -966,10 +999,13 @@ export async function prepareMarysDocumentsWithFolder(folderId: string) {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get document root containing a folder")
-    .withRequest("GET", `/users/mary@imagey.cloud/documents/${rootId}`, (r) =>
-      r.headers({
-        Accept: "application/octet-stream",
-      }),
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${rootId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
@@ -983,7 +1019,7 @@ export async function prepareMarysDocumentsWithFolder(folderId: string) {
     .uponReceiving("a request of mary to get document root key for folder test")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${rootId}/keys/mary@imagey.cloud`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${rootId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -992,17 +1028,20 @@ export async function prepareMarysDocumentsWithFolder(folderId: string) {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        `tests/images/encrypted/${rootId}/keys/mary@imagey.cloud.json`,
+        `tests/images/encrypted/${rootId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
       ),
     );
 
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get the My Vacation folder")
-    .withRequest("GET", `/users/mary@imagey.cloud/documents/${folderId}`, (r) =>
-      r.headers({
-        Accept: "application/octet-stream",
-      }),
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${folderId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
@@ -1016,7 +1055,7 @@ export async function prepareMarysDocumentsWithFolder(folderId: string) {
     .uponReceiving("a request of mary to get the My Vacation folder key")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${folderId}/keys/${rootId}`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${folderId}/keys/${rootId}`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1038,10 +1077,13 @@ export async function prepareMarysEmptyDocumentsFolder() {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get an empty document root")
-    .withRequest("GET", `/users/mary@imagey.cloud/documents/${rootId}`, (r) =>
-      r.headers({
-        Accept: "application/octet-stream",
-      }),
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${rootId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
@@ -1055,7 +1097,7 @@ export async function prepareMarysEmptyDocumentsFolder() {
     .uponReceiving("a request of mary to get empty document root key")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${rootId}/keys/mary@imagey.cloud`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${rootId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1064,7 +1106,7 @@ export async function prepareMarysEmptyDocumentsFolder() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        `tests/images/encrypted/${rootId}/keys/mary@imagey.cloud.json`,
+        `tests/images/encrypted/${rootId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
       ),
     );
 }
@@ -1078,18 +1120,22 @@ export async function prepareMarysFolderCreation() {
   return provider
     .addInteraction()
     .uponReceiving("a request of mary to create a folder")
-    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=.*",
-        ),
-      });
-    })
+    .withRequest(
+      "POST",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
-          "/users/mary@imagey.cloud/documents/new-folder-id",
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-folder-id",
         ),
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
@@ -1116,7 +1162,7 @@ export async function prepareMarysEmptyProfile(suffix: string = "") {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${profileId}`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}`,
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -1136,7 +1182,7 @@ export async function prepareMarysEmptyProfile(suffix: string = "") {
     )
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${profileId}/keys/mary@imagey.cloud`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1145,7 +1191,7 @@ export async function prepareMarysEmptyProfile(suffix: string = "") {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        `tests/images/encrypted/${profileId}/keys/mary@imagey.cloud-empty.json`,
+        `tests/images/encrypted/${profileId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3-empty.json`,
       ),
     );
 }
@@ -1159,7 +1205,7 @@ export async function prepareMarysProfile() {
     .uponReceiving("a request of mary to get her profile document")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${profileId}`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}`,
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -1177,7 +1223,7 @@ export async function prepareMarysProfile() {
     .uponReceiving("a request of mary to get her profile document key")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${profileId}/keys/mary@imagey.cloud`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1186,7 +1232,7 @@ export async function prepareMarysProfile() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        `tests/images/encrypted/${profileId}/keys/mary@imagey.cloud.json`,
+        `tests/images/encrypted/${profileId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
       ),
     );
 
@@ -1196,7 +1242,7 @@ export async function prepareMarysProfile() {
     .uponReceiving("a request of mary to get her profile picture content")
     .withRequest(
       "GET",
-      `/users/mary@imagey.cloud/documents/${profileId}/files/${pictureContentId}`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}/files/${pictureContentId}`,
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -1219,8 +1265,8 @@ export async function prepareProfileSave() {
     .withRequest(
       "PUT",
       Matchers.regex({
-        matcher: `/users/mary@imagey\\.cloud/documents/${profileId}/files/.+`,
-        generate: `/users/mary@imagey.cloud/documents/${profileId}/files/00000000-0000-0000-0000-000000000000`,
+        matcher: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}/files/.+`,
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}/files/00000000-0000-0000-0000-000000000000`,
       }),
       (r) =>
         r.headers({
@@ -1235,7 +1281,7 @@ export async function prepareProfileSave() {
       .uponReceiving("a request of mary to update her profile metadata")
       .withRequest(
         "PUT",
-        `/users/mary@imagey.cloud/documents/${profileId}`,
+        `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}`,
         (r) =>
           r.headers({
             "Content-Type": "application/octet-stream",
@@ -1284,10 +1330,13 @@ export async function prepareDocumentUpload(documentId: string) {
   provider
     .addInteraction()
     .uponReceiving("a request of mary to get public key")
-    .withRequest("GET", "/users/mary@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
 
@@ -1301,18 +1350,22 @@ export async function prepareDocumentUpload(documentId: string) {
     .uponReceiving(
       `a request of mary to upload a document with id ${documentId}`,
     )
-    .withRequest("POST", "/users/mary@imagey.cloud/documents", (r) => {
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=.*",
-        ),
-      });
-    })
+    .withRequest(
+      "POST",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
-          `/users/mary@imagey.cloud/documents/${documentId}`,
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}`,
         ),
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
@@ -1328,8 +1381,8 @@ export async function prepareDocumentUpload(documentId: string) {
       "GET",
       Matchers.regex({
         matcher:
-          "/users/mary@imagey\\.cloud/documents/(?!(bb66|f991)).+/files/.+",
-        generate: `/users/mary@imagey.cloud/documents/${documentId}/files/${previewImageId}`,
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!(bb66|f991)).+/files/.+",
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/${previewImageId}`,
       }),
       (r) =>
         r.headers({
@@ -1349,10 +1402,13 @@ export async function prepareMarysDevices() {
     .addInteraction()
     .given("marys second device registered")
     .uponReceiving("a request of mary to get devices")
-    .withRequest("GET", "/users/mary@imagey.cloud/devices", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
@@ -1362,14 +1418,20 @@ export async function prepareMarysDevices() {
     );
 }
 
-export async function setupMarysDevice(page: Page) {
-  await page.evaluate(() => {
+export async function setupMarysDevice(page: Page, storeEmail: boolean = true) {
+  await page.evaluate((storeEmail) => {
     localStorage.setItem("i18nextLng", "en");
-    localStorage.setItem("imagey.user", "mary@imagey.cloud");
-  });
+    localStorage.setItem("imagey.user", "d20cf443-4f96-418f-a957-c8cbef8677c3");
+    if (storeEmail) {
+      localStorage.setItem("imagey.email", "mary@imagey.cloud");
+    }
+  }, storeEmail);
   await page.evaluate(
     (deviceId) =>
-      localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+      localStorage.setItem(
+        "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+        deviceId,
+      ),
     TestData.mary.devices[0].deviceId,
   );
   await page.evaluate(
@@ -1385,11 +1447,15 @@ export async function setupMarysDevice(page: Page) {
 export async function setupMarysSecondDevice(page: Page) {
   await page.evaluate(() => {
     localStorage.setItem("i18nextLng", "en");
-    localStorage.setItem("imagey.user", "mary@imagey.cloud");
+    localStorage.setItem("imagey.user", "d20cf443-4f96-418f-a957-c8cbef8677c3");
+    localStorage.setItem("imagey.email", "mary@imagey.cloud");
   });
   await page.evaluate(
     (deviceId) =>
-      localStorage.setItem("imagey.deviceIds[mary@imagey.cloud]", deviceId),
+      localStorage.setItem(
+        "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+        deviceId,
+      ),
     TestData.mary.devices[1].deviceId,
   );
   await page.evaluate(
@@ -1405,12 +1471,16 @@ export async function setupMarysSecondDevice(page: Page) {
 export async function setupBillsDevice(page: Page) {
   await page.evaluate(() => {
     localStorage.setItem("i18nextLng", "en");
-    localStorage.setItem("imagey.user", "bill@imagey.cloud");
+    localStorage.setItem("imagey.user", "a358c2ed-07d4-4a25-a7db-d860d5c0b895");
+    localStorage.setItem("imagey.email", "bill@imagey.cloud");
   });
   await page.evaluate((deviceId) => {
     localStorage.setItem("imagey.devices", JSON.stringify([deviceId]));
     localStorage.setItem("imagey.deviceId", deviceId);
-    localStorage.setItem("imagey.deviceIds[bill@imagey.cloud]", deviceId);
+    localStorage.setItem(
+      "imagey.deviceIds[a358c2ed-07d4-4a25-a7db-d860d5c0b895]",
+      deviceId,
+    );
   }, TestData.bill.devices[0].deviceId);
   await page.evaluate(
     ({ deviceId, key }) =>
@@ -1455,16 +1525,19 @@ export async function prepareMarysContactRequests(
     .addInteraction()
     .given("mary has no contacts and a contact request from bill")
     .uponReceiving("a request of mary to get contact requests")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          inviter: "bill@imagey.cloud",
-          invitee: "mary@imagey.cloud",
+          inviter: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+          invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           publicKey: TestData.bill.publicMainKey,
           status: "INVITED",
         },
@@ -1498,16 +1571,19 @@ export async function prepareMarysAcceptedContactRequest(
     .uponReceiving(
       "a request of mary to get an accepted contact request from bill",
     )
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          inviter: "mary@imagey.cloud",
-          invitee: "bill@imagey.cloud",
+          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          invitee: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
           publicKey: TestData.bill.publicMainKey,
           status: "ACCEPTED",
           chatId,
@@ -1526,10 +1602,13 @@ export async function prepareMarysEmptyContactRequests() {
     .addInteraction()
     .given("mary has no contacts")
     .uponReceiving("a request of mary to get empty contact requests")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 }
@@ -1545,10 +1624,13 @@ export async function prepareBillsEmptyContactRequests() {
   return provider
     .addInteraction()
     .uponReceiving("a request of bill to get empty contact requests")
-    .withRequest("GET", "/users/bill@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 }
@@ -1559,7 +1641,7 @@ export async function prepareBillsDocuments() {
     .uponReceiving("a request of bill to get document root")
     .withRequest(
       "GET",
-      "/users/bill@imagey.cloud/documents/31e3569a-d2a7-493d-8d45-06370ebd2705",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/31e3569a-d2a7-493d-8d45-06370ebd2705",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -1576,7 +1658,7 @@ export async function prepareBillsDocuments() {
     .uponReceiving("a request of bill to get document root key")
     .withRequest(
       "GET",
-      "/users/bill@imagey.cloud/documents/31e3569a-d2a7-493d-8d45-06370ebd2705/keys/bill@imagey.cloud",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/31e3569a-d2a7-493d-8d45-06370ebd2705/keys/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1585,7 +1667,7 @@ export async function prepareBillsDocuments() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        "tests/images/encrypted/31e3569a-d2a7-493d-8d45-06370ebd2705/keys/bill@imagey.cloud.json",
+        "tests/images/encrypted/31e3569a-d2a7-493d-8d45-06370ebd2705/keys/a358c2ed-07d4-4a25-a7db-d860d5c0b895.json",
       ),
     );
 }
@@ -1595,10 +1677,10 @@ export async function prepareMarysChat(
   suffix: string = "",
   validKey: boolean = true,
 ) {
-  const chatId = "chat-" + contactEmail.split("@")[0];
+  const chatId = "chat-" + shortName(contactEmail);
   const given =
-    contactEmail !== "laura@imagey.cloud"
-      ? `Mary has a chat with ${contactEmail.split("@")[0]}`
+    contactEmail !== LAURA_ID
+      ? `Mary has a chat with ${shortName(contactEmail)}`
       : undefined;
 
   // Mary already has both laura and alice as contacts (see the fixed
@@ -1608,21 +1690,21 @@ export async function prepareMarysChat(
   const chatsDocumentKey = await prepareMarysChatsDocument(
     [
       {
-        userId: "laura@imagey.cloud",
+        userId: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
         chatId: "chat-laura",
-        owner: "mary@imagey.cloud",
+        owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
       },
       {
-        userId: "alice@imagey.cloud",
+        userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
         chatId: "chat-alice",
-        owner: "mary@imagey.cloud",
+        owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
       },
     ],
     given,
   );
 
   await mockChatDocument({
-    ownerEmail: "mary@imagey.cloud",
+    ownerEmail: "d20cf443-4f96-418f-a957-c8cbef8677c3",
     chatId,
     chatsId: TestData.mary.settings!.chats,
     chatsDocumentKey,
@@ -1638,21 +1720,29 @@ export async function prepareMarysChat(
 
   return builder
     .uponReceiving(`a request of mary to get contact requests in chat${suffix}`)
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) => {
-      r.headers({ Accept: "application/json" });
-    })
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => {
+        r.headers({ Accept: "application/json" });
+      },
+    )
     .willRespondWith(200, (r) => r.jsonBody([]));
 }
 
 export async function setupAlicesDevice(page: Page) {
   await page.evaluate(() => {
     localStorage.setItem("i18nextLng", "en");
-    localStorage.setItem("imagey.user", "alice@imagey.cloud");
+    localStorage.setItem("imagey.user", "10ad1cce-816b-4e12-b94d-7ef824c0d162");
+    localStorage.setItem("imagey.email", "alice@imagey.cloud");
   });
   await page.evaluate((deviceId) => {
     localStorage.setItem("imagey.devices", JSON.stringify([deviceId]));
     localStorage.setItem("imagey.deviceId", deviceId);
-    localStorage.setItem("imagey.deviceIds[alice@imagey.cloud]", deviceId);
+    localStorage.setItem(
+      "imagey.deviceIds[10ad1cce-816b-4e12-b94d-7ef824c0d162]",
+      deviceId,
+    );
   }, TestData.alice.devices[0].deviceId);
   await page.evaluate(
     ({ deviceId, key }) =>
@@ -1687,10 +1777,13 @@ export async function prepareAlicesLogin() {
     .addInteraction()
     .given("Alice exists")
     .uponReceiving("a request to get Alices public main key")
-    .withRequest("GET", "/users/alice@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (builder) =>
       builder.jsonBody(TestData.alice.publicMainKey),
@@ -1702,7 +1795,7 @@ export async function prepareAlicesLogin() {
     .uponReceiving("a request to get Alices public device key")
     .withRequest(
       "GET",
-      `/users/alice@imagey.cloud/devices/${TestData.alice.devices[0].deviceId}/public-keys/0`,
+      `/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/devices/${TestData.alice.devices[0].deviceId}/public-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1718,7 +1811,7 @@ export async function prepareAlicesLogin() {
     .uponReceiving("a request to get Alices encrypted private device key")
     .withRequest(
       "GET",
-      `/users/alice@imagey.cloud/devices/${TestData.alice.devices[0].deviceId}/private-keys/0`,
+      `/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/devices/${TestData.alice.devices[0].deviceId}/private-keys/0`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1736,7 +1829,10 @@ export async function prepareAlicesLogin() {
     .addInteraction()
     .given("Alice exists")
     .uponReceiving("a request to get Alices contact requests")
-    .withRequest("GET", "/users/alice@imagey.cloud/contact-requests")
+    .withRequest(
+      "GET",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/contact-requests",
+    )
     .willRespondWith(200, (builder) => builder.jsonBody([]));
 
   provider
@@ -1745,7 +1841,7 @@ export async function prepareAlicesLogin() {
     .uponReceiving("a request to get Alices settings document")
     .withRequest(
       "GET",
-      "/users/alice@imagey.cloud/documents/alice@imagey.cloud",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/10ad1cce-816b-4e12-b94d-7ef824c0d162",
       (r) =>
         r.headers({
           Accept: "application/octet-stream",
@@ -1754,7 +1850,7 @@ export async function prepareAlicesLogin() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        "tests/images/encrypted/alice@imagey.cloud/document.enc",
+        "tests/images/encrypted/10ad1cce-816b-4e12-b94d-7ef824c0d162/document.enc",
       ),
     );
 
@@ -1764,7 +1860,7 @@ export async function prepareAlicesLogin() {
     .uponReceiving("a request to get Alices settings key")
     .withRequest(
       "GET",
-      "/users/alice@imagey.cloud/documents/alice@imagey.cloud/keys/0",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/10ad1cce-816b-4e12-b94d-7ef824c0d162/keys/0",
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1773,7 +1869,7 @@ export async function prepareAlicesLogin() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        "tests/images/encrypted/alice@imagey.cloud/keys/0.json",
+        "tests/images/encrypted/10ad1cce-816b-4e12-b94d-7ef824c0d162/keys/0.json",
       ),
     );
 }
@@ -1788,10 +1884,13 @@ export async function prepareAlicesEmptyDocumentsFolder() {
     .addInteraction()
     .given("Alice exists")
     .uponReceiving("a request of alice to get an empty document root")
-    .withRequest("GET", `/users/alice@imagey.cloud/documents/${rootId}`, (r) =>
-      r.headers({
-        Accept: "application/octet-stream",
-      }),
+    .withRequest(
+      "GET",
+      `/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/${rootId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
@@ -1806,7 +1905,7 @@ export async function prepareAlicesEmptyDocumentsFolder() {
     .uponReceiving("a request of alice to get empty document root key")
     .withRequest(
       "GET",
-      `/users/alice@imagey.cloud/documents/${rootId}/keys/alice@imagey.cloud`,
+      `/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/${rootId}/keys/10ad1cce-816b-4e12-b94d-7ef824c0d162`,
       (r) =>
         r.headers({
           Accept: "application/json",
@@ -1815,7 +1914,7 @@ export async function prepareAlicesEmptyDocumentsFolder() {
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/json",
-        `tests/images/encrypted/${rootId}/keys/alice@imagey.cloud.json`,
+        `tests/images/encrypted/${rootId}/keys/10ad1cce-816b-4e12-b94d-7ef824c0d162.json`,
       ),
     );
 }
@@ -1826,15 +1925,21 @@ export async function prepareAlicesChat(
   returnValidKey: boolean = true,
 ) {
   const { chatsId } = await getAlicesSettings();
-  const chatId = "chat-" + contact.split("@")[0];
+  const chatId = "chat-" + shortName(contact);
 
   const chatsDocumentKey = await prepareAlicesChatsDocument(
-    [{ userId: contact, chatId, owner: "alice@imagey.cloud" }],
+    [
+      {
+        userId: contact,
+        chatId,
+        owner: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+      },
+    ],
     "Alice has a chat with mary",
   );
 
   await mockChatDocument({
-    ownerEmail: "alice@imagey.cloud",
+    ownerEmail: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
     chatId,
     chatsId,
     chatsDocumentKey,
@@ -1864,10 +1969,13 @@ export async function prepareBillsDocumentUpload(documentId: string) {
   provider
     .addInteraction()
     .uponReceiving("a request of bill to get public key")
-    .withRequest("GET", "/users/bill@imagey.cloud/public-keys/0", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/public-keys/0",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody(TestData.bill.publicMainKey));
 
@@ -1880,18 +1988,22 @@ export async function prepareBillsDocumentUpload(documentId: string) {
     .uponReceiving(
       `a request of bill to upload a document with id ${documentId}`,
     )
-    .withRequest("POST", "/users/bill@imagey.cloud/documents", (r) => {
-      r.headers({
-        "Content-Type": MatchersV3.regex(
-          "multipart/form-data.*",
-          "multipart/form-data; boundary=.*",
-        ),
-      });
-    })
+    .withRequest(
+      "POST",
+      "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
-          `/users/bill@imagey.cloud/documents/${documentId}`,
+          `/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/${documentId}`,
         ),
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
@@ -1907,8 +2019,8 @@ export async function prepareBillsDocumentUpload(documentId: string) {
       "GET",
       Matchers.regex({
         matcher:
-          "/users/bill@imagey\\.cloud/documents/(?!(bb66|f991)).+/files/.+",
-        generate: `/users/bill@imagey.cloud/documents/${documentId}/files/${previewImageId}`,
+          "/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/(?!(bb66|f991)).+/files/.+",
+        generate: `/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/${documentId}/files/${previewImageId}`,
       }),
       (r) =>
         r.headers({

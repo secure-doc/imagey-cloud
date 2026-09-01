@@ -52,6 +52,7 @@ import cloud.imagey.domain.user.UserRegistration;
 import cloud.imagey.domain.user.UserRepository;
 import cloud.imagey.domain.user.UserService;
 import cloud.imagey.domain.user.UserService.AuthenticationStatus;
+import cloud.imagey.domain.user.VerificationRequest;
 
 @Path("/")
 @ApplicationScoped
@@ -76,7 +77,7 @@ public class UserResource {
         @Multipart("chatList") EncryptedContent chatList,
         @Multipart("profile") EncryptedContent profile) throws IOException {
 
-        if (!metadata.email().address().equals(currentPrincipal.get().getName())) {
+        if (!metadata.userId().id().equals(currentPrincipal.get().getName())) {
             LOG.warn("Current user is trying to register another user.");
             throw new ForbiddenException("User is only allowed to register itself.");
         }
@@ -94,7 +95,7 @@ public class UserResource {
 
         return new UserRegistration(
             metadata.deviceId(),
-            metadata.email(),
+            metadata.userId(),
             metadata.encryptedPrivateKey(),
             metadata.mainPublicKey(),
             metadata.devicePublicKey(),
@@ -113,20 +114,23 @@ public class UserResource {
 
     @GET
     @RolesAllowed("owner")
-    @Path("{email}/public-keys/{kid}")
+    @Path("{userId}/public-keys/{kid}")
     @Produces(APPLICATION_JSON)
-    public String getKey(@PathParam("email") User user, @PathParam("kid") Kid kid) throws IOException {
+    public String getKey(@PathParam("userId") User user, @PathParam("kid") Kid kid) throws IOException {
         LOG.info("Loading public key");
         return userRepository.loadPublicKey(user, kid).orElseThrow(() -> new NotFoundException());
     }
 
+    // Keyed by email, not userId: the caller is unauthenticated and does not know its own id yet.
+    // The server resolves the address through UserMappingService and emails a login or registration
+    // link accordingly.
     @POST
     @PermitAll
-    @Path("{email}/verifications")
+    @Path("verifications")
     @Consumes(APPLICATION_JSON)
-    public Response verfiyUser(@PathParam("email") User user) throws IOException {
+    public Response verfiyUser(VerificationRequest request) throws IOException {
 
-        AuthenticationStatus status = userService.startAuthenticationProcess(user);
+        AuthenticationStatus status = userService.startAuthenticationProcess(request.email());
         return status == REGISTRATION_STARTED ? Response.status(CREATED).build() : Response.status(ACCEPTED).build();
     }
 }

@@ -67,7 +67,7 @@ import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
-@Path("{email}/documents")
+@Path("{userId}/documents")
 public class DocumentResource {
 
     private static final Logger LOG = LogManager.getLogger(DocumentResource.class);
@@ -83,7 +83,7 @@ public class DocumentResource {
     @Path("{documentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public Response getDocument(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId) throws IOException {
 
         EncryptedMetadata metadata = documentRepository.loadEncryptedMetadataWithETag(user, documentId)
@@ -96,7 +96,7 @@ public class DocumentResource {
     @Path("{documentId}")
     @Consumes(APPLICATION_OCTET_STREAM)
     public Response updateDocument(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId,
         EncryptedContent metadata,
         @Context Request request) throws IOException {
@@ -123,7 +123,7 @@ public class DocumentResource {
     @Path("{documentId}/files/{contentId}")
     @Produces(APPLICATION_OCTET_STREAM)
     public EncryptedContent getDocumentContent(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("contentId") DocumentId contentId) throws IOException {
 
@@ -135,7 +135,7 @@ public class DocumentResource {
     @Path("{documentId}/files/{contentId}")
     @Consumes(APPLICATION_OCTET_STREAM)
     public Response storeDocumentContent(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("contentId") DocumentId contentId,
         EncryptedContent content) throws IOException {
@@ -149,7 +149,7 @@ public class DocumentResource {
     @Path("{documentId}/keys/{kid}")
     @Produces(APPLICATION_JSON)
     public EncryptedSharedKey getSharedKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("kid") Kid kid) throws IOException {
 
@@ -162,7 +162,7 @@ public class DocumentResource {
     @Path("{documentId}/keys")
     @Consumes(APPLICATION_JSON)
     public Response storeSharedKey(
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId,
         EncryptedSharedKey key) throws IOException {
 
@@ -175,7 +175,7 @@ public class DocumentResource {
     @Consumes(MULTIPART_FORM_DATA)
     public Response uploadDocument(
         @Context UriInfo uriInfo,
-        @PathParam("email") User user,
+        @PathParam("userId") User user,
         @Multipart("metadata") UploadMetadata metadata,
         @Multipart("folder") EncryptedContent folderContent,
         @Multipart("document") EncryptedContent documentContent,

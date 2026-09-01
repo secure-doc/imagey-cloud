@@ -22,6 +22,7 @@ export enum RegistrationResult {
 
 export const authenticationService = {
   register: async (
+    userId: UserId,
     email: Email,
     password: Password,
     inviter?: UserId,
@@ -29,7 +30,7 @@ export const authenticationService = {
     // The three roots have no data dependency on each other - run them in
     // parallel (each is a WebCrypto round-trip).
     const [device, mainKeyPair, settingsKey] = await Promise.all([
-      deviceService.initializeDevice(email, password),
+      deviceService.initializeDevice(userId, password),
       cryptoService.initializeKeyPair(),
       cryptoService.generateSymmetricKey(),
     ]);
@@ -92,37 +93,37 @@ export const authenticationService = {
 
     await authenticationRepository.register(
       {
-        email,
+        userId,
         deviceId: device.deviceId,
         devicePublicKey: device.deviceKeyPair.publicKey,
         mainPublicKey: mainKeyPair.publicKey,
         encryptedPrivateKey: encryptedPrivateMainKey,
         settingsKey: {
-          issuer: email,
+          issuer: userId,
           kid: "0",
           sharedKey: encryptedSettingsKey,
         },
         documentList: {
           id: documentListId,
           key: {
-            issuer: email,
-            kid: email,
+            issuer: userId,
+            kid: userId,
             sharedKey: documentList.wrappedKey,
           },
         },
         chatList: {
           id: chatListId,
           key: {
-            issuer: email,
-            kid: email,
+            issuer: userId,
+            kid: userId,
             sharedKey: chatList.wrappedKey,
           },
         },
         profile: {
           id: profileId,
           key: {
-            issuer: email,
-            kid: email,
+            issuer: userId,
+            kid: userId,
             sharedKey: profile.wrappedKey,
           },
         },
@@ -139,7 +140,7 @@ export const authenticationService = {
       // is on our own contact-request entry (the server persisted it there
       // when the invite was sent). No public-key fetch, no key in the link.
       const invitation = (
-        await contactRepository.getContactRequests(email)
+        await contactRepository.getContactRequests(userId)
       ).find(
         (request) =>
           request.inviter === inviter && request.status === "INVITED",
@@ -148,12 +149,12 @@ export const authenticationService = {
         throw new Error("No pending invitation from " + inviter + " to accept");
       }
       const settings = await documentService.getSettings(
-        email,
+        userId,
         mainKeyPair.publicKey,
         mainKeyPair.privateKey,
       );
       await contactService.acceptContactRequest(
-        email,
+        userId,
         inviter,
         invitation.publicKey,
         settings,
@@ -182,23 +183,23 @@ export const authenticationService = {
     }
   },
   requestChallenge: async (
-    email: Email,
+    userId: UserId,
     deviceId: DeviceId,
   ): Promise<{ nonce: Nonce; ephemeralPublicKey: JsonWebKey }> => {
     try {
-      return await authenticationRepository.requestChallenge(email, deviceId);
+      return await authenticationRepository.requestChallenge(userId, deviceId);
     } catch {
       return Promise.reject("Failed to request challenge");
     }
   },
   authenticateWithChallenge: async (
-    email: Email,
+    userId: UserId,
     deviceId: DeviceId,
     password: Password,
     trustedDevice: boolean = false,
   ): Promise<{ privateMainKey: JsonWebKey; privateDeviceKey: JsonWebKey }> => {
     const challenge = await authenticationService.requestChallenge(
-      email,
+      userId,
       deviceId,
     );
     const serverPublicKey = challenge.ephemeralPublicKey;
@@ -216,7 +217,7 @@ export const authenticationService = {
 
     try {
       await authenticationRepository.authenticateWithChallenge(
-        email,
+        userId,
         deviceId,
         signature,
         trustedDevice,
@@ -241,7 +242,7 @@ export const authenticationService = {
 
       try {
         await authenticationRepository.storeRecoveryKey(
-          email,
+          userId,
           deviceId,
           recoveryKey,
         );
@@ -251,7 +252,7 @@ export const authenticationService = {
     }
 
     const privateMainKey = await authenticationService.loadPrivateMainKey(
-      email,
+      userId,
       deviceId,
       privateDeviceKey,
     );
@@ -259,14 +260,14 @@ export const authenticationService = {
     return { privateMainKey, privateDeviceKey };
   },
   loadPrivateMainKey: async (
-    email: Email,
+    userId: UserId,
     deviceId: DeviceId,
     privateDeviceKey: JsonWebKey,
   ): Promise<JsonWebKey> => {
     const encryptedPrivateMainKey =
-      await authenticationRepository.loadPrivateMainKey(email, deviceId);
+      await authenticationRepository.loadPrivateMainKey(userId, deviceId);
     const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
-      email,
+      userId,
       encryptedPrivateMainKey.encryptingDeviceId,
     );
     const decryptedPrivateMainKey = await cryptoService.decryptKey(
@@ -277,7 +278,7 @@ export const authenticationService = {
     return decryptedPrivateMainKey;
   },
   autoLogin: async (
-    email: Email,
+    userId: UserId,
     deviceId: DeviceId,
     encryptedRecoveryDeviceKey: EncryptedRecoveryKey,
   ): Promise<{
@@ -286,7 +287,7 @@ export const authenticationService = {
     publicDeviceKey: JsonWebKey;
   }> => {
     const recoveryKey = await authenticationRepository.loadRecoveryKey(
-      email,
+      userId,
       deviceId,
     );
     const privateDeviceKey = await cryptoService.decryptPrivatePasswordKey(
@@ -294,12 +295,12 @@ export const authenticationService = {
       recoveryKey,
     );
     const privateMainKey = await authenticationService.loadPrivateMainKey(
-      email,
+      userId,
       deviceId,
       privateDeviceKey,
     );
     const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
-      email,
+      userId,
       deviceId,
     );
 

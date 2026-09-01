@@ -1,3 +1,41 @@
+// The server now identifies every account by an opaque UUID (see
+// docs/adr/0005-user-ids-instead-of-emails.md). These are the fixed ids the
+// server-side test fixtures (imagey-server UserFactory + src/test/resources/data)
+// pin for each persona - the Playwright suite must use the exact same values so
+// the generated pacts line up with the provider ContractTest.
+export const UserIds = {
+  "mary@imagey.cloud": "d20cf443-4f96-418f-a957-c8cbef8677c3",
+  "joe@imagey.cloud": "35c34cb3-559d-4001-a67b-23259e45e69e",
+  "alice@imagey.cloud": "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+  "bill@imagey.cloud": "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+  "laura@imagey.cloud": "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+} as const;
+
+export const MARY_ID = UserIds["mary@imagey.cloud"];
+export const JOE_ID = UserIds["joe@imagey.cloud"];
+export const ALICE_ID = UserIds["alice@imagey.cloud"];
+export const BILL_ID = UserIds["bill@imagey.cloud"];
+export const LAURA_ID = UserIds["laura@imagey.cloud"];
+
+// Resolves a persona email to its server userId. Unknown addresses (e.g. the
+// "unknown@imagey.cloud" used by the not-registered flows) are returned
+// unchanged so callers can still feed them through as-is.
+export function userId(email: string): string {
+  return (UserIds as Record<string, string>)[email] ?? email;
+}
+
+const idToEmail: Record<string, string> = Object.fromEntries(
+  Object.entries(UserIds).map(([email, id]) => [id, email]),
+);
+
+// The persona's local-part ("mary", "laura", ...) for a userId or email. Used
+// for building stable-looking internal test identifiers (chat ids, Pact state
+// names) that used to be derived from the email local-part.
+export function shortName(idOrEmail: string): string {
+  const email = idToEmail[idOrEmail] ?? idOrEmail;
+  return email.split("@")[0];
+}
+
 export interface TestDevice {
   deviceId: string;
   publicDeviceKey?: JsonWebKey;

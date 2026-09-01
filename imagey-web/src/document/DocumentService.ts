@@ -31,24 +31,24 @@ export const documentService = {
   // shared with someone outside its own folder hierarchy) - in that case
   // `wrappingKey` is the *other* party's public key, not a symmetric key.
   loadKey: async (
-    email: string,
+    userId: string,
     documentId: string,
     kid: string,
     wrappingKey: JsonWebKey,
     privateKey?: JsonWebKey,
   ): Promise<JsonWebKey> => {
-    const key = await documentRepository.loadKey(email, documentId, kid);
+    const key = await documentRepository.loadKey(userId, documentId, kid);
     return cryptoService.decryptKey(key.sharedKey, wrappingKey, privateKey);
   },
   storeFolder: async (
-    email: string,
+    userId: string,
     name: string,
     parentFolder: Document,
     parentFolderKey: JsonWebKey,
   ): Promise<StoreResult> => {
     const file = new File([], name, { type: "Folder" });
     return documentService.storeDocument(
-      email,
+      userId,
       file,
       parentFolder,
       parentFolderKey,
@@ -56,7 +56,7 @@ export const documentService = {
   },
 
   storeDocument: async (
-    email: string,
+    userId: string,
     file: File,
     parentFolder: Document,
     parentFolderKey: JsonWebKey,
@@ -108,7 +108,7 @@ export const documentService = {
     ]);
     // The parent folder may belong to someone who shared it with us; its key is theirs, so the new
     // document's key entry is issued by them, and its content update goes to their tree.
-    const folderOwner = parentFolder.owner ?? email;
+    const folderOwner = parentFolder.owner ?? userId;
     const files: { filename: string; buffer: ArrayBuffer }[] = [];
     if (contentId) {
       files.push({ filename: contentId, buffer: encryptedContent[1] });
@@ -152,7 +152,7 @@ export const documentService = {
       );
       try {
         const { folderETag } = await documentRepository.uploadDocument(
-          email,
+          userId,
           folderOwner,
           parentFolder.documentId,
           newEncryptedParent[0],
@@ -194,7 +194,7 @@ export const documentService = {
   // Encrypts and uploads a new file for an EXISTING document (e.g. a
   // replacement profile picture) and returns the new content id.
   storeContent: async (
-    email: string,
+    userId: string,
     documentId: string,
     documentKey: JsonWebKey,
     content: File,
@@ -205,7 +205,7 @@ export const documentService = {
       [await content.arrayBuffer()],
     );
     await documentRepository.storeContent(
-      email,
+      userId,
       documentId,
       contentId,
       encryptedContent,
@@ -217,7 +217,7 @@ export const documentService = {
   // `etag` the document was loaded with (Document.etag) so a concurrent change
   // is rejected with PreconditionFailedError instead of silently overwritten.
   updateDocumentMetadata: async (
-    email: string,
+    userId: string,
     documentId: string,
     documentKey: JsonWebKey,
     metadata: Record<string, unknown>,
@@ -233,7 +233,7 @@ export const documentService = {
     // Returns the document's new ETag so the caller can keep saving without a
     // re-read (the server 412s a second save that still carries the old one).
     return documentRepository.updateDocumentMetadata(
-      email,
+      userId,
       documentId,
       encryptedMetadata,
       etag,
@@ -416,14 +416,14 @@ export const documentService = {
   // as adding it to any other folder: the document's own symmetric key gets
   // a second keys/{kid} entry, this time wrapped with the chat's shared key
   // (the chat Document's own key, see ContactService.loadChatKey) instead
-  // of a folder's. The recipient's email is used as "kid" so they can find
+  // of a folder's. The recipient's userId is used as "kid" so they can find
   // their own copy the same way they'd find a folder-shared one, and as the
   // issuer so the entry grants them the "member" role on this document -
   // they can still decrypt it, as they hold the same chat key.
   shareDocument: async (
     user: string,
     document: DocumentMetadata,
-    contactEmail: string,
+    contactUserId: string,
     chatKey: JsonWebKey,
   ): Promise<void> => {
     if (!document.key) {
@@ -431,8 +431,8 @@ export const documentService = {
     }
     const encryptedKey = await cryptoService.encryptKey(document.key, chatKey);
     await documentRepository.storeSharedKey(user, document.documentId, {
-      issuer: contactEmail,
-      kid: contactEmail,
+      issuer: contactUserId,
+      kid: contactUserId,
       sharedKey: encryptedKey,
     });
   },

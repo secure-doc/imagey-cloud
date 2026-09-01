@@ -5,6 +5,7 @@ import { ContactRequest } from "./ContactRequest";
 export const contactRepository = {
   sendContactRequest: async (
     inviter: UserId,
+    inviterEmail: Email,
     invitee: Email,
     publicKey: JsonWebKey,
   ): Promise<void> => {
@@ -14,7 +15,9 @@ export const contactRepository = {
         "Content-Type": "application/json",
       },
       credentials: "same-origin",
-      body: JSON.stringify({ inviter, invitee, publicKey }),
+      // inviterEmail is only used server-side to name the inviter in the
+      // invitation mail sent to a not-yet-registered invitee; it is not stored.
+      body: JSON.stringify({ invitee, inviterEmail, publicKey }),
     });
     if (!response.ok) {
       throw new Error("Failed to send contact request");

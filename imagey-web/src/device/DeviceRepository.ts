@@ -1,23 +1,32 @@
-// imagey.user contains the email address
-// imagey.deviceIds[email] contains the device id of the user
-// imagey.devices[deviceId].key contains the encrypted private device key
+// imagey.user           - the signed-in account's server id (a UUID)
+// imagey.email           - the address that id was last reached through (display only)
+// imagey.deviceIds[userId]        - this browser's device id for that account
+// imagey.devices[deviceId].key    - the password-encrypted private device key
 export const deviceRepository = {
   loadUser: () => {
-    const email = localStorage.getItem("imagey.user");
-    return email ? email : undefined;
+    const userId = localStorage.getItem("imagey.user");
+    return userId ? userId : undefined;
   },
-  storeUser: (user: string) => {
-    localStorage.setItem("imagey.user", user);
+  storeUser: (userId: string) => {
+    localStorage.setItem("imagey.user", userId);
   },
   removeUser: () => {
     localStorage.removeItem("imagey.user");
+    localStorage.removeItem("imagey.email");
   },
-  loadDeviceId: (email: string) => {
-    const deviceId = localStorage.getItem(`imagey.deviceIds[${email}]`);
+  loadEmail: () => {
+    const email = localStorage.getItem("imagey.email");
+    return email ? email : undefined;
+  },
+  storeEmail: (email: string) => {
+    localStorage.setItem("imagey.email", email);
+  },
+  loadDeviceId: (userId: string) => {
+    const deviceId = localStorage.getItem(`imagey.deviceIds[${userId}]`);
     return deviceId ? deviceId : undefined;
   },
-  storeDeviceId: (email: string, deviceId: string) => {
-    localStorage.setItem(`imagey.deviceIds[${email}]`, deviceId);
+  storeDeviceId: (userId: string, deviceId: string) => {
+    localStorage.setItem(`imagey.deviceIds[${userId}]`, deviceId);
   },
   loadKey: (deviceId: string) => {
     const key = localStorage.getItem(`imagey.devices[${deviceId}].key`);

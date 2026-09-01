@@ -35,6 +35,10 @@ public record DomainName(String value) {
         return "Imagey";
     }
 
+    public String startUrl() {
+        return value == null ? "https://imagey.cloud" : value;
+    }
+
     public String getHost() {
         if (value == null) {
             return "imagey.cloud";

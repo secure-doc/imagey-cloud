@@ -24,6 +24,7 @@ import static cloud.imagey.domain.token.TokenService.ONE_WEEK;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -49,6 +50,8 @@ import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DomainName;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
+import cloud.imagey.domain.user.UserMappingService;
 import cloud.imagey.domain.user.UserRepository;
 import cloud.imagey.infrastructure.ResourceConflictException;
 
@@ -63,6 +66,8 @@ public class ContactService {
     private MailService mailService;
     @Inject
     private UserRepository userRepository;
+    @Inject
+    private UserMappingService userMappingService;
     @Inject
     private ContactRepository contactRepository;
     @Inject
@@ -79,19 +84,37 @@ public class ContactService {
     @ConfigProperty(name = "mail.invitation.body")
     private EmailBody invitationBody;
 
-    public boolean invite(User sender, Email recipient, PublicKey key) throws IOException {
+    /**
+     * @param sender        the inviting account
+     * @param senderEmail   the inviter's address, supplied by their client - used only to name the
+     *                      inviter in the invitation email, never stored
+     * @param recipient     the address being invited; resolved to (or assigned) a {@link UserId} so
+     *                      the pending request can be filed in the invitee's tree even before they
+     *                      register
+     * @param key           the inviter's public main key, stored on the request for the invitee to
+     *                      wrap the chat key on accept
+     * @return the invitee (by minted/resolved {@link UserId}) if a fresh request was filed, or
+     *         empty if an exchange between the two already existed and nothing was sent
+     */
+    public Optional<User> invite(User sender, Email senderEmail, Email recipient, PublicKey key) throws IOException {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL");
         }
 
-        User recipientUser = new User(recipient);
+        // Resolve the invitee's userId without touching the global mapping write-lock when they are
+        // already known. A miss means the address has never been seen, so it can have neither an
+        // account nor an existing exchange - we only mint an id below, once we know a fresh request
+        // is actually being filed.
+        User recipientUser = userMappingService.findUserId(recipient).map(User::new).orElse(null);
         // "Registered", not merely "has a home directory": ContactRepository.persist creates the
         // invitee's tree, so a pending invite from someone else must not make this look like an
         // existing account (which would suppress the invitation email and mis-route the invitee to
         // a login link instead of registration).
-        boolean registered = userRepository.isRegistered(recipientUser);
-        ContactExchange currentExchange = contactRepository.getContactExchange(sender, recipientUser).orElse(null);
+        boolean registered = recipientUser != null && userRepository.isRegistered(recipientUser);
+        ContactExchange currentExchange = recipientUser == null
+            ? null
+            : contactRepository.getContactExchange(sender, recipientUser).orElse(null);
         if (currentExchange != null && currentExchange.status() == DENIED) {
             // Block only the party whose request was denied from re-sending it. The party that did
             // the declining stays free to invite the other side - their fresh INVITED exchange
@@ -101,24 +124,29 @@ public class ContactService {
             }
         } else if (currentExchange != null) {
             // A pending or completed exchange between these two already exists; nothing to re-send.
-            return false;
+            return Optional.empty();
         }
 
-        contactRepository.persist(new ContactExchange(sender, recipient, INVITED, key, null, null));
+        // A fresh request is being filed: mint (or look up) the invitee's userId now so the pending
+        // request lands in their tree and the mapping already resolves once they register.
+        if (recipientUser == null) {
+            recipientUser = new User(userMappingService.registerUser(recipient));
+        }
+        contactRepository.persist(new ContactExchange(sender, recipientUser, INVITED, key, null, null));
 
         if (!registered) {
             // The invitee accepts this request as the last step of registration; it reads the
             // inviter's public main key straight off its own persisted contact-request entry
             // (GET /users/{invitee}/contact-requests) rather than from the link.
-            Token token = tokenService.generateToken(recipientUser, ONE_WEEK);
-            String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.email().address();
+            Token token = tokenService.generateInvitationToken(recipient, ONE_WEEK);
+            String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.id().id();
             mailService.send(recipient, new EmailTemplate(
                 new Email("invitation@" + domain.getHost()),
                 invitationSubject,
                 invitationBody
-            ).formatted(domain.getAppName(), sender.email().address(), link));
+            ).formatted(domain.getAppName(), senderEmail.address(), link));
         }
-        return true;
+        return Optional.of(recipientUser);
     }
 
     // Called by the invitee (see ContactResource.updateContactRequest): they overwrite the
@@ -159,7 +187,7 @@ public class ContactService {
             // exchange.chatId() is non-null here: acceptInvitation rejects an ACCEPTED transition
             // without one, and this method only proceeds for an ACCEPTED exchange.
             documentRepository.create(invitee, exchange.chatId(),
-                new EncryptedSharedKey(inviter, new Kid(inviter.email().address()), chatKey.sharedKey()));
+                new EncryptedSharedKey(inviter, new Kid(inviter.id().id()), chatKey.sharedKey()));
         }
 
         ContactExchange received = new ContactExchange(
@@ -173,7 +201,7 @@ public class ContactService {
             contactRepository.persist(new ContactExchange(
                 exchange.inviter(), exchange.invitee(), DENIED, exchange.publicKey(), exchange.chatId(), exchange.sharedKey()));
         } else {
-            contactRepository.persist(new ContactExchange(requestor, user.email(), DENIED, null, null, null));
+            contactRepository.persist(new ContactExchange(requestor, user, DENIED, null, null, null));
         }
     }
 }

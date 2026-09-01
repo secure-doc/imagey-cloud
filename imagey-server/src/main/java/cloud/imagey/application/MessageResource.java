@@ -62,10 +62,10 @@ import cloud.imagey.domain.contact.MessageId;
 import cloud.imagey.domain.contact.MessageRepository;
 import cloud.imagey.domain.contact.MessageService;
 import cloud.imagey.domain.document.DocumentId;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
-@Path("{email}/documents/{chatId}/messages")
+@Path("{userId}/documents/{chatId}/messages")
 @ApplicationScoped
 public class MessageResource {
 
@@ -84,7 +84,7 @@ public class MessageResource {
     @RolesAllowed({"owner", "member"})
     @Consumes(TEXT_PLAIN)
     public Response sendMessage(
-        @PathParam("email") User owner,
+        @PathParam("userId") User owner,
         @PathParam("chatId") DocumentId chatId,
         MessageContent messageContent,
         @Context UriInfo uriInfo) throws IOException {
@@ -97,7 +97,7 @@ public class MessageResource {
     @RolesAllowed({"owner", "member"})
     @Produces(APPLICATION_JSON)
     public void receiveMessages(
-        @PathParam("email") User owner,
+        @PathParam("userId") User owner,
         @PathParam("chatId") DocumentId chatId,
         @QueryParam("sinceId") MessageId sinceId,
         @HeaderParam("Prefer") Prefer prefer,
@@ -123,7 +123,7 @@ public class MessageResource {
     }
 
     private User caller() {
-        return new User(new Email(securityContext.getUserPrincipal().getName()));
+        return new User(new UserId(securityContext.getUserPrincipal().getName()));
     }
 
     public record Prefer(String value) {

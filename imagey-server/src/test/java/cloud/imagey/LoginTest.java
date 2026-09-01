@@ -16,17 +16,23 @@
  */
 package cloud.imagey;
 
+import static cloud.imagey.domain.token.TokenService.ONE_HOUR;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
+import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.FOUND;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
+import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
+import static org.apache.commons.io.FileUtils.copyDirectory;
+import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.util.Optional;
 
 import jakarta.inject.Inject;
@@ -45,6 +51,7 @@ import org.junit.jupiter.api.Test;
 
 import com.icegreen.greenmail.base.GreenMailOperations;
 
+import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -69,9 +76,9 @@ public class LoginTest {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/mary@imagey.cloud/verifications")
+            .path("users/verifications")
             .request().header("Origin", "https://secure-doc.store")
-            .post(json(""));
+            .post(json("{\"email\":\"mary@imagey.cloud\"}"));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
@@ -91,7 +98,7 @@ public class LoginTest {
         String tokenValue = token.substring(tokenKey.length() + 1);
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         Optional<DecodedToken> decodedToken = tokenService.decode(new Token(tokenValue));
-        assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).isEqualTo("mary@imagey.cloud");
+        assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).isEqualTo(UserFactory.MARY_ID.id());
     }
 
     @Test
@@ -100,9 +107,9 @@ public class LoginTest {
         // Given
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/joe@imagey.cloud/verifications")
+            .path("users/verifications")
             .request().header("Origin", "https://secure-doc.store")
-            .post(json(""));
+            .post(json("{\"email\":\"joe@imagey.cloud\"}"));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
@@ -115,8 +122,8 @@ public class LoginTest {
             .request().header("Origin", "https://secure-doc.store")
             .get();
 
-        // Then
-        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+        // Then - a registration-typed token is rejected outright at the login endpoint.
+        assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
     }
 
     @Test
@@ -140,38 +147,83 @@ public class LoginTest {
     public void verifyInvitedButUnregistered() throws IOException, MessagingException {
         // A pending invite creates the invitee's home directory (ContactRepository.persist) before
         // they ever register - that bare directory must not make them look like an existing account.
-        File inviteeHome = new File(rootPath, "invitee@imagey.cloud");
+        File inviteeHome = new File(rootPath, "invitee-home-placeholder");
         new File(inviteeHome, "contact-requests").mkdirs();
 
         newClient()
             .target("http://localhost:" + config.getHttpPort())
-            .path("users/invitee@imagey.cloud/verifications")
+            .path("users/verifications")
             .request().header("Origin", "https://secure-doc.store")
-            .post(json(""));
+            .post(json("{\"email\":\"invitee@imagey.cloud\"}"));
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
         assertThat(extractLink(receivedMessages[0])).contains("/registrations/");
     }
 
+    @Test
+    @DisplayName("A login link for an address with no user mapping is answered with 404")
+    public void loginForUnmappedAddress() {
+        Token loginToken = tokenService.generateLoginToken(new Email("ghost@imagey.cloud"), ONE_HOUR);
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/authentications/" + loginToken.token())
+            .request().header("Origin", "https://secure-doc.store")
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A login link for a mapped address whose account no longer exists is answered with 404")
+    public void loginForMappedButMissingAccount() {
+        // joe is in the user-ids.json fixture, but initializeDefaultState() removes his data directory.
+        Token loginToken = tokenService.generateLoginToken(new Email("joe@imagey.cloud"), ONE_HOUR);
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/authentications/" + loginToken.token())
+            .request().header("Origin", "https://secure-doc.store")
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A verification request from a disallowed client URL is rejected with 400")
+    public void verificationFromDisallowedOrigin() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/verifications")
+            .request().header("Origin", "https://evil.example.com")
+            .post(json("{\"email\":\"mary@imagey.cloud\"}"));
+
+        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A user-mapping file that holds a bare null is treated as an empty mapping")
+    public void nullUserMappingFileIsTolerated() throws IOException {
+        Files.writeString(new File(rootPath, "user-ids.json").toPath(), "null");
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/verifications")
+            .request().header("Origin", "https://secure-doc.store")
+            .post(json("{\"email\":\"mary@imagey.cloud\"}"));
+
+        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
+    }
+
     @BeforeEach
     void initializeDefaultState() throws URISyntaxException, IOException {
-        File joesData = new File("./" + rootPath, "joe@imagey.cloud");
-        if (joesData.exists()) {
-            forceDelete(joesData);
+        File data = new File(rootPath);
+        if (data.exists()) {
+            forceDelete(data);
         }
-
-        File inviteeData = new File(rootPath, "invitee@imagey.cloud");
-        if (inviteeData.exists()) {
-            forceDelete(inviteeData);
-        }
-
-        File marysData = new File(rootPath, "mary@imagey.cloud");
-        File marysDevices = new File(marysData, "devices");
-        File marysCreatedDevice = new File(marysDevices, "123e4567-e89b-12d3-a456-426655440000");
-        if (marysCreatedDevice.exists()) {
-            forceDelete(marysCreatedDevice);
-        }
+        copyDirectory(new File("src/test/resources/data"), data);
+        // Joe must look unregistered - verification of his address should start registration.
+        deleteQuietly(new File(data, UserFactory.JOE_ID.id()));
+        deleteQuietly(new File(data, "invitee-home-placeholder"));
     }
 
     private String extractLink(MimeMessage message) throws IOException, MessagingException {

@@ -9,14 +9,14 @@ import { ChatsList } from "./Chats";
 import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
 import { useChatsId } from "../contexts/SettingsContext";
 
-export default function Chat({ contactEmail }: { contactEmail: string }) {
+export default function Chat({ contactUserId }: { contactUserId: string }) {
   const authentication = useAuthentication();
   const user = authentication.user;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
   const chatsId = useChatsId();
 
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
-  const [chat, setChat] = useState<{ ownerEmail: string; chatId: string }>();
+  const [chat, setChat] = useState<{ ownerId: string; chatId: string }>();
   const [keyError, setKeyError] = useState(false);
   const [chatsLoadFailed, setChatsLoadFailed] = useState(false);
   // Populated once the sidebar ChatsList has loaded the "chats" document -
@@ -28,7 +28,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   }>();
   const { messages, setMessages } = usePolling(
     user,
-    chat?.ownerEmail,
+    chat?.ownerId,
     chat?.chatId,
     sharedKey,
   );
@@ -36,7 +36,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useBackButton();
-  useTitle(contactEmail);
+  useTitle(contactUserId);
 
   const handleChatsListLoaded = useCallback(
     (contacts: Contact[], chatsDocumentKey: JsonWebKey) =>
@@ -45,7 +45,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
   );
 
   useEffect(() => {
-    if (!contactEmail || !privateKey || !chatsDocumentInfo) {
+    if (!contactUserId || !privateKey || !chatsDocumentInfo) {
       return;
     }
     setSharedKey(undefined);
@@ -56,14 +56,14 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
     // ContactService figure out whether it's ours (self-issued) or the
     // other party's (ECDH-wrapped for us).
     const contact = chatsDocumentInfo.contacts.find(
-      (c) => c.userId === contactEmail,
+      (c) => c.userId === contactUserId,
     );
     if (!contact) {
-      console.error(`No chat found for contact ${contactEmail}`);
+      console.error(`No chat found for contact ${contactUserId}`);
       setKeyError(true);
       return;
     }
-    setChat({ ownerEmail: contact.owner, chatId: contact.chatId });
+    setChat({ ownerId: contact.owner, chatId: contact.chatId });
     contactService
       .loadChatKey(user, contact, chatsId, chatsDocumentInfo.chatsDocumentKey)
       .then((decryptedKey) => setSharedKey(decryptedKey))
@@ -71,7 +71,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
         console.error(e);
         setKeyError(true);
       });
-  }, [user, contactEmail, chatsId, chatsDocumentInfo, privateKey]);
+  }, [user, contactUserId, chatsId, chatsDocumentInfo, privateKey]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -82,7 +82,7 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
       <ChatsList
         id={chatsId}
         className="m l"
-        activeContactEmail={contactEmail}
+        activeContactUserId={contactUserId}
         onLoaded={handleChatsListLoaded}
         onLoadError={setChatsLoadFailed}
       />
@@ -149,13 +149,13 @@ export default function Chat({ contactEmail }: { contactEmail: string }) {
               ))}
               <div ref={messagesEndRef} />
             </div>
-            {user && contactEmail && chat && (
+            {user && contactUserId && chat && (
               <>
                 <hr className="divider" />
                 <SendMessageForm
-                  userEmail={user}
-                  contactEmail={contactEmail}
-                  ownerEmail={chat.ownerEmail}
+                  userId={user}
+                  contactUserId={contactUserId}
+                  ownerId={chat.ownerId}
                   chatId={chat.chatId}
                   sharedKey={sharedKey}
                   onMessageSent={(newMessage) =>

@@ -45,12 +45,12 @@ public class AbstractFileRepository {
     }
 
     /**
-     * The storage tree of a single account, {@code <root.path>/<email>}. Takes the raw address
+     * The storage tree of a single account, {@code <root.path>/<userId>}. Takes the raw id string
      * rather than a {@code cloud.imagey.domain.user.User} on purpose: the infrastructure layer
      * must not depend on domain types (see {@code ArchitectureTest#noCycles}).
      */
-    protected File getUserHome(String emailAddress) {
-        return new File(rootPath, emailAddress);
+    protected File getUserHome(String userId) {
+        return new File(rootPath, userId);
     }
 
     protected File createNewFile(File folder, String filename) {

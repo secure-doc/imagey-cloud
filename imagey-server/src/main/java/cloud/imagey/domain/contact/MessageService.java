@@ -43,14 +43,14 @@ public class MessageService {
     private Event<Message> messageEvent;
 
     public Message sendMessage(User owner, DocumentId chatId, User sender, MessageContent encryptedContent) throws IOException {
-        // RolesFilter grants "owner" to any caller who puts their own email in {email}, so a chat
+        // RolesFilter grants "owner" to any caller who puts their own userId in {userId}, so a chat
         // member could address /{self}/documents/{chatId}/messages and silently create a stray
         // messages folder in their own tree - a 201 for a message nobody else can read. Messages
         // are single-copy (kept only in the chat owner's tree), so require the chat document to
         // actually exist there.
         if (!documentRepository.documentExists(owner, chatId)) {
             throw new ResourceNotFoundException(
-                "Chat " + chatId.id() + " does not exist for " + owner.email().address() + ".");
+                "Chat " + chatId.id() + " does not exist for " + owner.id().id() + ".");
         }
         Message message = messageRepository.persist(owner, chatId, sender, encryptedContent);
         messageEvent.fire(message);

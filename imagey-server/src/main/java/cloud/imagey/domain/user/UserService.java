@@ -55,6 +55,8 @@ public class UserService {
     @Inject
     private UserRepository userRepository;
     @Inject
+    private UserMappingService userMappingService;
+    @Inject
     private DeviceRepository deviceRepository;
     @Inject
     private DocumentRepository documentRepository;
@@ -76,18 +78,22 @@ public class UserService {
     @ConfigProperty(name = "mail.registration.body")
     private EmailBody registrationBody;
 
-    public AuthenticationStatus startAuthenticationProcess(User user) {
+    public AuthenticationStatus startAuthenticationProcess(Email email) {
         LOG.info("authentiation starting...");
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL: " + domain.value());
         }
 
-        Token token = tokenService.generateToken(user, ONE_DAY);
-        if (userRepository.isRegistered(user)) {
+        boolean registered = userMappingService.findUserId(email)
+            .map(User::new)
+            .filter(userRepository::isRegistered)
+            .isPresent();
+        if (registered) {
             LOG.info("User exists");
+            Token token = tokenService.generateLoginToken(email, ONE_DAY);
             String link = domain.value() + "/authentications/" + token.token();
-            mailService.send(user.email(), new EmailTemplate(
+            mailService.send(email, new EmailTemplate(
                 new Email("login@" + domain.getHost()),
                 loginSubject,
                 loginBody
@@ -95,8 +101,9 @@ public class UserService {
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
             LOG.info("User does not exist, starting registration...");
+            Token token = tokenService.generateRegistrationToken(email, ONE_DAY);
             String link = domain.value() + "/registrations/" + token.token();
-            mailService.send(user.email(), new EmailTemplate(
+            mailService.send(email, new EmailTemplate(
                 new Email("verification@" + domain.getHost()),
                 registrationSubject,
                 registrationBody
@@ -115,7 +122,7 @@ public class UserService {
     }
 
     public void register(UserRegistration registration) throws IOException {
-        User user = new User(registration.email());
+        User user = new User(registration.userId());
         userRepository.storePublicKey(user, new Kid("0"), registration.mainPublicKey());
         deviceRepository.storeDevicePublicKey(user, registration.deviceId(), registration.devicePublicKey());
         deviceRepository.storeEncryptedPrivateKey(
@@ -123,17 +130,17 @@ public class UserService {
             registration.deviceId(),
             new PrivateKeyMetadata(new Kid("0"), registration.deviceId(), registration.encryptedPrivateKey()));
 
-        // Settings always lives under the user's own email as document id (see DocumentResource
+        // Settings always lives under the user's own userId as document id (see DocumentResource
         // path conventions elsewhere); documentList/chatList/profile get their ids from the client
         // (see AuthenticationService.ts), which generates them up front so it can wire up
         // cross-references before the account exists server-side.
-        persistDocument(user, new DocumentId(user.email().address()), registration.settings(), registration.settingsSharedKey());
+        persistDocument(user, new DocumentId(user.id().id()), registration.settings(), registration.settingsSharedKey());
         persistDocument(user, registration.documentListId(), registration.documentList(), registration.documentListSharedKey());
         persistDocument(user, registration.chatListId(), registration.chatList(), registration.chatListSharedKey());
         persistDocument(user, registration.profileId(), registration.profile(), registration.profileSharedKey());
     }
 
-    // The key's own kid (chosen by the client - "0" for settings, the user's own email for
+    // The key's own kid (chosen by the client - "0" for settings, the user's own userId for
     // documentList/chatList/profile, see AuthenticationRepository.ts) is used as-is as the lookup
     // file name, matching how DocumentRepository.findDocumentKey/persist are keyed everywhere else.
     private void persistDocument(User user, DocumentId documentId, EncryptedContent metadata, EncryptedSharedKey key) {

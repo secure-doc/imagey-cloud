@@ -25,12 +25,11 @@ import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.encryption.PublicKey.Deserializer;
 import cloud.imagey.domain.encryption.PublicKey.Serializer;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.User;
 
 public record ContactExchange(
     @JsonbTypeAdapter(User.Adapter.class) User inviter,
-    @JsonbTypeAdapter(Email.Adapter.class) Email invitee,
+    @JsonbTypeAdapter(User.Adapter.class) User invitee,
     ContactStatus status,
     @JsonbTypeSerializer(Serializer.class)
     @JsonbTypeDeserializer(Deserializer.class)

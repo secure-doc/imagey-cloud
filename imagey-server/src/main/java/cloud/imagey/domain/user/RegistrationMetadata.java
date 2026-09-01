@@ -20,7 +20,6 @@ import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.encryption.EncryptedPrivateKey;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.PublicKey;
-import cloud.imagey.domain.mail.Email;
 
 // The scalar half of a registration request (see UserResource#registerUser): everything the client
 // sends as the single JSON "metadata" multipart part, as opposed to the four opaque encrypted
@@ -28,11 +27,13 @@ import cloud.imagey.domain.mail.Email;
 // RecordMessageBodyReader / AbstractRecordConverter - the JSON keys must match these component
 // names exactly. UserResource#toRegistration folds this plus the four blobs into UserRegistration.
 //
-// settingsKey has no matching id here because the settings document's id is always the user's own
-// email (see UserService.register), so only documentList/chatList/profile carry an explicit
-// client-generated id alongside their self-key.
+// The userId is the one the server minted in RegistrationFilter / InvitationFilter and handed back
+// on the redirect (?userId=); registerUser only accepts it if it matches the authenticated
+// principal. settingsKey has no matching id here because the settings document's id is always the
+// user's own userId (see UserService.register), so only documentList/chatList/profile carry an
+// explicit client-generated id alongside their self-key.
 public record RegistrationMetadata(
-    Email email,
+    UserId userId,
     DeviceId deviceId,
     PublicKey devicePublicKey,
     PublicKey mainPublicKey,

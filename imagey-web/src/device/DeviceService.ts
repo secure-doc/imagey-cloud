@@ -3,16 +3,16 @@ import { cryptoService } from "../authentication/CryptoService";
 import { deviceRepository } from "./DeviceRepository";
 
 export const deviceService = {
-  registerDevice: async (email: string, password: string) => {
-    const device = await deviceService.initializeDevice(email, password);
+  registerDevice: async (userId: string, password: string) => {
+    const device = await deviceService.initializeDevice(userId, password);
     await authenticationRepository.storePublicDeviceKey(
-      email,
+      userId,
       device.deviceId,
       device.deviceKeyPair.publicKey,
     );
   },
-  initializeDevice: async (email: string, password: string) => {
-    const deviceId = generateDeviceId(email);
+  initializeDevice: async (userId: string, password: string) => {
+    const deviceId = generateDeviceId(userId);
     const deviceKeyPair = await cryptoService.initializeKeyPair();
     const encryptedPrivateDeviceKey =
       await cryptoService.encryptPrivatePasswordKey(
@@ -26,17 +26,17 @@ export const deviceService = {
     };
   },
   activateDevice: async (
-    email: string,
+    userId: string,
     deviceId: string,
     decryptedPrivateMainKey: JsonWebKey,
     privateDeviceKeyOfThisDevice: JsonWebKey,
   ) => {
-    const thisDeviceId = deviceRepository.loadDeviceId(email);
+    const thisDeviceId = deviceRepository.loadDeviceId(userId);
     if (!thisDeviceId) {
       return Promise.reject("deviceId not found");
     }
     const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
-      email,
+      userId,
       deviceId,
     );
     const encryptedPrivateMainKey = await cryptoService.encryptKey(
@@ -45,7 +45,7 @@ export const deviceService = {
       privateDeviceKeyOfThisDevice,
     );
     return authenticationRepository.storePrivateMainKey(
-      email,
+      userId,
       thisDeviceId,
       deviceId,
       encryptedPrivateMainKey,
@@ -61,14 +61,14 @@ export const deviceService = {
       devicePassword,
     );
   },
-  unlockDevice: async (email: string, devicePassword: string) => {
-    const deviceId = deviceRepository.loadDeviceId(email);
+  unlockDevice: async (userId: string, devicePassword: string) => {
+    const deviceId = deviceRepository.loadDeviceId(userId);
     if (!deviceId) {
       throw "DeviceId missing";
     }
 
     const publicDeviceKey = await authenticationRepository.loadPublicDeviceKey(
-      email,
+      userId,
       deviceId,
     );
     const encryptedPrivateDeviceKey = deviceRepository.loadKey(deviceId);
@@ -81,12 +81,12 @@ export const deviceService = {
       devicePassword,
     );
     const encryptedPrivateMainKeyMetadata =
-      await authenticationRepository.loadPrivateMainKey(email, deviceId);
+      await authenticationRepository.loadPrivateMainKey(userId, deviceId);
     const encryptingDeviceId =
       encryptedPrivateMainKeyMetadata.encryptingDeviceId;
     const encryptingPublicKey =
       await authenticationRepository.loadPublicDeviceKey(
-        email,
+        userId,
         encryptingDeviceId,
       );
     const decryptedPrivateMainKey = await cryptoService.decryptKey(
@@ -105,8 +105,8 @@ export const deviceService = {
   },
 };
 
-function generateDeviceId(email: string): string {
+function generateDeviceId(userId: string): string {
   const deviceId = cryptoService.generateUuid();
-  deviceRepository.storeDeviceId(email, deviceId);
+  deviceRepository.storeDeviceId(userId, deviceId);
   return deviceId;
 }

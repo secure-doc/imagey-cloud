@@ -19,6 +19,7 @@ import {
   AuthenticationContext,
   Settings as SettingsType,
 } from "./contexts/AuthenticationContext";
+import { UserId } from "./authentication/UserId";
 import Activities from "./pages/Activities";
 import { SettingsContext } from "./contexts/SettingsContext";
 
@@ -34,9 +35,9 @@ function DocumentRoute() {
 }
 
 function ChatRoute() {
-  const { contactEmail } = useParams();
-  return contactEmail ? (
-    <Chat key={contactEmail} contactEmail={contactEmail} />
+  const { contactUserId } = useParams();
+  return contactUserId ? (
+    <Chat key={contactUserId} contactUserId={contactUserId} />
   ) : null;
 }
 
@@ -50,7 +51,8 @@ function BottomNavLayout() {
 }
 
 function App() {
-  const [user, setUser] = useState<Email>();
+  const [user, setUser] = useState<UserId>();
+  const [email, setEmail] = useState<Email>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
   const [settings, setSettings] = useState<SettingsType | undefined>();
   const [folders, setFolders] = useState<Record<string, FolderInfo>>({});
@@ -104,8 +106,9 @@ function App() {
   if (!user || !keyPairs) {
     return (
       <AuthenticationComponent
-        onKeysDecrypted={(user, keyPairs) => {
+        onKeysDecrypted={(user, email, keyPairs) => {
           setUser(user);
+          setEmail(email);
           setKeyPairs(keyPairs);
         }}
       />
@@ -121,7 +124,7 @@ function App() {
   }
 
   return (
-    <AuthenticationContext.Provider value={{ user, keyPairs, settings }}>
+    <AuthenticationContext.Provider value={{ user, email, keyPairs, settings }}>
       <SettingsContext.Provider
         value={{
           settingsKey: settings.settingsKey,
@@ -163,7 +166,7 @@ function App() {
                     <Route path="devices" element={user && <Devices />} />
                   </Route>
                 </Route>
-                <Route path="chats/:contactEmail" element={<ChatRoute />} />
+                <Route path="chats/:contactUserId" element={<ChatRoute />} />
               </Routes>
               <aside></aside>
             </BrowserRouter>

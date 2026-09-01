@@ -3,9 +3,11 @@ import { deviceService } from "../device/DeviceService";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { JsonWebKeyPair } from "../contexts/AuthenticationContext";
+import { UserId } from "./UserId";
 
 interface DeviceRegistrationDialogProperties {
-  email: string;
+  userId: UserId;
+  email?: string;
   onKeysDecrypted: (
     privateMainKey: JsonWebKey,
     deviceKeyPair: JsonWebKeyPair,
@@ -14,6 +16,7 @@ interface DeviceRegistrationDialogProperties {
 }
 
 export default function DeviceRegistrationDialog({
+  userId,
   email,
   onKeysDecrypted,
   onWrongUser,
@@ -32,7 +35,7 @@ export default function DeviceRegistrationDialog({
             className="transparent link"
             onClick={() =>
               deviceService
-                .unlockDevice(email, password)
+                .unlockDevice(userId, password)
                 .then((keys) =>
                   onKeysDecrypted(keys.privateMainKey, keys.deviceKeyPair),
                 )
@@ -62,7 +65,7 @@ export default function DeviceRegistrationDialog({
       onPasswordValid={(password) => {
         setPassword(password);
         deviceService
-          .registerDevice(email, password)
+          .registerDevice(userId, password)
           .then(() =>
             setMessage(
               t(

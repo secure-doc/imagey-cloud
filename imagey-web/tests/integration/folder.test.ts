@@ -111,7 +111,7 @@ test("navigating into a freshly created folder shows its empty state, not a stuc
     await setupMockServer(page, mockServer);
 
     await page.route(
-      /\/users\/mary@imagey\.cloud\/documents$/,
+      /\/users\/d20cf443-4f96-418f-a957-c8cbef8677c3\/documents$/,
       async (route) => {
         const request = route.request();
         const body = request.postDataBuffer();
@@ -132,7 +132,7 @@ test("navigating into a freshly created folder shows its empty state, not a stuc
     );
 
     await page.route(
-      /\/users\/mary@imagey\.cloud\/documents\/([^/?]+)(\/keys\/[^/?]+)?(\?.*)?$/,
+      /\/users\/d20cf443-4f96-418f-a957-c8cbef8677c3\/documents\/([^/?]+)(\/keys\/[^/?]+)?(\?.*)?$/,
       (route) => {
         const url = route.request().url();
         const id = url.match(/\/documents\/([^/?]+)/)![1];
@@ -262,56 +262,59 @@ test.skip("folder items are sorted according to folder metadata documents array"
   await provider.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
 
-    await page.route("**/users/mary@imagey.cloud/documents", async (route) => {
-      const url = new URL(route.request().url());
-      if (url.searchParams.has("folderId")) {
-        // Return doc1 and doc2
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([
-            {
-              documentId: doc1Id,
-              metadata: "doc1-metadata",
-              sharedKey: {
-                issuerType: "USER",
-                issuer: "mary",
-                kid: "0",
-                sharedKey: validSharedKey,
+    await page.route(
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      async (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.has("folderId")) {
+          // Return doc1 and doc2
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                documentId: doc1Id,
+                metadata: "doc1-metadata",
+                sharedKey: {
+                  issuerType: "USER",
+                  issuer: "mary",
+                  kid: "0",
+                  sharedKey: validSharedKey,
+                },
               },
-            },
-            {
-              documentId: doc2Id,
-              metadata: "doc2-metadata",
-              sharedKey: {
-                issuerType: "USER",
-                issuer: "mary",
-                kid: "0",
-                sharedKey: validSharedKey,
+              {
+                documentId: doc2Id,
+                metadata: "doc2-metadata",
+                sharedKey: {
+                  issuerType: "USER",
+                  issuer: "mary",
+                  kid: "0",
+                  sharedKey: validSharedKey,
+                },
               },
-            },
-          ]),
-        });
-      } else {
-        // Return folder
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([
-            {
-              documentId: folderId,
-              metadata: "folder-metadata",
-              sharedKey: {
-                issuerType: "USER",
-                issuer: "mary",
-                kid: "0",
-                sharedKey: validSharedKey,
+            ]),
+          });
+        } else {
+          // Return folder
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                documentId: folderId,
+                metadata: "folder-metadata",
+                sharedKey: {
+                  issuerType: "USER",
+                  issuer: "mary",
+                  kid: "0",
+                  sharedKey: validSharedKey,
+                },
               },
-            },
-          ]),
-        });
-      }
-    });
+            ]),
+          });
+        }
+      },
+    );
 
     // Mock document content to decrypt to specific JSON
     // We mock the cryptoService directly, or we can mock the fetch and return properly encrypted data.

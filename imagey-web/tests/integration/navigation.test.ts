@@ -29,10 +29,13 @@ test("navigate to chats", async ({ page }) => {
     .addInteraction()
     .given("Mary has declined lauras invitation")
     .uponReceiving("a request of mary to get contact requests")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -58,7 +61,7 @@ test("navigate to chats", async ({ page }) => {
       response
         .url()
         .includes(
-          `/users/mary@imagey.cloud/documents/${TestData.mary.settings!.chats}/keys/`,
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}/keys/`,
         ),
     );
     await chatsLink.click();
@@ -115,10 +118,13 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
     .addInteraction()
     .given("Mary has declined lauras invitation")
     .uponReceiving("a request of mary to get contact requests")
-    .withRequest("GET", "/users/mary@imagey.cloud/contact-requests", (r) =>
-      r.headers({
-        Accept: "application/json",
-      }),
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) =>
+        r.headers({
+          Accept: "application/json",
+        }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -144,7 +150,7 @@ test("navigate to chats on mobile resolution", async ({ page }) => {
       response
         .url()
         .includes(
-          `/users/mary@imagey.cloud/documents/${TestData.mary.settings!.chats}/keys/`,
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}/keys/`,
         ),
     );
     await chatsLink.first().click();

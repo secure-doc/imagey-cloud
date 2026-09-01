@@ -61,7 +61,7 @@ async function messageFromBrowser<A = undefined>(
   );
 }
 
-const MARY = "mary@imagey.cloud";
+const MARY = "d20cf443-4f96-418f-a957-c8cbef8677c3";
 
 // The minimum set of endpoints App.tsx hits to decrypt Mary's keys and load
 // her settings document (getSettings). Enough to render the logged-in shell;
@@ -94,13 +94,13 @@ async function routeMarysAuth(page: Page) {
   await page.route(`**/users/${MARY}/documents/${MARY}`, (route) =>
     route.fulfill({
       status: 200,
-      path: "tests/images/encrypted/mary@imagey.cloud/document.enc",
+      path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/document.enc",
     }),
   );
   await page.route(`**/users/${MARY}/documents/${MARY}/keys/0`, (route) =>
     route.fulfill({
       status: 200,
-      path: "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+      path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0.json",
     }),
   );
 }
@@ -138,14 +138,18 @@ test.describe("DeviceService error paths", () => {
     page,
   }) => {
     await setupMarysDevice(page);
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
     await page.evaluate(() =>
-      localStorage.removeItem("imagey.deviceIds[mary@imagey.cloud]"),
+      localStorage.removeItem(
+        "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+      ),
     );
 
     const message = await messageFromBrowser(page, () =>
       window.deviceService.activateDevice(
-        "mary@imagey.cloud",
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
         "some-other-device",
         {} as JsonWebKey,
         {} as JsonWebKey,
@@ -159,13 +163,20 @@ test.describe("DeviceService error paths", () => {
     page,
   }) => {
     await setupMarysDevice(page);
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
     await page.evaluate(() =>
-      localStorage.removeItem("imagey.deviceIds[mary@imagey.cloud]"),
+      localStorage.removeItem(
+        "imagey.deviceIds[d20cf443-4f96-418f-a957-c8cbef8677c3]",
+      ),
     );
 
     const message = await messageFromBrowser(page, () =>
-      window.deviceService.unlockDevice("mary@imagey.cloud", "password"),
+      window.deviceService.unlockDevice(
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        "password",
+      ),
     );
 
     expect(message).toBe("DeviceId missing");
@@ -180,21 +191,26 @@ test.describe("DeviceService error paths", () => {
     // private one, so that call has to succeed for us to reach the branch
     // under test.
     await page.route(
-      `**/users/mary@imagey.cloud/devices/${deviceId}/public-keys/0`,
+      `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${deviceId}/public-keys/0`,
       (route) =>
         route.fulfill({
           status: 200,
           json: TestData.mary.devices[0].publicDeviceKey,
         }),
     );
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
     await page.evaluate(
       (id) => localStorage.removeItem(`imagey.devices[${id}].key`),
       deviceId,
     );
 
     const message = await messageFromBrowser(page, () =>
-      window.deviceService.unlockDevice("mary@imagey.cloud", "password"),
+      window.deviceService.unlockDevice(
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        "password",
+      ),
     );
 
     expect(message).toBe("Private Key missing");
@@ -205,7 +221,9 @@ test.describe("DeviceService error paths", () => {
   }) => {
     await setupMarysDevice(page);
     const deviceId = TestData.mary.devices[0].deviceId;
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
     await page.evaluate(
       (id) => localStorage.removeItem(`imagey.devices[${id}].key`),
       deviceId,
@@ -233,10 +251,10 @@ test.describe("ContactService error paths", () => {
 
     const message = await messageFromBrowser(page, () =>
       window.contactService.receiveContactRequest(
-        "mary@imagey.cloud",
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
         {
-          inviter: "mary@imagey.cloud",
-          invitee: "laura@imagey.cloud",
+          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          invitee: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
           publicKey: {} as JsonWebKey,
           status: "ACCEPTED",
         },
@@ -265,15 +283,15 @@ test.describe("ContactService error paths", () => {
     // key-less placeholder, so acceptContactRequest hits its own
     // "Chats document key not found" guard.
     await page.route(
-      "**/users/mary@imagey.cloud/documents/chats-broken",
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chats-broken",
       (route) => route.fulfill({ status: 500 }),
     );
     await page.goto("/");
 
     const message = await messageFromBrowser(page, () =>
       window.contactService.acceptContactRequest(
-        "mary@imagey.cloud",
-        "laura@imagey.cloud",
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
         {} as JsonWebKey,
         {
           documents: "docs",
@@ -303,7 +321,7 @@ test.describe("ContactService error paths", () => {
       TestData.mary.publicMainKey,
     );
     await page.route(
-      "**/users/mary@imagey.cloud/documents/chats-broken",
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chats-broken",
       (route) => route.fulfill({ status: 500 }),
     );
     await page.goto("/");
@@ -312,10 +330,10 @@ test.describe("ContactService error paths", () => {
       async ({ wrappedChatKey, pub, priv }) => {
         try {
           await window.contactService.receiveContactRequest(
-            "mary@imagey.cloud",
+            "d20cf443-4f96-418f-a957-c8cbef8677c3",
             {
-              inviter: "mary@imagey.cloud",
-              invitee: "laura@imagey.cloud",
+              inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+              invitee: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
               publicKey: pub as JsonWebKey,
               status: "ACCEPTED",
               chatId: "chat-1",
@@ -358,9 +376,9 @@ test.describe("DocumentService error paths", () => {
 
     const message = await messageFromBrowser(page, () =>
       window.documentService.shareDocument(
-        "mary@imagey.cloud",
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
         { documentId: "doc-1", name: "doc-1" },
-        "laura@imagey.cloud",
+        "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
         {} as JsonWebKey,
       ),
     );
@@ -386,9 +404,9 @@ test.describe("DocumentService error paths", () => {
       page,
       (arg: { documentKey: JsonWebKey; chatKey: JsonWebKey }) =>
         window.documentService.shareDocument(
-          "mary@imagey.cloud",
+          "d20cf443-4f96-418f-a957-c8cbef8677c3",
           { documentId: "doc-1", name: "doc-1", key: arg.documentKey },
-          "laura@imagey.cloud",
+          "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
           arg.chatKey,
         ),
       { documentKey, chatKey },
@@ -403,11 +421,14 @@ test.describe("DocumentService error paths", () => {
     await page.goto("/");
 
     const message = await messageFromBrowser(page, () =>
-      window.documentService.loadContent("mary@imagey.cloud", {
-        documentId: "doc-1",
-        name: "doc-1",
-        key: { kty: "oct", k: "irrelevant" } as JsonWebKey,
-      }),
+      window.documentService.loadContent(
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        {
+          documentId: "doc-1",
+          name: "doc-1",
+          key: { kty: "oct", k: "irrelevant" } as JsonWebKey,
+        },
+      ),
     );
 
     expect(message).toBe(
@@ -421,10 +442,13 @@ test.describe("DocumentService error paths", () => {
     await page.goto("/");
 
     const message = await messageFromBrowser(page, () =>
-      window.documentService.loadContent("mary@imagey.cloud", {
-        documentId: "doc-1",
-        name: "doc-1",
-      }),
+      window.documentService.loadContent(
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        {
+          documentId: "doc-1",
+          name: "doc-1",
+        },
+      ),
     );
 
     expect(message).toBe("Either document.key or folder is required");
@@ -433,7 +457,7 @@ test.describe("DocumentService error paths", () => {
   test("loadContent unwraps the document key via the parent folder when the document has none", async ({
     page,
   }) => {
-    const owner = "mary@imagey.cloud";
+    const owner = "d20cf443-4f96-418f-a957-c8cbef8677c3";
     const documentId = "shared-doc-1";
     const folderId = "parent-folder-1";
     const contentId = "content-1";
@@ -489,7 +513,7 @@ test.describe("DocumentService error paths", () => {
   test("getSettings rejects when the settings document is missing its ids", async ({
     page,
   }) => {
-    const user = "mary@imagey.cloud";
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
     // A valid (self-ECDH-wrapped) settings key, so decryptKey() succeeds and
     // we get all the way to the "missing required ids" guard...
     const settingsKey = await generateAesGcmKeyJwk();
@@ -541,7 +565,7 @@ test.describe("DocumentService error paths", () => {
   test("storeDocument re-reads the folder and retries when the upload hits a concurrent-change 412", async ({
     page,
   }) => {
-    const user = "mary@imagey.cloud";
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
     const folderId = "retry-folder";
     const siblingId = "sibling-added-meanwhile";
 
@@ -617,7 +641,7 @@ test.describe("DocumentService error paths", () => {
   test("updateDocumentMetadata rejects with a precondition error when the document changed since load", async ({
     page,
   }) => {
-    const user = "mary@imagey.cloud";
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
     const documentId = "doc-under-edit";
     const documentKey = await generateAesGcmKeyJwk();
 
@@ -655,7 +679,7 @@ test.describe("DocumentService error paths", () => {
 
     const message = await messageFromBrowser(page, () =>
       window.documentService.storeDocument(
-        "mary@imagey.cloud",
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
         new File(["hi"], "note.txt", { type: "text/plain" }),
         {
           documentId: "half-loaded-folder",
@@ -681,10 +705,7 @@ test.describe("Authentication flow error paths", () => {
     page,
   }) => {
     const email = "newcomer@imagey.cloud";
-    await page.route(`**/users/${email}/public-keys/0`, (route) =>
-      route.fulfill({ status: 401 }),
-    );
-    await page.route(`**/users/${email}/verifications/`, (route) =>
+    await page.route(`**/users/verifications`, (route) =>
       route.fulfill({ status: 503 }),
     );
 
@@ -699,10 +720,7 @@ test.describe("Authentication flow error paths", () => {
     page,
   }) => {
     const email = "newcomer@imagey.cloud";
-    await page.route(`**/users/${email}/public-keys/0`, (route) =>
-      route.fulfill({ status: 401 }),
-    );
-    await page.route(`**/users/${email}/verifications/`, (route) =>
+    await page.route(`**/users/verifications`, (route) =>
       route.fulfill({ status: 500 }),
     );
 
@@ -721,15 +739,18 @@ test.describe("Authentication flow error paths", () => {
 
     // 401 -> AuthenticationComponent renders the ChallengeAuthenticationDialog
     // (device id is known locally).
-    await page.route("**/users/mary@imagey.cloud/public-keys/0", (route) =>
-      route.fulfill({ status: 401 }),
+    await page.route(
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (route) => route.fulfill({ status: 401 }),
     );
     await page.route(
-      `**/users/mary@imagey.cloud/devices/${deviceId}/challenges`,
+      `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${deviceId}/challenges`,
       (route) => route.fulfill({ status: 500 }),
     );
 
-    await page.goto("/?email=mary@imagey.cloud");
+    await page.goto(
+      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
 
     const passwordInput = page.getByLabel("Password", { exact: true });
     await expect(passwordInput).toBeVisible();
@@ -756,7 +777,7 @@ test.describe("Component error handlers", () => {
     // it into an <img>, whose `onerror` rejects the load.
     const message = await messageFromBrowser(page, () =>
       window.documentService.storeDocument(
-        "mary@imagey.cloud",
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
         new File([new Uint8Array([0, 1, 2, 3, 4])], "not-really.png", {
           type: "image/png",
         }),
@@ -772,9 +793,11 @@ test.describe("Component error handlers", () => {
     page,
   }) => {
     const email = "newcomer@imagey.cloud";
+    const newcomerId = "00000000-0000-4000-8000-000000000001";
     // 404 on the public key -> AuthenticationComponent renders the
-    // RegistrationDialog.
-    await page.route(`**/users/${email}/public-keys/0`, (route) =>
+    // RegistrationDialog. Reaching it needs the resolved userId the server
+    // would have put on the redirect.
+    await page.route(`**/users/${newcomerId}/public-keys/0`, (route) =>
       route.fulfill({ status: 404 }),
     );
     await page.route("**/users", (route) =>
@@ -783,7 +806,7 @@ test.describe("Component error handlers", () => {
         : route.fallback(),
     );
 
-    await page.goto(`/?email=${email}`);
+    await page.goto(`/?email=${email}&userId=${newcomerId}`);
 
     const passwordInput = page.getByLabel("Password", { exact: true });
     await expect(passwordInput).toBeVisible();
@@ -833,7 +856,7 @@ test.describe("Component error handlers", () => {
           json: [
             {
               inviter: MARY,
-              invitee: "laura@imagey.cloud",
+              invitee: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
               publicKey: {},
               status: "ACCEPTED",
             },
@@ -926,7 +949,7 @@ test.describe("Component error handlers", () => {
         (route) =>
           route.fulfill({
             status: 200,
-            path: `tests/images/encrypted/${documentsId}/keys/mary@imagey.cloud.json`,
+            path: `tests/images/encrypted/${documentsId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
           }),
       );
       // ...but the folder document itself fails to load.
@@ -974,9 +997,9 @@ async function prepareMarysBrokenChatAndOpenIt(
         type: "folder",
         contacts: [
           {
-            userId: "alice@imagey.cloud",
+            userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
             chatId,
-            owner: "mary@imagey.cloud",
+            owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           },
         ],
       }),
@@ -992,11 +1015,13 @@ async function prepareMarysBrokenChatAndOpenIt(
   // needs to be there.
   const chatContent = Buffer.from("irrelevant, never decrypted");
 
-  await page.route("**/users/mary@imagey.cloud/public-keys/0", (route) =>
-    route.fulfill({ status: 200, json: TestData.mary.publicMainKey }),
+  await page.route(
+    "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+    (route) =>
+      route.fulfill({ status: 200, json: TestData.mary.publicMainKey }),
   );
   await page.route(
-    `**/users/mary@imagey.cloud/devices/${deviceId}/private-keys/0`,
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${deviceId}/private-keys/0`,
     (route) =>
       route.fulfill({
         status: 200,
@@ -1008,7 +1033,7 @@ async function prepareMarysBrokenChatAndOpenIt(
       }),
   );
   await page.route(
-    `**/users/mary@imagey.cloud/devices/${deviceId}/public-keys/0`,
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${deviceId}/public-keys/0`,
     (route) =>
       route.fulfill({
         status: 200,
@@ -1016,26 +1041,27 @@ async function prepareMarysBrokenChatAndOpenIt(
       }),
   );
   await page.route(
-    "**/users/mary@imagey.cloud/documents/mary@imagey.cloud",
+    "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/d20cf443-4f96-418f-a957-c8cbef8677c3",
     (route) =>
       route.fulfill({
         status: 200,
-        path: "tests/images/encrypted/mary@imagey.cloud/document.enc",
+        path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/document.enc",
       }),
   );
   await page.route(
-    "**/users/mary@imagey.cloud/documents/mary@imagey.cloud/keys/0",
+    "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0",
     (route) =>
       route.fulfill({
         status: 200,
-        path: "tests/images/encrypted/mary@imagey.cloud/keys/0.json",
+        path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0.json",
       }),
   );
-  await page.route("**/users/mary@imagey.cloud/contact-requests", (route) =>
-    route.fulfill({ status: 200, json: [] }),
+  await page.route(
+    "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+    (route) => route.fulfill({ status: 200, json: [] }),
   );
   await page.route(
-    `**/users/mary@imagey.cloud/documents/${documentsId}`,
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentsId}`,
     (route) =>
       route.fulfill({
         status: 200,
@@ -1043,38 +1069,42 @@ async function prepareMarysBrokenChatAndOpenIt(
       }),
   );
   await page.route(
-    `**/users/mary@imagey.cloud/documents/${documentsId}/keys/mary@imagey.cloud`,
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentsId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
     (route) =>
       route.fulfill({
         status: 200,
-        path: `tests/images/encrypted/${documentsId}/keys/mary@imagey.cloud.json`,
+        path: `tests/images/encrypted/${documentsId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
       }),
   );
-  await page.route(`**/users/mary@imagey.cloud/documents/${chatsId}`, (route) =>
-    route.fulfill({
-      status: 200,
-      body: chatsContent,
-      contentType: "application/octet-stream",
-    }),
+  await page.route(
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatsId}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        body: chatsContent,
+        contentType: "application/octet-stream",
+      }),
   );
   await page.route(
-    `**/users/mary@imagey.cloud/documents/${chatsId}/keys/mary@imagey.cloud`,
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatsId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
     (route) =>
       route.fulfill({
         status: 200,
         json: {
-          issuer: "mary@imagey.cloud",
-          kid: "mary@imagey.cloud",
+          issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          kid: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           sharedKey: chatsWrappedKey,
         },
       }),
   );
-  await page.route(`**/users/mary@imagey.cloud/documents/${chatId}`, (route) =>
-    route.fulfill({
-      status: 200,
-      body: chatContent,
-      contentType: "application/octet-stream",
-    }),
+  await page.route(
+    `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        body: chatContent,
+        contentType: "application/octet-stream",
+      }),
   );
   await registerChatKeyRoute(page, chatId, chatsId);
   // Deliberately no route for the messages endpoint: once the chat key
@@ -1086,7 +1116,9 @@ async function prepareMarysBrokenChatAndOpenIt(
   await inputMarysPassword(page);
 
   await page.getByRole("link", { name: "Chats" }).first().click();
-  const aliceContact = page.getByText("alice@imagey.cloud").first();
+  const aliceContact = page
+    .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
+    .first();
   await expect(aliceContact).toBeVisible();
   await aliceContact.click();
 }
@@ -1113,12 +1145,12 @@ test("decryption error shows an error message when a chat key can't be decrypted
     // cryptoService.decryptKey() throws and contactService.loadChatKey()
     // sees no usable document key.
     await page.route(
-      `**/users/mary@imagey.cloud/documents/${chatId}/keys/${chatsId}`,
+      `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}/keys/${chatsId}`,
       (route) =>
         route.fulfill({
           status: 200,
           json: {
-            issuer: "mary@imagey.cloud",
+            issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
             kid: chatsId,
             sharedKey: "AAAA",
           },
@@ -1139,7 +1171,7 @@ test("decryption error shows an error message when a chat key entry is missing",
     // swallows the same way it swallows a decrypt failure, so
     // contactService.loadChatKey() again sees no usable document key.
     await page.route(
-      `**/users/mary@imagey.cloud/documents/${chatId}/keys/${chatsId}`,
+      `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}/keys/${chatsId}`,
       (route) => route.fulfill({ status: 404 }),
     );
   });

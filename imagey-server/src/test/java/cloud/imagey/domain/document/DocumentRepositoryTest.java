@@ -36,9 +36,9 @@ import org.junit.jupiter.api.Test;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
-import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 import cloud.imagey.infrastructure.ResourceConflictException;
 
 @MonoMeecrowaveConfig
@@ -62,14 +62,14 @@ public class DocumentRepositoryTest {
         }
         data.mkdirs();
 
-        user = new User(new Email("test@example.com"));
+        user = new User(new UserId("test-user"));
         documentId = new DocumentId(UUID.randomUUID().toString());
     }
 
     @Test
     @DisplayName("persist metadata when folder already exists")
     void persistMetadataFolderExists() {
-        File userHome = new File(rootPath, user.email().address());
+        File userHome = new File(rootPath, user.id().id());
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         documentFolder.mkdirs();
@@ -84,7 +84,7 @@ public class DocumentRepositoryTest {
     @Test
     @DisplayName("persist content when files folder already exists")
     void persistContentFilesFolderExists() {
-        File userHome = new File(rootPath, user.email().address());
+        File userHome = new File(rootPath, user.id().id());
         File documentHome = new File(userHome, "documents");
         File documentFolder = new File(documentHome, documentId.id());
         File filesFolder = new File(documentFolder, "files");
@@ -156,7 +156,7 @@ public class DocumentRepositoryTest {
     @Test
     @DisplayName("loadEncryptedMetadata when metadata is missing returns empty")
     void loadEncryptedMetadataMissing() {
-        File documentFolder = new File(new File(new File(rootPath, user.email().address()), "documents"), documentId.id());
+        File documentFolder = new File(new File(new File(rootPath, user.id().id()), "documents"), documentId.id());
         documentFolder.mkdirs();
 
         Optional<EncryptedContent> metadata = documentRepository.loadEncryptedMetadata(user, documentId);
@@ -179,7 +179,7 @@ public class DocumentRepositoryTest {
 
         documentRepository.create(user, documentId, sharedKey(user, friend.id()));
 
-        assertThat(keyFile).exists().content().contains("\"issuer\":\"test@example.com\"");
+        assertThat(keyFile).exists().content().contains("\"issuer\":\"test-user\"");
     }
 
     @Test
@@ -192,7 +192,7 @@ public class DocumentRepositoryTest {
         documentRepository.create(user, documentId, sharedKey(user, friend.id()));
 
         // same slot, different issuer -> conflict
-        User other = new User(new Email("other@example.com"));
+        User other = new User(new UserId("other@example.com"));
         assertThatThrownBy(() -> documentRepository.create(user, documentId, sharedKey(other, friend.id())))
             .isInstanceOf(ResourceConflictException.class);
     }
@@ -200,8 +200,8 @@ public class DocumentRepositoryTest {
     @Test
     @DisplayName("findDocumentKey round-trips the persisted issuer and kid")
     void findDocumentKeyRoundTrips() {
-        User folderUser = new User(new Email("folder123"));
-        User issuer = new User(new Email("friend@example.com"));
+        User folderUser = new User(new UserId("folder123"));
+        User issuer = new User(new UserId("friend@example.com"));
         Kid lookupKid = new Kid("some-folder-id");
 
         documentRepository.create(folderUser, documentId, sharedKey(issuer, lookupKid.id()));
@@ -215,23 +215,23 @@ public class DocumentRepositoryTest {
     @Test
     @DisplayName("isIssuerInKeyChain is true for a key issued directly by the member")
     void isIssuerInKeyChainDirect() {
-        User member = new User(new Email("member@example.com"));
+        User member = new User(new UserId("member@example.com"));
         documentRepository.persist(user, documentId, new EncryptedContent("meta".getBytes()));
-        documentRepository.create(user, documentId, sharedKey(member, member.email().address()));
+        documentRepository.create(user, documentId, sharedKey(member, member.id().id()));
 
         assertThat(documentRepository.isIssuerInKeyChain(user, documentId, member)).isTrue();
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new Email("stranger@example.com"))))
+        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new UserId("stranger@example.com"))))
             .isFalse();
     }
 
     @Test
     @DisplayName("isIssuerInKeyChain follows a key filed under a parent document the member can reach")
     void isIssuerInKeyChainRecursive() {
-        User member = new User(new Email("member@example.com"));
+        User member = new User(new UserId("member@example.com"));
         DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
 
         documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
-        documentRepository.create(user, folder, sharedKey(member, member.email().address()));
+        documentRepository.create(user, folder, sharedKey(member, member.id().id()));
 
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
         documentRepository.create(user, documentId, sharedKey(user, folder.id()));
@@ -242,13 +242,13 @@ public class DocumentRepositoryTest {
     @Test
     @DisplayName("isIssuerInKeyChain follows a key into the parent's owner's tree (contribution to a shared folder)")
     void isIssuerInKeyChainCrossesTrees() {
-        User folderOwner = new User(new Email("bob@example.com"));
-        User member = new User(new Email("carol@example.com"));
+        User folderOwner = new User(new UserId("bob@example.com"));
+        User member = new User(new UserId("carol@example.com"));
         DocumentId folder = new DocumentId("shared-folder-" + UUID.randomUUID());
 
         // Bob's folder, shared with Carol (a key she issued)
         documentRepository.persist(folderOwner, folder, new EncryptedContent("folder".getBytes()));
-        documentRepository.create(folderOwner, folder, sharedKey(member, member.email().address()));
+        documentRepository.create(folderOwner, folder, sharedKey(member, member.id().id()));
 
         // Carol's document, added to Bob's folder - its key is issued by Bob (owner of the folder key)
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
@@ -256,14 +256,14 @@ public class DocumentRepositoryTest {
 
         assertThat(documentRepository.isIssuerInKeyChain(user, documentId, member)).isTrue();
         assertThat(documentRepository.isIssuerInKeyChain(user, documentId, folderOwner)).isTrue();
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new Email("dave@example.com"))))
+        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new UserId("dave@example.com"))))
             .isFalse();
     }
 
     @Test
     @DisplayName("isIssuerInKeyChain is false when the reachable parent document has no key for the member")
     void isIssuerInKeyChainParentWithoutMember() {
-        User member = new User(new Email("member@example.com"));
+        User member = new User(new UserId("member@example.com"));
         DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
 
         documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
@@ -285,7 +285,7 @@ public class DocumentRepositoryTest {
         documentRepository.create(user, a, sharedKey(user, b.id()));
         documentRepository.create(user, b, sharedKey(user, a.id()));
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, a, new User(new Email("member@example.com")))).isFalse();
+        assertThat(documentRepository.isIssuerInKeyChain(user, a, new User(new UserId("member@example.com")))).isFalse();
     }
 
     @Test
@@ -294,7 +294,7 @@ public class DocumentRepositoryTest {
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
         writeRawKeyFile(user, documentId, "garbage", "not json");
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new Email("member@example.com"))))
+        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new UserId("member@example.com"))))
             .isFalse();
     }
 
@@ -303,7 +303,7 @@ public class DocumentRepositoryTest {
     }
 
     private File keyFile(User owner, DocumentId docId, String kid) {
-        return new File(new File(new File(new File(new File(rootPath, owner.email().address()), "documents"),
+        return new File(new File(new File(new File(new File(rootPath, owner.id().id()), "documents"),
             docId.id()), "keys"), kid + ".json");
     }
 

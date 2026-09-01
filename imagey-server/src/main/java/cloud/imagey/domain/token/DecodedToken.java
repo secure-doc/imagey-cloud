@@ -16,7 +16,26 @@
  */
 package cloud.imagey.domain.token;
 
+import java.text.ParseException;
+import java.util.Optional;
+
 import com.nimbusds.jwt.JWTClaimsSet;
 
+import cloud.imagey.domain.token.TokenService.TokenType;
+
 public record DecodedToken(JWTClaimsSet jwt) {
+
+    /** The token's declared {@link TokenType}, or empty if it carries no / an unknown type claim. */
+    public Optional<TokenType> type() {
+        try {
+            return Optional.ofNullable(jwt.getStringClaim(TokenService.TYPE_CLAIM)).map(TokenType::valueOf);
+        } catch (ParseException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** Whether this token is of the expected {@link TokenType}. */
+    public boolean isOfType(TokenType expected) {
+        return type().filter(expected::equals).isPresent();
+    }
 }
