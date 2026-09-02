@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { getAppName, initAppName } from "./utils/appName.ts";
+import { registerServiceWorker } from "./serviceWorkerRegistration.ts";
 
 import { contactService } from "./contact/ContactService";
 import { deviceService } from "./device/DeviceService";
@@ -26,6 +27,8 @@ if (import.meta.env.DEV) {
   window.cryptoService = cryptoService;
   window.publicProfileService = publicProfileService;
 }
+
+registerServiceWorker();
 
 initAppName().then(() => {
   document.title = getAppName();

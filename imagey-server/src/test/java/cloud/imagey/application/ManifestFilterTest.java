@@ -50,7 +50,9 @@ public class ManifestFilterTest {
         assertThat(json).contains("\"id\": \"imagey\"");
         assertThat(json).contains("\"name\": \"Imagey - Your image vault\"");
         assertThat(json).contains("\"short_name\": \"Imagey\"");
-        assertThat(json).contains("\"start_url\": \"https://imagey.cloud\"");
+        assertThat(json).contains("\"start_url\": \"/\"");
+        assertThat(json).contains("\"scope\": \"/\"");
+        assertThat(json).contains("\"display\": \"standalone\"");
     }
 
     @Test
@@ -67,6 +69,6 @@ public class ManifestFilterTest {
         assertThat(json).contains("\"id\": \"secure-doc\"");
         assertThat(json).contains("\"name\": \"Secure Doc - Your image vault\"");
         assertThat(json).contains("\"short_name\": \"Secure Doc\"");
-        assertThat(json).contains("\"start_url\": \"https://secure-doc.store\"");
+        assertThat(json).contains("\"start_url\": \"/\"");
     }
 }
