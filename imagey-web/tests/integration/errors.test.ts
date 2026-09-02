@@ -1,9 +1,13 @@
+import { MatchersV3 } from "@pact-foundation/pact";
 import { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
   setupMarysDevice,
   inputMarysPassword,
+  setupMockServer,
+  provider,
+  runningPactRequests,
   TestData,
   aesGcmEncrypt,
   encryptKeyEnvelope,
@@ -13,12 +17,14 @@ import {
 import type { deviceService } from "../../src/device/DeviceService";
 import type { contactService } from "../../src/contact/ContactService";
 import type { documentService } from "../../src/document/DocumentService";
+import type { publicProfileService } from "../../src/profile/publicProfileService";
 
 declare global {
   interface Window {
     deviceService: typeof deviceService;
     contactService: typeof contactService;
     documentService: typeof documentService;
+    publicProfileService: typeof publicProfileService;
   }
 }
 
@@ -258,6 +264,7 @@ test.describe("ContactService error paths", () => {
           publicKey: {} as JsonWebKey,
           status: "ACCEPTED",
         },
+        { documentId: "pp", key: {} as JsonWebKey },
         {
           documents: "d",
           chats: "c",
@@ -293,6 +300,8 @@ test.describe("ContactService error paths", () => {
         "d20cf443-4f96-418f-a957-c8cbef8677c3",
         "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
         {} as JsonWebKey,
+        undefined,
+        { documentId: "pp", key: {} as JsonWebKey },
         {
           documents: "docs",
           chats: "chats-broken",
@@ -339,6 +348,7 @@ test.describe("ContactService error paths", () => {
               chatId: "chat-1",
               sharedKey: wrappedChatKey,
             },
+            { documentId: "pp", key: pub as JsonWebKey },
             {
               documents: "docs",
               chats: "chats-broken",
@@ -360,6 +370,251 @@ test.describe("ContactService error paths", () => {
     );
 
     expect(message).toBe("Chats document key not found");
+  });
+});
+
+// -------------------------------------------------------------------------
+// publicProfileService - the concurrent-creation race (§3.5's race note).
+// -------------------------------------------------------------------------
+
+test.describe("publicProfileService error/race paths", () => {
+  test("ensurePublicProfile adopts a concurrently created public profile after a 412", async ({
+    page,
+  }) => {
+    // Simulates two devices racing to create mary's public-profile at once:
+    // our own create attempt is rejected with 412 (another device's write won
+    // the ETag check first), so we reload the private profile, see the
+    // publicProfileId the winner already set, and adopt their public profile
+    // instead of retrying our own.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const profileId = TestData.mary.settings!.profile;
+    const profileKey = TestData.mary.documents[5].key!;
+    const winnerPublicProfileId = "66666666-6666-6666-6666-666666666666";
+
+    // The 412 itself isn't asserted through Pact/ContractTest: the pact
+    // interaction builder never captures the multipart request body (see
+    // every other upload interaction in this suite, which only assert
+    // Content-Type), so a real provider verification replay sends no
+    // folderETag and can't naturally 412 - mocked directly via page.route
+    // below instead (imagey-web-error-path-tests memory).
+    const reloadedProfileContent = await aesGcmEncrypt(
+      profileKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          emails: ["mary@imagey.cloud"],
+          publicProfileId: winnerPublicProfileId,
+        }),
+      ),
+    );
+    provider
+      .addInteraction()
+      .uponReceiving(
+        "a request of mary to reload her profile after losing the public-profile creation race",
+      )
+      .withRequest("GET", `/users/${userId}/documents/${profileId}`, (r) =>
+        r.headers({ Accept: "application/octet-stream" }),
+      )
+      .willRespondWith(200, (r) =>
+        r.body("application/octet-stream", reloadedProfileContent),
+      );
+
+    const winnerKey = await generateAesGcmKeyJwk();
+    const winnerContent = await aesGcmEncrypt(
+      winnerKey,
+      new TextEncoder().encode(
+        JSON.stringify({ type: "public-profile", name: "Mary Doe" }),
+      ),
+    );
+    provider
+      .addInteraction()
+      // Unlike mary's other named-public-profile fixtures, this document has
+      // no fixed id and so no matching static fixture in imagey-server - the
+      // "a document exists" provider state (see ContractTest.
+      // aDocumentExists) creates it on demand for ContractTest.
+      .given("a document exists", {
+        ownerId: userId,
+        documentId: winnerPublicProfileId,
+        kid: profileId,
+        issuer: userId,
+      })
+      .uponReceiving("a request of mary to get the winning public profile")
+      .withRequest(
+        "GET",
+        `/users/${userId}/documents/${winnerPublicProfileId}`,
+        (r) => r.headers({ Accept: "application/octet-stream" }),
+      )
+      .willRespondWith(200, (r) =>
+        r.body("application/octet-stream", winnerContent),
+      );
+    const wrappedWinnerKey = await encryptKeyEnvelope(winnerKey, profileKey);
+    const builder = provider
+      .addInteraction()
+      .given("a document exists", {
+        ownerId: userId,
+        documentId: winnerPublicProfileId,
+        kid: profileId,
+        issuer: userId,
+      })
+      .uponReceiving("a request of mary to get the winning public profile key")
+      .withRequest(
+        "GET",
+        `/users/${userId}/documents/${winnerPublicProfileId}/keys/${profileId}`,
+        (r) => r.headers({ Accept: "application/json" }),
+      )
+      .willRespondWith(200, (r) =>
+        r.jsonBody({
+          issuer: userId,
+          kid: profileId,
+          sharedKey: MatchersV3.string(wrappedWinnerKey),
+        }),
+      );
+
+    await builder.executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      // Registered after setupMockServer's catch-all, so it wins for this
+      // one path (Playwright matches routes last-registered-first) without
+      // disturbing the Pact-mocked GETs below.
+      await page.route(`**/users/${userId}/documents`, (route) =>
+        route.fulfill({ status: 412 }),
+      );
+      await page.goto("/");
+
+      const result = await page.evaluate(
+        async ({ userId, profileId, profileKey }) =>
+          window.publicProfileService.ensurePublicProfile(userId, profileId, {
+            name: "",
+            emails: [],
+            key: profileKey,
+          }),
+        { userId, profileId, profileKey },
+      );
+
+      expect(result.publicProfile.name).toBe("Mary Doe");
+      expect(result.profile.publicProfileId).toBe(winnerPublicProfileId);
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+  });
+
+  test("loadContactProfile falls back to undefined when the contact's public profile isn't reachable", async ({
+    page,
+  }) => {
+    // §3.4's error case: the chat metadata names a public-profile that isn't
+    // actually reachable yet (e.g. the sharing key hasn't been filed for us,
+    // or the document is simply gone) - useContactProfile falls back to the
+    // contact's raw userId/initial rather than the whole chat erroring out.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const contactUserId = "a358c2ed-07d4-4a25-a7db-d860d5c0b895";
+    const publicProfileId = "77777777-7777-7777-7777-777777777777";
+    const chatKey = await generateAesGcmKeyJwk();
+
+    const builder = provider
+      .addInteraction()
+      .uponReceiving(
+        "a request of mary to get a contact's unreachable public profile",
+      )
+      .withRequest(
+        "GET",
+        `/users/${contactUserId}/documents/${publicProfileId}`,
+        (r) => r.headers({ Accept: "application/octet-stream" }),
+      )
+      .willRespondWith(404);
+
+    await builder.executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      await page.goto("/");
+
+      const result = await page.evaluate(
+        async ({ userId, contactUserId, publicProfileId, chatKey }) =>
+          window.publicProfileService.loadContactProfile(
+            userId,
+            contactUserId,
+            publicProfileId,
+            chatKey,
+          ),
+        { userId, contactUserId, publicProfileId, chatKey },
+      );
+
+      expect(result).toBeUndefined();
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+  });
+
+  test("ensurePublicProfile propagates a genuine (non-412) creation failure", async ({
+    page,
+  }) => {
+    // Only a 412 (lost the concurrent-creation race, see the "adopts" test
+    // above) is treated specially - any other failure creating the public
+    // profile must still surface as a rejection, not be swallowed. An
+    // arbitrary 500 isn't a real provider behavior to verify a contract
+    // against (see the imagey-web-error-path-tests memory), so this is
+    // mocked directly via page.route rather than through Pact/ContractTest.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const profileId = TestData.mary.settings!.profile;
+    const profileKey = TestData.mary.documents[5].key!;
+
+    await page.goto("/");
+    await page.route(`**/users/${userId}/documents`, (route) =>
+      route.fulfill({ status: 500 }),
+    );
+
+    const message = await messageFromBrowser(
+      page,
+      async ({ userId, profileId, profileKey }) =>
+        window.publicProfileService.ensurePublicProfile(userId, profileId, {
+          name: "",
+          emails: [],
+          key: profileKey,
+        }),
+      { userId, profileId, profileKey },
+    );
+
+    expect(message).toBe("Http Error 500");
+  });
+
+  test("ensurePublicProfile rejects when the linked public profile can no longer be loaded", async ({
+    page,
+  }) => {
+    // profile.publicProfileId is set but the document it points at is gone
+    // (or not reachable) - ensurePublicProfile must reject rather than
+    // silently create a second, orphaned public profile.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const profileId = TestData.mary.settings!.profile;
+    const profileKey = TestData.mary.documents[5].key!;
+    const missingPublicProfileId = "88888888-8888-8888-8888-888888888888";
+
+    const builder = provider
+      .addInteraction()
+      .uponReceiving(
+        "a request of mary to get her linked-but-missing public profile",
+      )
+      .withRequest(
+        "GET",
+        `/users/${userId}/documents/${missingPublicProfileId}`,
+        (r) => r.headers({ Accept: "application/octet-stream" }),
+      )
+      .willRespondWith(404);
+
+    await builder.executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      await page.goto("/");
+
+      const message = await messageFromBrowser(
+        page,
+        async ({ userId, profileId, profileKey, missingPublicProfileId }) =>
+          window.publicProfileService.ensurePublicProfile(userId, profileId, {
+            name: "",
+            emails: [],
+            key: profileKey,
+            publicProfileId: missingPublicProfileId,
+          }),
+        { userId, profileId, profileKey, missingPublicProfileId },
+      );
+
+      expect(message).toBe(
+        "Failed to load existing public profile " + missingPublicProfileId,
+      );
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
   });
 });
 
@@ -932,6 +1187,46 @@ test.describe("Component error handlers", () => {
     await page.getByRole("button", { name: "Confirm" }).click();
 
     await expect(page.getByText("Error activating device")).toBeVisible();
+  });
+
+  test("profile save button no-ops gracefully when the profile failed to load", async ({
+    page,
+  }) => {
+    const profileId = TestData.mary.settings!.profile;
+
+    await loginMary(page, async (p) => {
+      await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+        route.fulfill({ status: 200, json: [] }),
+      );
+      // Let the profile document load fail; loadDocument() swallows it and
+      // ProfilePage still renders the (keyless) Save button - clicking it
+      // must not throw, just log and no-op (§ProfileSaveButton.handleSave's
+      // `!profile.key` guard).
+      await p.route(`**/users/${MARY}/documents/${profileId}`, (route) =>
+        route.fulfill({ status: 500 }),
+      );
+    });
+
+    const consoleErrors = collectConsoleErrors(page);
+    await page.getByRole("link", { name: "Settings" }).first().click();
+    await page
+      .getByRole("heading", { name: "Profile", exact: true })
+      .first()
+      .click();
+
+    await expect(
+      page.getByText("Could not load your profile. Retrying..."),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .poll(() =>
+        consoleErrors.some((e) =>
+          e.includes("Cannot save profile without its document key"),
+        ),
+      )
+      .toBe(true);
   });
 
   test("the folder page shows an error when the folder document can't be loaded", async ({

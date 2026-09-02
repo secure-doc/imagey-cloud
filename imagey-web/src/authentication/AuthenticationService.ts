@@ -9,6 +9,8 @@ import { contactService } from "../contact/ContactService";
 import { contactRepository } from "../contact/ContactRepository";
 import { DeviceId, Password, UserId } from "./UserId";
 import { documentService } from "../document/DocumentService";
+import { Profile } from "../profile/Profile";
+import { publicProfileService } from "../profile/publicProfileService";
 
 export type Nonce = string;
 export type EncryptedRecoveryKey = string;
@@ -26,6 +28,9 @@ export const authenticationService = {
     email: Email,
     password: Password,
     inviter?: UserId,
+    // Only asked for (and only meaningful) on an invite-based registration -
+    // see RegistrationDialog.tsx and docs/plans/chat-public-profile.md §3.6.
+    displayName?: string,
   ): Promise<JsonWebKeyPairs> => {
     // The three roots have no data dependency on each other - run them in
     // parallel (each is a WebCrypto round-trip).
@@ -153,10 +158,33 @@ export const authenticationService = {
         mainKeyPair.publicKey,
         mainKeyPair.privateKey,
       );
+      // §3.6: ensure our own public profile exists - named with the display name collected in the
+      // password dialog for this invite-registration flow - before accepting, so the chat metadata
+      // acceptContactRequest writes always has a named public-profile to point at for us.
+      const profile = (await documentService.loadDocument(
+        userId,
+        settings.profile,
+        userId,
+        settings.settingsKey,
+      )) as Profile;
+      const { publicProfile } = displayName
+        ? await publicProfileService.updateName(
+            userId,
+            settings.profile,
+            profile,
+            displayName,
+          )
+        : await publicProfileService.ensurePublicProfile(
+            userId,
+            settings.profile,
+            profile,
+          );
       await contactService.acceptContactRequest(
         userId,
         inviter,
         invitation.publicKey,
+        invitation.publicProfileId,
+        publicProfile,
         settings,
         mainKeyPair,
       );

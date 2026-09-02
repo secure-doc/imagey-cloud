@@ -12,6 +12,7 @@ import {
   prepareMarysDocuments,
   prepareMarysEmptyDocumentsFolder,
   prepareMarysChat,
+  prepareMarysChatWithContactProfile,
   prepareMarysChatsDocument,
   prepareMarysChatOwnedByAlice,
   prepareAlicesLogin,
@@ -755,6 +756,68 @@ test("send a message in a chat owned by another user (posts to the owner's tree)
 
     // Optimistically appended once the POST resolved.
     await expect(page.getByText("Hi Alice, Mary here")).toBeVisible();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("view chat shows the contact's display name and avatar", async ({
+  page,
+}) => {
+  // §3.4: once a chat's metadata carries both parties' public-profile ids and
+  // the contact has actually shared theirs into the chat, the chat header
+  // shows their name/avatar instead of their raw userId.
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+
+  const avatarBytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+  await prepareMarysChatWithContactProfile({
+    contactUserId: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+    contactName: "Laura Doe",
+    contactAvatarId: "avatar-laura",
+    contactAvatarContent: avatarBytes,
+  });
+
+  // Unlike "view chat and send message" above, this test never sends a
+  // message, so it does not reliably run a second (polling) messages fetch -
+  // only the initial one is mocked, same as "send empty message does not
+  // submit" elsewhere in this file.
+  const builder = provider
+    .addInteraction()
+    .uponReceiving("a request to receive messages for laura's named chat")
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          id: MatchersV3.string("msg-123"),
+          content: MatchersV3.string(
+            TestData.mary.chats![0].messages[0].content,
+          ),
+        },
+      ]),
+    );
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    const lauraContact = page
+      .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
+      .first();
+    await expect(lauraContact).toBeVisible();
+    await lauraContact.click();
+
+    // The chat header now shows Laura's display name, not her raw userId
+    // (heading appears twice: the app bar title and the in-panel header).
+    await expect(
+      page.getByRole("heading", { name: "Laura Doe" }).first(),
+    ).toBeVisible();
+    await expect(page.getByRole("img", { name: "Laura Doe" })).toBeVisible();
 
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await expect.poll(() => runningPactRequests).toBe(0);

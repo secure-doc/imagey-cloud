@@ -7,6 +7,7 @@ import { contactService } from "./contact/ContactService";
 import { deviceService } from "./device/DeviceService";
 import { documentService } from "./document/DocumentService";
 import { cryptoService } from "./authentication/CryptoService";
+import { publicProfileService } from "./profile/publicProfileService";
 
 declare global {
   interface Window {
@@ -14,6 +15,7 @@ declare global {
     deviceService: typeof deviceService;
     documentService: typeof documentService;
     cryptoService: typeof cryptoService;
+    publicProfileService: typeof publicProfileService;
   }
 }
 
@@ -22,6 +24,7 @@ if (import.meta.env.DEV) {
   window.deviceService = deviceService;
   window.documentService = documentService;
   window.cryptoService = cryptoService;
+  window.publicProfileService = publicProfileService;
 }
 
 initAppName().then(() => {

@@ -35,5 +35,9 @@ public record ContactExchange(
     @JsonbTypeDeserializer(Deserializer.class)
     PublicKey publicKey,
     @JsonbTypeAdapter(DocumentId.Adapter.class) DocumentId chatId,
-    @JsonbTypeAdapter(EncryptedSymmetricKey.Adapter.class) EncryptedSymmetricKey sharedKey) {
+    @JsonbTypeAdapter(EncryptedSymmetricKey.Adapter.class) EncryptedSymmetricKey sharedKey,
+    // The id of the sender's "public-profile" Document (see docs/plans/chat-public-profile.md):
+    // set by the inviter on the INVITED request, and by the invitee when they ACCEPT. Nullable -
+    // an older client, or one where the sender's public-profile does not exist yet, may omit it.
+    @JsonbTypeAdapter(DocumentId.Adapter.class) DocumentId publicProfileId) {
 }

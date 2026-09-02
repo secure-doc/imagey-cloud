@@ -7,6 +7,12 @@ interface PasswordDialogProperties<R> {
   requireConfirmation?: boolean;
   onWrongUser?: () => void;
   showKeepLoggedIn?: boolean;
+  // Extra form content rendered between the password field(s) and the confirm
+  // button - e.g. the display-name field RegistrationDialog adds for an
+  // invite-based registration (see docs/plans/chat-public-profile.md §3.6).
+  // Any inputs in here are the caller's own controlled state, independent of
+  // validatePassword/onPasswordValid.
+  children?: React.ReactNode;
   validatePassword: (password: string, keepLoggedIn: boolean) => Promise<R>;
   onPasswordValid: (result: R, keepLoggedIn: boolean) => void;
 }
@@ -17,6 +23,7 @@ export default function PasswordDialog<R>({
   requireConfirmation,
   onWrongUser,
   showKeepLoggedIn,
+  children,
   validatePassword,
   onPasswordValid,
 }: PasswordDialogProperties<R>) {
@@ -91,6 +98,7 @@ export default function PasswordDialog<R>({
             </span>
           </div>
         )}
+        {children}
         {showKeepLoggedIn && (
           <div className="field">
             <label className="checkbox">

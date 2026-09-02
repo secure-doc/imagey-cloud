@@ -93,10 +93,15 @@ public class ContactService {
      *                      register
      * @param key           the inviter's public main key, stored on the request for the invitee to
      *                      wrap the chat key on accept
+     * @param publicProfileId the inviter's "public-profile" Document id (see
+     *                      docs/plans/chat-public-profile.md), nullable - carried along so the
+     *                      invitee can share their own public-profile with the inviter once
+     *                      accepted, without a separate round-trip
      * @return the invitee (by minted/resolved {@link UserId}) if a fresh request was filed, or
      *         empty if an exchange between the two already existed and nothing was sent
      */
-    public Optional<User> invite(User sender, Email senderEmail, Email recipient, PublicKey key) throws IOException {
+    public Optional<User> invite(User sender, Email senderEmail, Email recipient, PublicKey key, DocumentId publicProfileId)
+            throws IOException {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL");
@@ -132,7 +137,7 @@ public class ContactService {
         if (recipientUser == null) {
             recipientUser = new User(userMappingService.registerUser(recipient));
         }
-        contactRepository.persist(new ContactExchange(sender, recipientUser, INVITED, key, null, null));
+        contactRepository.persist(new ContactExchange(sender, recipientUser, INVITED, key, null, null, publicProfileId));
 
         if (!registered) {
             // The invitee accepts this request as the last step of registration; it reads the
@@ -152,8 +157,9 @@ public class ContactService {
     // Called by the invitee (see ContactResource.updateContactRequest): they overwrite the
     // placeholder public key from the original invite with their own, and hand over the chat
     // document id plus the chat key ECDH-wrapped for the inviter.
-    public void acceptInvitation(User invitee, User inviter, PublicKey publicKey, DocumentId chatId, EncryptedSymmetricKey sharedKey)
-            throws IOException {
+    public void acceptInvitation(
+        User invitee, User inviter, PublicKey publicKey, DocumentId chatId, EncryptedSymmetricKey sharedKey,
+        DocumentId publicProfileId) throws IOException {
 
         if (chatId == null) {
             throw new ValidationException("An accepted contact request must carry a chatId.");
@@ -164,7 +170,7 @@ public class ContactService {
             .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
 
         ContactExchange accepted = new ContactExchange(
-            exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, chatId, sharedKey);
+            exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, chatId, sharedKey, publicProfileId);
         contactRepository.persist(accepted);
     }
 
@@ -191,7 +197,8 @@ public class ContactService {
         }
 
         ContactExchange received = new ContactExchange(
-            exchange.inviter(), exchange.invitee(), RECEIVED, exchange.publicKey(), exchange.chatId(), exchange.sharedKey());
+            exchange.inviter(), exchange.invitee(), RECEIVED, exchange.publicKey(), exchange.chatId(),
+            exchange.sharedKey(), exchange.publicProfileId());
         contactRepository.persist(received);
     }
 
@@ -199,9 +206,10 @@ public class ContactService {
         ContactExchange exchange = contactRepository.getContactExchange(user, requestor).orElse(null);
         if (exchange != null) {
             contactRepository.persist(new ContactExchange(
-                exchange.inviter(), exchange.invitee(), DENIED, exchange.publicKey(), exchange.chatId(), exchange.sharedKey()));
+                exchange.inviter(), exchange.invitee(), DENIED, exchange.publicKey(), exchange.chatId(),
+                exchange.sharedKey(), exchange.publicProfileId()));
         } else {
-            contactRepository.persist(new ContactExchange(requestor, user, DENIED, null, null, null));
+            contactRepository.persist(new ContactExchange(requestor, user, DENIED, null, null, null, null));
         }
     }
 }

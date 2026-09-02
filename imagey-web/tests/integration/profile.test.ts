@@ -8,6 +8,10 @@ import {
   prepareMarysEmptyDocumentsFolder,
   prepareMarysEmptyProfile,
   prepareMarysProfile,
+  prepareMarysPublicProfileAvatarPut,
+  prepareMarysPublicProfileCreation,
+  prepareMarysPublicProfileMetadataPut,
+  prepareProfileMetadataSave,
   prepareProfileSave,
   runningPactRequests,
   setupMockServer,
@@ -25,6 +29,13 @@ test("edit and save profile", async ({ page }) => {
   await prepareMarysEmptyDocumentsFolder();
   await prepareMarysEmptyProfile();
   const saveInteraction = await prepareProfileSave();
+  // Both the name and the picture change in this test, so both public-profile
+  // triggers fire (§3.5): a fresh public-profile is created (mary has none
+  // yet), then its avatar and its name are each written.
+  await prepareMarysPublicProfileCreation();
+  prepareMarysPublicProfileAvatarPut();
+  prepareMarysPublicProfileMetadataPut(" (avatar)");
+  prepareMarysPublicProfileMetadataPut(" (name)");
 
   // When
   await saveInteraction.executeTest(async (mockServer) => {
@@ -133,6 +144,94 @@ test("load existing profile with picture", async ({ page }) => {
     // Verify the profile picture is loaded (vitalykobzun-frau-7385461.jpg)
     const avatarImage = page.getByRole("img", { name: "Avatar" });
     await expect(avatarImage).toBeVisible();
+
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("edit and save profile - name only, no picture change", async ({
+  page,
+}) => {
+  // Given: only the name changes this time, exercising ProfileSaveButton's
+  // "name changed, no new picture" branch specifically (distinct from "edit
+  // and save profile" above, which changes both).
+  await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysEmptyProfile();
+  const saveInteraction = prepareProfileMetadataSave();
+  await prepareMarysPublicProfileCreation();
+  prepareMarysPublicProfileMetadataPut(" (name only)");
+
+  await saveInteraction.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Settings" }).click();
+    await page
+      .getByRole("heading", { name: "Profile", exact: true })
+      .first()
+      .click();
+
+    const editNameButton = page.locator("button:has(i:text('edit'))").first();
+    await editNameButton.click();
+    const nameInput = page.getByLabel("Name");
+    await expect(nameInput).toBeVisible();
+    await nameInput.fill("Mary Doe");
+    await page.locator("i:text('check')").first().click();
+
+    const responsePromise = page.waitForResponse(
+      (res) =>
+        res.request().method() === "PUT" &&
+        res.url().endsWith(`/documents/${TestData.mary.settings!.profile}`),
+    );
+    await page.getByRole("button", { name: "Save" }).click();
+    await responsePromise;
+
+    await expect(page.getByText("Mary Doe")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("edit and save profile - picture only, no name change", async ({
+  page,
+}) => {
+  // Given: only the picture changes this time, exercising ProfileSaveButton's
+  // "picture changed, no name change" branch specifically (distinct from
+  // "edit and save profile" above, which changes both).
+  await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysEmptyProfile();
+  const saveInteraction = await prepareProfileSave();
+  await prepareMarysPublicProfileCreation();
+  prepareMarysPublicProfileAvatarPut(" (picture only)");
+  prepareMarysPublicProfileMetadataPut(" (picture only)");
+
+  await saveInteraction.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Settings" }).click();
+    await page
+      .getByRole("heading", { name: "Profile", exact: true })
+      .first()
+      .click();
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.locator("label", { hasText: "Change Picture" }).click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles(
+      path.join("tests", "images", TestData.mary.documents[3].name),
+    );
+
+    const responsePromise = page.waitForResponse(
+      (res) =>
+        res.request().method() === "PUT" &&
+        res.url().endsWith(`/documents/${TestData.mary.settings!.profile}`),
+    );
+    await page.getByRole("button", { name: "Save" }).click();
+    await responsePromise;
 
     await expect.poll(() => runningPactRequests).toBe(0);
   });

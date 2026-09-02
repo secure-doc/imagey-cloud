@@ -483,6 +483,9 @@ export async function decryptDocument(
     emails: payload.emails,
     profilePictureId: payload.profilePictureId,
     contacts: payload.contacts,
+    avatarId: payload.avatarId,
+    publicProfiles: payload.publicProfiles,
+    publicProfileId: payload.publicProfileId,
     sharedKey: encryptedKey,
     key: decryptedDocumentKey,
   };
