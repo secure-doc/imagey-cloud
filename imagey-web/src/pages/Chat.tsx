@@ -8,6 +8,7 @@ import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
 import { useChatsId } from "../contexts/SettingsContext";
+import { useContactProfile } from "../hooks/useContactProfile";
 
 export default function Chat({ contactUserId }: { contactUserId: string }) {
   const authentication = useAuthentication();
@@ -16,6 +17,8 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const chatsId = useChatsId();
 
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
+  const [publicProfiles, setPublicProfiles] =
+    useState<Record<string, string>>();
   const [chat, setChat] = useState<{ ownerId: string; chatId: string }>();
   const [keyError, setKeyError] = useState(false);
   const [chatsLoadFailed, setChatsLoadFailed] = useState(false);
@@ -35,8 +38,15 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const { name: contactName, avatarUrl: contactAvatarUrl } = useContactProfile(
+    user,
+    contactUserId,
+    publicProfiles?.[contactUserId],
+    sharedKey,
+  );
+
   useBackButton();
-  useTitle(contactUserId);
+  useTitle(contactName || contactUserId);
 
   const handleChatsListLoaded = useCallback(
     (contacts: Contact[], chatsDocumentKey: JsonWebKey) =>
@@ -49,6 +59,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
       return;
     }
     setSharedKey(undefined);
+    setPublicProfiles(undefined);
     setChat(undefined);
     setKeyError(false);
     // The chat's shared key is the chat Document's own Document key - look
@@ -66,7 +77,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     setChat({ ownerId: contact.owner, chatId: contact.chatId });
     contactService
       .loadChatKey(user, contact, chatsId, chatsDocumentInfo.chatsDocumentKey)
-      .then((decryptedKey) => setSharedKey(decryptedKey))
+      .then(({ key, publicProfiles }) => {
+        setSharedKey(key);
+        setPublicProfiles(publicProfiles);
+      })
       .catch((e) => {
         console.error(e);
         setKeyError(true);
@@ -107,6 +121,24 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           </div>
         ) : (
           <>
+            <div
+              className="row padding"
+              style={{ alignItems: "center", gap: "0.5rem" }}
+            >
+              {contactAvatarUrl ? (
+                <img
+                  src={contactAvatarUrl}
+                  alt={contactName || contactUserId}
+                  className="circle small"
+                />
+              ) : (
+                <div className="circle surface center-align middle-align small">
+                  {(contactName || contactUserId).charAt(0).toLocaleUpperCase()}
+                </div>
+              )}
+              <h6 className="no-margin">{contactName || contactUserId}</h6>
+            </div>
+            <hr className="divider" />
             <div
               className="scroll padding vertical"
               style={{

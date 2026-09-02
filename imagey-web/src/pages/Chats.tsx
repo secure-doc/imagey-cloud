@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { NavLink } from "react-router";
 import { useActionIcons } from "../contexts/ActionBarContext";
 import ContactRequestDialog from "../contact/ContactRequestDialog";
+import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
 import { contactService } from "../contact/ContactService";
@@ -12,7 +13,9 @@ import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
 import { documentService } from "../document/DocumentService";
+import { publicProfileService } from "../profile/publicProfileService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
+import { useSendContactRequest } from "../hooks/useSendContactRequest";
 import { useSettingsKey } from "../contexts/SettingsContext";
 
 export default function Chats({ id }: { id: string }) {
@@ -52,6 +55,14 @@ export function ChatsList({
   const [contacts, setContacts] = useState<Contact[]>();
   const [chatsDocumentKey, setChatsDocumentKey] = useState<JsonWebKey>();
   const settingsKey = useSettingsKey();
+  const { requestContact, namePrompt, confirmDisplayName, cancelDisplayName } =
+    useSendContactRequest(
+      user,
+      authentication.email,
+      mainKeyPair,
+      settings,
+      () => setIsDialogOpen(false),
+    );
 
   const actionIcons = useMemo(
     () => [
@@ -129,8 +140,17 @@ export function ChatsList({
         return;
       }
       receivingRef.current.add(requestKey);
-      contactService
-        .receiveContactRequest(user, request, settings, mainKeyPair)
+      publicProfileService
+        .loadProfileAndEnsurePublicProfile(user, settings)
+        .then(({ publicProfile }) =>
+          contactService.receiveContactRequest(
+            user,
+            request,
+            publicProfile,
+            settings,
+            mainKeyPair,
+          ),
+        )
         .then((newContact) => {
           setContactRequests((prev) =>
             prev?.filter(
@@ -149,22 +169,6 @@ export function ChatsList({
         });
     });
   }, [contactRequests, user, settings, mainKeyPair]);
-
-  const handleContactRequest = async (email: string) => {
-    if (user && mainKeyPair) {
-      try {
-        await contactRepository.sendContactRequest(
-          user,
-          authentication.email ?? "",
-          email,
-          mainKeyPair.publicKey,
-        );
-        setIsDialogOpen(false);
-      } catch (error) {
-        console.error("Failed to send contact request", error);
-      }
-    }
-  };
 
   // Invitations still awaiting our decision, addressed to us.
   const openInvitations = (contactRequests ?? []).filter(
@@ -203,6 +207,7 @@ export function ChatsList({
                   user={user}
                   contact={contactRequest.inviter}
                   contactPublicKey={contactRequest.publicKey}
+                  contactPublicProfileId={contactRequest.publicProfileId}
                   onAccepted={(newContact) => {
                     setContactRequests((contactRequests) =>
                       contactRequests?.filter(
@@ -255,8 +260,19 @@ export function ChatsList({
 
       {isDialogOpen && (
         <ContactRequestDialog
-          onConfirm={handleContactRequest}
+          onConfirm={(email) => {
+            // Close now - a DisplayNamePrompt (§3.6) may open right behind
+            // it, and the two must not show at the same time.
+            setIsDialogOpen(false);
+            requestContact(email);
+          }}
           onCancel={() => setIsDialogOpen(false)}
+        />
+      )}
+      {namePrompt && (
+        <DisplayNamePrompt
+          onConfirm={confirmDisplayName}
+          onCancel={cancelDisplayName}
         />
       )}
     </section>

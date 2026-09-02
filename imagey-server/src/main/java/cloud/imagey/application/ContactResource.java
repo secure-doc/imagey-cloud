@@ -76,7 +76,7 @@ public class ContactResource {
     @Consumes(APPLICATION_JSON)
     public Response requestContact(@PathParam("userId") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
         Optional<User> invitee = contactService.invite(
-            inviter, request.inviterEmail(), request.invitee(), request.publicKey());
+            inviter, request.inviterEmail(), request.invitee(), request.publicKey(), request.publicProfileId());
         return invitee
             .map(i -> {
                 UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
@@ -113,7 +113,8 @@ public class ContactResource {
         if (update.status() == ContactStatus.RECEIVED) {
             contactService.confirmReceipt(user, contact, update.chatKey());
         } else if (update.status() == ContactStatus.ACCEPTED) {
-            contactService.acceptInvitation(user, contact, update.publicKey(), update.chatId(), update.sharedKey());
+            contactService.acceptInvitation(
+                user, contact, update.publicKey(), update.chatId(), update.sharedKey(), update.publicProfileId());
         } else {
             // TODO move to Bean Validation
             throw new BadRequestException("Status " + update.status() + " not allowed");
@@ -126,7 +127,9 @@ public class ContactResource {
         Email invitee,
         Email inviterEmail,
         @JsonbTypeSerializer(Serializer.class)
-        @JsonbTypeDeserializer(Deserializer.class) PublicKey publicKey) {
+        @JsonbTypeDeserializer(Deserializer.class) PublicKey publicKey,
+        // The inviter's "public-profile" Document id, nullable (see docs/plans/chat-public-profile.md).
+        DocumentId publicProfileId) {
     }
 
     public record ContactRequestUpdate(
@@ -135,6 +138,8 @@ public class ContactResource {
         @JsonbTypeSerializer(Serializer.class)
         @JsonbTypeDeserializer(Deserializer.class) PublicKey publicKey,
         EncryptedSymmetricKey sharedKey,
-        EncryptedSharedKey chatKey) {
+        EncryptedSharedKey chatKey,
+        // The invitee's "public-profile" Document id, nullable; only meaningful on ACCEPTED.
+        DocumentId publicProfileId) {
     }
 }

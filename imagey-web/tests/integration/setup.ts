@@ -1296,6 +1296,317 @@ export async function prepareProfileSave() {
   );
 }
 
+// Like prepareProfileSave, but for a save that doesn't touch the picture (no
+// files/.+ PUT registered) - a genuine "name only" ProfileSaveButton save
+// would otherwise leave that interaction unconsumed.
+export function prepareProfileMetadataSave(): ConfiguredInteraction {
+  const profileId = TestData.mary.settings!.profile;
+  return provider
+    .addInteraction()
+    .uponReceiving("a request of mary to update her profile metadata only")
+    .withRequest(
+      "PUT",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${profileId}`,
+      (r) =>
+        r.headers({
+          "Content-Type": "application/octet-stream",
+        }),
+    )
+    .willRespondWith(204, (r) =>
+      r.headers({ ETag: MatchersV3.string('"updated-profile-etag"') }),
+    );
+}
+
+// --- public-profile test helpers (docs/plans/chat-public-profile.md) ------
+
+// Registers GET <content> + GET <key> for a document owned by `ownerEmail`,
+// whose key entry is filed under `kid` and wrapped with `wrappingKey` -
+// generic version of mockChatsDocument above, used to mock the private
+// Profile and public-profile documents live-encrypted the same way.
+async function mockOwnedDocument(
+  ownerEmail: string,
+  documentId: string,
+  kid: string,
+  wrappingKey: JsonWebKey,
+  documentKey: JsonWebKey,
+  content: Record<string, unknown>,
+  given: string | string[] | undefined,
+  descriptionSuffix: string,
+  // The key entry's issuer: for an owner's own key (self-wrap under the
+  // user's own id, or under a parent document's id - see
+  // publicProfileService's kid=profileId pattern), that's ownerEmail
+  // regardless of what kid is. Only a cross-owner share (documentService.
+  // shareDocument) sets issuer to the grantee, which happens to equal kid
+  // there - defaulting to ownerEmail keeps every existing self-wrap caller
+  // correct without having to pass this explicitly.
+  issuer: string = ownerEmail,
+): Promise<void> {
+  // Every document this mocks is generated at test-run time (fixed or
+  // dynamic id alike) rather than living in imagey-server's static test
+  // fixtures, so ContractTest needs the generic "a document exists" state
+  // (see ContractTest.aDocumentExists) to create a matching one - on top of
+  // whichever caller-specific state(s) set up the rest of that scenario.
+  const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
+  const documentExistsParams = { ownerId: ownerEmail, documentId, kid, issuer };
+  const encryptedContent = await aesGcmEncrypt(
+    documentKey,
+    new TextEncoder().encode(JSON.stringify(content)),
+  );
+  const wrappedKey = await encryptKeyEnvelope(documentKey, wrappingKey);
+
+  let contentBuilder = provider
+    .addInteraction()
+    .given("a document exists", documentExistsParams);
+  for (const state of givenStates) contentBuilder = contentBuilder.given(state);
+  contentBuilder
+    .uponReceiving(
+      `a request of ${ownerEmail} to get document ${documentId}${descriptionSuffix}`,
+    )
+    .withRequest("GET", `/users/${ownerEmail}/documents/${documentId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", encryptedContent),
+    );
+
+  let keyBuilder = provider
+    .addInteraction()
+    .given("a document exists", documentExistsParams);
+  for (const state of givenStates) keyBuilder = keyBuilder.given(state);
+  keyBuilder
+    .uponReceiving(
+      `a request of ${ownerEmail} to get document ${documentId} key ${kid}${descriptionSuffix}`,
+    )
+    .withRequest(
+      "GET",
+      `/users/${ownerEmail}/documents/${documentId}/keys/${kid}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer,
+        kid,
+        sharedKey: MatchersV3.string(wrappedKey),
+      }),
+    );
+}
+
+// Mary already has a named public profile (§3.5/§3.6): mocks her private
+// Profile document (with publicProfileId set) and her own copy of the
+// public-profile document, so publicProfileService.ensurePublicProfile
+// resolves without creating anything or prompting for a name. Returns the
+// public-profile's id/key so a caller can also mock sharing it into a chat
+// (see prepareMarysPublicProfileShare below) or reading it back as a
+// contact's profile.
+// Counter folded into both each call's interaction descriptions AND its
+// publicProfileId below: within one test file, several tests calling this
+// helper with its default arguments would otherwise register interactions
+// that are not just identically described but identical in method+path -
+// the mock server has been observed to occasionally misattribute a request
+// to an earlier (already-consumed) test's interaction of the same shape
+// rather than the current test's freshly registered one. A distinct id per
+// call sidesteps that instead of relying on the description alone.
+let namedPublicProfileCallCount = 0;
+
+export async function prepareMarysNamedPublicProfile(
+  name: string = "Mary",
+  given?: string | string[],
+): Promise<{ publicProfileId: string; publicProfileKey: JsonWebKey }> {
+  const profileId = TestData.mary.settings!.profile;
+  const profileKey = TestData.mary.documents[5].key!;
+  const callIndex = ++namedPublicProfileCallCount;
+  const publicProfileId =
+    "22222222-2222-2222-2222-" + String(callIndex).padStart(12, "0");
+  const publicProfileKey = await generateAesGcmKeyJwk();
+  const callSuffix = ` #${callIndex}`;
+
+  await mockOwnedDocument(
+    "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    profileId,
+    "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    TestData.mary.settingsKey!,
+    profileKey,
+    { emails: ["mary@imagey.cloud"], publicProfileId },
+    given,
+    ` (named public profile)${callSuffix}`,
+  );
+  await mockOwnedDocument(
+    "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    publicProfileId,
+    profileId,
+    profileKey,
+    publicProfileKey,
+    { type: "public-profile", name },
+    given,
+    callSuffix,
+  );
+
+  return { publicProfileId, publicProfileKey };
+}
+
+// Mary's private Profile document exists but has no publicProfileId yet (no
+// public profile at all) - the state ensurePublicProfile's create path
+// starts from (§3.5).
+export async function prepareMarysProfileWithoutPublicProfile(
+  given?: string | string[],
+): Promise<void> {
+  const profileId = TestData.mary.settings!.profile;
+  const profileKey = TestData.mary.documents[5].key!;
+  await mockOwnedDocument(
+    "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    profileId,
+    "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    TestData.mary.settingsKey!,
+    profileKey,
+    { emails: ["mary@imagey.cloud"] },
+    given,
+    " (no public profile yet)",
+  );
+}
+
+// Registers the multipart POST that creates mary's public profile for the
+// first time (§3.5/§10) - analogous to prepareMarysChatCreation for a chat
+// Document, just under mary's own tree instead of a "chats" folder. The
+// created document's id is client-generated (see publicProfileService.
+// createPublicProfile), so the Location header value is only loosely matched.
+export async function prepareMarysPublicProfileCreation(): Promise<void> {
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to create her public profile")
+    .withRequest(
+      "POST",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-public-profile-id",
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
+        ETag: MatchersV3.string('"new-public-profile-etag"'),
+      }),
+    );
+}
+
+// Registers a PUT to mary's public profile - its avatar file
+// (publicProfileService.setAvatar's storeContent) or its metadata
+// (setAvatar/setName's updateDocumentMetadata) - matched by a path regex
+// since the target document id is client-generated/not known ahead of time
+// (see prepareMarysPublicProfileCreation), excluding mary's known documents
+// so it can't ambiguously match one of those instead.
+export function prepareMarysPublicProfileAvatarPut(
+  descriptionSuffix: string = "",
+): void {
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to store her public profile avatar${descriptionSuffix}`,
+    )
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!9b71fa98).+/files/.+",
+        generate:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/22222222-2222-2222-2222-222222222222/files/00000000-0000-0000-0000-000000000000",
+      }),
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(200);
+}
+
+export function prepareMarysPublicProfileMetadataPut(
+  descriptionSuffix: string = "",
+): void {
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to update her public profile metadata${descriptionSuffix}`,
+    )
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        matcher:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!9b71fa98)[^/]+$",
+        generate:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/22222222-2222-2222-2222-222222222222",
+      }),
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(204, (r) =>
+      r.headers({ ETag: MatchersV3.string('"public-profile-etag"') }),
+    );
+}
+
+// Registers the POST that shares Mary's public profile into a chat with
+// `contactUserId` (documentService.shareDocument, called from
+// ContactService.acceptContactRequest/receiveContactRequest - see §3.2).
+export function prepareMarysPublicProfileShare(
+  publicProfileId: string,
+  contactUserId: string,
+  given?: string | string[],
+): ConfiguredInteraction {
+  const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
+  let builder = provider.addInteraction();
+  for (const state of givenStates) builder = builder.given(state);
+  return builder
+    .uponReceiving(
+      `a request of mary to share her public profile with ${contactUserId}`,
+    )
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${publicProfileId}/keys`,
+      (r) => {
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          issuer: contactUserId,
+          kid: contactUserId,
+          sharedKey: MatchersV3.string("dummy-shared-key"),
+        });
+      },
+    )
+    .willRespondWith(200);
+}
+
+// Same as prepareMarysPublicProfileShare, for when mary's public profile was
+// just created in the same test (its id is client-generated, so the target
+// path is matched with a regex instead of an exact value - same reasoning as
+// prepareMarysPublicProfileAvatarPut/MetadataPut above).
+export function prepareMarysPublicProfileShareForFreshProfile(
+  contactUserId: string,
+  given?: string | string[],
+): void {
+  const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
+  let builder = provider.addInteraction();
+  for (const state of givenStates) builder = builder.given(state);
+  builder
+    .uponReceiving(
+      `a request of mary to share her freshly created public profile with ${contactUserId}`,
+    )
+    .withRequest(
+      "POST",
+      Matchers.regex({
+        matcher: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!${TestData.mary.settings!.profile}).+/keys$`,
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/22222222-2222-2222-2222-222222222222/keys`,
+      }),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          issuer: contactUserId,
+          kid: contactUserId,
+          sharedKey: MatchersV3.string("dummy-shared-key"),
+        });
+      },
+    )
+    .willRespondWith(200);
+}
+
 export async function prepareDocumentUpload(documentId: string) {
   expectedUploadDocumentId = documentId;
 
@@ -1540,6 +1851,10 @@ export async function prepareMarysContactRequests(
           invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           publicKey: TestData.bill.publicMainKey,
           status: "INVITED",
+          // Bill's own public-profile id, carried on the request (§4) -
+          // becomes ContactService.acceptContactRequest's
+          // inviterPublicProfileId when mary accepts.
+          publicProfileId: "bills-public-profile-id",
         },
       ]),
     );
@@ -1726,6 +2041,189 @@ export async function prepareMarysChat(
       (r) => {
         r.headers({ Accept: "application/json" });
       },
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+}
+
+// Mary has a chat with `contactUserId` whose metadata carries both parties'
+// public-profile ids (§3.3), and the contact has actually shared their public
+// profile into it (§3.2) - the read path useContactProfile/
+// publicProfileService.loadContactProfile exercises when a chat header
+// actually shows a contact's name/avatar, rather than falling back to their
+// userId. Unlike prepareMarysChat, this mocks a single, dedicated chat/contact
+// rather than mary's two standing contacts.
+// Counter folded into every interaction description (and the public-profile
+// ids) below - see prepareMarysNamedPublicProfile's comment: several tests
+// calling this helper for the same contact would otherwise register
+// interactions that are not just identically described but identical in
+// method+path, which the mock server has been observed to occasionally
+// misattribute across tests.
+let chatWithContactProfileCallCount = 0;
+
+export async function prepareMarysChatWithContactProfile({
+  contactUserId,
+  contactName,
+  contactAvatarId,
+  contactAvatarContent,
+  contactProfileUnavailable = false,
+}: {
+  contactUserId: string;
+  contactName: string;
+  contactAvatarId?: string;
+  contactAvatarContent?: Uint8Array;
+  // §3.4's "Fehlerfall": the contact's public-profile document is listed in
+  // the chat metadata but is not (yet) actually reachable - e.g. the key
+  // entry hasn't been filed for us yet, or the document itself is gone.
+  // Mocked here as the content GET 404ing, matching documentService.
+  // loadDocument's content-before-key fetch order (so the key GET never
+  // happens, and useContactProfile/publicProfileService.loadContactProfile
+  // fall back gracefully instead of throwing).
+  contactProfileUnavailable?: boolean;
+}): Promise<void> {
+  const callIndex = ++chatWithContactProfileCallCount;
+  const callSuffix = ` #${callIndex}`;
+  const chatId = "chat-" + shortName(contactUserId);
+  const chatsDocumentKey = await prepareMarysChatsDocument([
+    {
+      userId: contactUserId,
+      chatId,
+      owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    },
+  ]);
+
+  const chatDocumentKey = await generateAesGcmKeyJwk();
+  const maryPublicProfileId =
+    "44444444-4444-4444-4444-" + String(callIndex).padStart(12, "0");
+  const contactPublicProfileId =
+    "55555555-5555-5555-5555-" + String(callIndex).padStart(12, "0");
+  const chatContent = await aesGcmEncrypt(
+    chatDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({
+        documentId: chatId,
+        name: "Chat",
+        type: "Chat",
+        publicProfiles: {
+          "d20cf443-4f96-418f-a957-c8cbef8677c3": maryPublicProfileId,
+          [contactUserId]: contactPublicProfileId,
+        },
+      }),
+    ),
+  );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to get the chat document ${chatId} with public profiles${callSuffix}`,
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}`,
+      (r) => r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", chatContent),
+    );
+
+  const wrappedChatKey = await encryptKeyEnvelope(
+    chatDocumentKey,
+    chatsDocumentKey,
+  );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to get the chat document ${chatId} key with public profiles${callSuffix}`,
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}/keys/${TestData.mary.settings!.chats}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        kid: TestData.mary.settings!.chats,
+        sharedKey: MatchersV3.string(wrappedChatKey),
+      }),
+    );
+
+  if (contactProfileUnavailable) {
+    provider
+      .addInteraction()
+      .uponReceiving(
+        `a request of mary to get ${contactUserId}'s unavailable public profile${callSuffix}`,
+      )
+      .withRequest(
+        "GET",
+        `/users/${contactUserId}/documents/${contactPublicProfileId}`,
+        (r) => r.headers({ Accept: "application/octet-stream" }),
+      )
+      .willRespondWith(404);
+  } else {
+    // The contact's own public-profile document, shared into this chat (its
+    // key entry for us is filed under our own userId, wrapped with the chat's
+    // key - see ContactService.acceptContactRequest/receiveContactRequest).
+    const publicProfileKey = await generateAesGcmKeyJwk();
+    await mockOwnedDocument(
+      contactUserId,
+      contactPublicProfileId,
+      "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      chatDocumentKey,
+      publicProfileKey,
+      {
+        type: "public-profile",
+        name: contactName,
+        ...(contactAvatarId ? { avatarId: contactAvatarId } : {}),
+      },
+      undefined,
+      ` (contact public profile)${callSuffix}`,
+      // This key entry is a cross-owner share (documentService.
+      // shareDocument): its issuer is mary, the grantee, not the contact who
+      // owns the document - see the mockOwnedDocument issuer param doc.
+      "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    );
+
+    if (contactAvatarId && contactAvatarContent) {
+      const encryptedAvatar = await aesGcmEncrypt(
+        publicProfileKey,
+        contactAvatarContent,
+      );
+      provider
+        .addInteraction()
+        // Same provider state as the profile document above (see
+        // ContractTest.aDocumentExists) - each pact interaction gets a fresh
+        // copy of the fixture data, so the parent document's key file (for
+        // RolesFilter's "member" check) has to be recreated here too, not
+        // just the file content.
+        .given("a document exists", {
+          ownerId: contactUserId,
+          documentId: contactPublicProfileId,
+          kid: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          fileId: contactAvatarId,
+        })
+        .uponReceiving(
+          `a request of mary to get ${contactUserId}'s avatar${callSuffix}`,
+        )
+        .withRequest(
+          "GET",
+          `/users/${contactUserId}/documents/${contactPublicProfileId}/files/${contactAvatarId}`,
+          (r) => r.headers({ Accept: "application/octet-stream" }),
+        )
+        .willRespondWith(200, (r) =>
+          r.body("application/octet-stream", encryptedAvatar),
+        );
+    }
+  }
+
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to get contact requests in chat with ${contactUserId}${callSuffix}`,
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 }

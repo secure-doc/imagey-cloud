@@ -1,11 +1,28 @@
 import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
+import { PublicProfile } from "../profile/PublicProfile";
 import { Contact } from "./Contact";
 import { ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
 import { documentRepository } from "../document/DocumentRepository";
 import { documentService } from "../document/DocumentService";
+
+// Appends a contact to the "chats" document's list, replacing any existing
+// entry for the same chat (chatId is a freshly generated uuid, unique per
+// chat/contact). Both handshake steps are non-atomic read-modify-writes
+// followed by a separate server call (accept: the repository call; receive:
+// confirmContactRequestReceived) - if that trailing call fails the request
+// stays pending and the whole step is retried on the next poll, by which
+// point our first attempt's list write has already landed. Deduping here
+// keeps the retry from growing the list without bound.
+function appendContact(
+  existing: Contact[] | undefined,
+  contact: Contact,
+): Contact[] {
+  const others = (existing ?? []).filter((c) => c.chatId !== contact.chatId);
+  return [...others, contact];
+}
 
 export const contactService = {
   // Invitee side: accept an INVITED request. The chat is - like everything
@@ -19,6 +36,8 @@ export const contactService = {
     userId: UserId,
     contactId: UserId,
     inviterPublicKey: JsonWebKey,
+    inviterPublicProfileId: string | undefined,
+    ownPublicProfile: PublicProfile,
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
   ): Promise<Contact> => {
@@ -38,6 +57,17 @@ export const contactService = {
 
       const chatId = cryptoService.generateUuid();
       const chatDocumentKey = await cryptoService.generateSymmetricKey();
+      // Both parties' "public-profile" Document ids travel in the chat's own metadata (see
+      // docs/plans/chat-public-profile.md §3.3), so either side can find the other's without relying
+      // on the message history. The inviter's id is only missing if their public-profile somehow
+      // does not exist yet (should not normally happen, see §3.6) - the chat is still created either
+      // way, it just leaves that lookup unresolved until a later exchange fills it in (§6/§11).
+      const publicProfiles: Record<string, string> = {
+        [userId]: ownPublicProfile.documentId,
+        ...(inviterPublicProfileId
+          ? { [contactId]: inviterPublicProfileId }
+          : {}),
+      };
       const [encryptedChatContent] = await cryptoService.encryptDocument(
         chatDocumentKey,
         [
@@ -46,6 +76,7 @@ export const contactService = {
               documentId: chatId,
               name: contactId,
               type: "Chat",
+              publicProfiles,
             }),
           ).buffer,
         ],
@@ -56,7 +87,7 @@ export const contactService = {
       );
 
       const contact: Contact = { userId: contactId, chatId, owner: userId };
-      const updatedContacts = [...(chatsDocument.contacts ?? []), contact];
+      const updatedContacts = appendContact(chatsDocument.contacts, contact);
       const [encryptedChatsContent] = await cryptoService.encryptDocument(
         chatsDocument.key,
         [
@@ -103,6 +134,21 @@ export const contactService = {
         mainKeyPair.publicKey,
         chatId,
         sharedKeyForInviter,
+        ownPublicProfile.documentId,
+      );
+
+      // Share our own public profile into the chat (§3.2): a keys/{contactId}.json entry under our
+      // ppId, wrapped with the chat's own key - the same mechanism documentService.shareDocument
+      // uses for any other document shared into a chat.
+      await documentService.shareDocument(
+        userId,
+        {
+          documentId: ownPublicProfile.documentId,
+          name: "",
+          key: ownPublicProfile.key,
+        },
+        contactId,
+        chatDocumentKey,
       );
 
       return contact;
@@ -125,6 +171,7 @@ export const contactService = {
   receiveContactRequest: async (
     userId: UserId,
     request: ContactRequest,
+    ownPublicProfile: PublicProfile,
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
   ): Promise<Contact> => {
@@ -159,12 +206,26 @@ export const contactService = {
       chatsDocument.key,
     );
 
+    // Share our own public profile into the chat (§3.2/§4): the invitee already put both parties'
+    // ppIds into the chat metadata at accept time, but only we can grant them read access to ours
+    // (issuer = them, filed under our own ppId).
+    await documentService.shareDocument(
+      userId,
+      {
+        documentId: ownPublicProfile.documentId,
+        name: "",
+        key: ownPublicProfile.key,
+      },
+      request.invitee,
+      chatDocumentKey,
+    );
+
     const contact: Contact = {
       userId: request.invitee,
       chatId: request.chatId,
       owner: request.invitee,
     };
-    const updatedContacts = [...(chatsDocument.contacts ?? []), contact];
+    const updatedContacts = appendContact(chatsDocument.contacts, contact);
     await documentService.updateDocumentMetadata(
       userId,
       settings.chats,
@@ -202,7 +263,7 @@ export const contactService = {
     contact: Contact,
     chatsId: string,
     chatsDocumentKey: JsonWebKey,
-  ): Promise<JsonWebKey> => {
+  ): Promise<{ key: JsonWebKey; publicProfiles?: Record<string, string> }> => {
     const document =
       contact.owner === user
         ? await documentService.loadDocument(
@@ -220,6 +281,6 @@ export const contactService = {
     if (!document.key) {
       throw new Error("Chat document key not found");
     }
-    return document.key;
+    return { key: document.key, publicProfiles: document.publicProfiles };
   },
 };

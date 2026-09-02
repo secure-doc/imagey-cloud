@@ -29,4 +29,10 @@ export type ContactRequest = {
   // inviter's public key) and base64-encoded.
   chatId?: string;
   sharedKey?: string;
+  // The sender's "public-profile" Document id (see
+  // docs/plans/chat-public-profile.md §4): the inviter's while INVITED,
+  // overwritten by the invitee's own once ACCEPTED - mirrors how `publicKey`
+  // is overwritten on accept. Optional: a sender's public-profile may not
+  // exist yet (should not normally happen, see §3.6).
+  publicProfileId?: string;
 };

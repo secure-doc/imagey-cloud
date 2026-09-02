@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import ContactRequestDialog from "../contact/ContactRequestDialog";
+import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import { contactRepository } from "../contact/ContactRepository";
+import { useSendContactRequest } from "../hooks/useSendContactRequest";
 import { getAppName } from "../utils/appName";
 import Panel from "../components/Panel";
 
@@ -12,23 +13,16 @@ export default function NoContactsPanel({ className }: { className?: string }) {
   const authentication = useAuthentication();
   const user = authentication.user;
   const mainKeyPair = authentication.keyPairs?.mainKeyPair;
+  const settings = authentication.settings;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  const handleContactRequest = async (inviteeEmail: string) => {
-    if (user && mainKeyPair) {
-      try {
-        await contactRepository.sendContactRequest(
-          user,
-          authentication.email ?? "",
-          inviteeEmail,
-          mainKeyPair.publicKey,
-        );
-        setIsDialogOpen(false);
-      } catch (error) {
-        console.error("Failed to send contact request", error);
-      }
-    }
-  };
+  const { requestContact, namePrompt, confirmDisplayName, cancelDisplayName } =
+    useSendContactRequest(
+      user,
+      authentication.email,
+      mainKeyPair,
+      settings,
+      () => setIsDialogOpen(false),
+    );
 
   return (
     <>
@@ -57,8 +51,19 @@ export default function NoContactsPanel({ className }: { className?: string }) {
 
       {isDialogOpen && (
         <ContactRequestDialog
-          onConfirm={handleContactRequest}
+          onConfirm={(email) => {
+            // Close now - a DisplayNamePrompt (§3.6) may open right behind
+            // it, and the two must not show at the same time.
+            setIsDialogOpen(false);
+            requestContact(email);
+          }}
           onCancel={() => setIsDialogOpen(false)}
+        />
+      )}
+      {namePrompt && (
+        <DisplayNamePrompt
+          onConfirm={confirmDisplayName}
+          onCancel={cancelDisplayName}
         />
       )}
     </>

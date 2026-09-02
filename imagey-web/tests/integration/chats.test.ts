@@ -13,6 +13,8 @@ import {
   TestData,
   prepareMarysContactRequests,
   prepareMarysAcceptedContactRequest,
+  prepareMarysNamedPublicProfile,
+  prepareMarysPublicProfileShare,
   runningPactRequests,
 } from "./setup";
 
@@ -73,6 +75,10 @@ test("accept open invitations", async ({ page }) => {
   const chatsDocumentKey = await generateAesGcmKeyJwk();
   await prepareMarysContactRequests(chatsDocumentKey);
 
+  // Accepting first ensures mary has a named public profile of her own
+  // (§3.6) - she already has one here, so this is a read, not a create/prompt.
+  const { publicProfileId } = await prepareMarysNamedPublicProfile();
+
   // No fetch of bill's public key is needed here - it was already sent
   // along with the ContactRequest itself (see
   // ContactService.acceptContactRequest).
@@ -96,6 +102,7 @@ test("accept open invitations", async ({ page }) => {
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           chatId: MatchersV3.string("new-chat-id"),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
+          publicProfileId,
         });
       },
     )
@@ -111,6 +118,11 @@ test("accept open invitations", async ({ page }) => {
     chatsDocumentKey,
   );
   await prepareMarysChatCreation();
+  // ... and shares mary's public profile into the new chat with bill (§3.2).
+  prepareMarysPublicProfileShare(
+    publicProfileId,
+    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+  );
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -231,6 +243,18 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
   // the accept flow's own double-read (see prepareMarysContactRequests).
   await prepareMarysChatsDocument([], given, chatsDocumentKey);
 
+  // receiveContactRequest also ensures mary's own public profile (already
+  // named here, §3.6) and shares it into the chat with bill (§3.2).
+  const { publicProfileId } = await prepareMarysNamedPublicProfile(
+    "Mary",
+    given,
+  );
+  prepareMarysPublicProfileShare(
+    publicProfileId,
+    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    given,
+  );
+
   provider
     .addInteraction()
     .given(given)
@@ -292,6 +316,86 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
     await expect(
       page.getByText("a358c2ed-07d4-4a25-a7db-d860d5c0b895").first(),
     ).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("pick up an accepted invitation fails when confirming receipt fails", async ({
+  page,
+}) => {
+  // Same as "pick up an accepted invitation (inviter side)" above, but the
+  // final confirm-receipt PUT fails - covers ContactRepository.
+  // confirmContactRequestReceived's failure branch and confirms the flow
+  // just logs (leaving the request actionable for a retry) rather than
+  // crashing.
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+
+  const given =
+    "mary has no contacts and bill has accepted marys invitation for a failing confirm";
+  const chatId = "chat-bill-for-mary-failing-confirm";
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const chatDocumentKey = await generateAesGcmKeyJwk();
+
+  await prepareMarysAcceptedContactRequest(
+    chatId,
+    chatDocumentKey,
+    given,
+    chatsDocumentKey,
+  );
+  await prepareMarysChatsDocument([], given, chatsDocumentKey);
+  const { publicProfileId } = await prepareMarysNamedPublicProfile(
+    "Mary",
+    given,
+  );
+  prepareMarysPublicProfileShare(
+    publicProfileId,
+    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    given,
+  );
+
+  const builder = provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving(
+      "a request of mary to store the picked-up contact before a failing confirm",
+    )
+    .withRequest(
+      "PUT",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}`,
+      (r) => {
+        r.headers({ "Content-Type": "application/octet-stream" });
+      },
+    )
+    .willRespondWith(204);
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+
+    let confirmPutAttempted = false;
+    await page.route(
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+      async (route, request) => {
+        if (request.method() === "PUT") {
+          confirmPutAttempted = true;
+          await route.fulfill({ status: 500 });
+        } else {
+          await route.fallback();
+        }
+      },
+    );
+
+    await loginAsMary(page);
+    await expect(page.locator("main img")).toHaveCount(2);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+
+    // receiveContactRequest only reports the contact once every step -
+    // including the confirm-receipt PUT - has succeeded, so a failure here
+    // leaves the request actionable for a retry rather than adding bill
+    // optimistically. Gate on the failing PUT actually being reached.
+    await expect.poll(() => confirmPutAttempted).toBe(true);
+    await page.unrouteAll({ behavior: "ignoreErrors" });
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

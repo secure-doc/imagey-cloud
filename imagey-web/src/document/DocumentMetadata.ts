@@ -34,4 +34,16 @@ export default interface DocumentMetadata {
   // Present on the "chats" document: the user's contacts, each paired
   // with the id of the (also encrypted) chat Document they now share.
   contacts?: Contact[];
+  // Present on a "public-profile" document: the id of its avatar file
+  // (analogous to profilePictureId on the private Profile), and its
+  // display name (see profile/PublicProfile.ts - optional there too).
+  avatarId?: string;
+  // Present on the private Profile once publicProfileService.ensurePublicProfile
+  // has created one for this user: the linked "public-profile" Document's id
+  // (see profile/Profile.ts and docs/plans/chat-public-profile.md §3.1).
+  publicProfileId?: string;
+  // Present on a chat Document: each party's "public-profile" Document id,
+  // keyed by their UserId (see docs/plans/chat-public-profile.md §3.3).
+  // Written once, by the chat's creator, at accept time.
+  publicProfiles?: Record<string, string>;
 }

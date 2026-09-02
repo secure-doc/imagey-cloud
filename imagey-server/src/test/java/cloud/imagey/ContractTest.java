@@ -35,6 +35,7 @@ import static org.apache.commons.io.FileUtils.writeStringToFile;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.inject.Inject;
@@ -341,7 +342,7 @@ public class ContractTest {
         writeStringToFile(new File(marysContactRequests, "a358c2ed-07d4-4a25-a7db-d860d5c0b895.json"),
             "{\"inviter\":\"a358c2ed-07d4-4a25-a7db-d860d5c0b895\",\"invitee\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\","
             + "\"status\":\"INVITED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":null,\"sharedKey\":null}",
+            + "\"chatId\":null,\"sharedKey\":null,\"publicProfileId\":\"bills-public-profile-id\"}",
             UTF_8);
     }
 
@@ -369,12 +370,26 @@ public class ContractTest {
             + "\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\","
             + "\"x\":\"OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY\","
             + "\"y\":\"D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM\"},"
-            + "\"chatId\":null,\"sharedKey\":null}",
+            + "\"chatId\":null,\"sharedKey\":null,\"publicProfileId\":null}",
             UTF_8);
     }
 
     @State("mary has no contacts and bill has accepted marys invitation")
     void maryHasNoContactsAndBillAcceptedInvitation() throws IOException {
+        maryHasNoContactsAndBillAcceptedInvitation("chat-bill-for-mary");
+    }
+
+    @State("mary has no contacts and bill has accepted marys invitation for a failing confirm")
+    void maryHasNoContactsAndBillAcceptedInvitationForAFailingConfirm() throws IOException {
+        // Same fixture as above, just under the distinct chatId "chats.test.ts"'s "pick up an
+        // accepted invitation fails when confirming receipt fails" uses (see
+        // prepareMarysAcceptedContactRequest) - the public-profile documents that scenario also
+        // mocks (mary's own, dynamically-id'd) are covered separately by the generic "a document
+        // exists" state (see aDocumentExists), not by this one.
+        maryHasNoContactsAndBillAcceptedInvitation("chat-bill-for-mary-failing-confirm");
+    }
+
+    private void maryHasNoContactsAndBillAcceptedInvitation(String chatId) throws IOException {
         File marysContacts = new File(getMarysData(), "contacts");
         deleteQuietly(marysContacts);
         File marysContactRequests = getMarysContactRequests();
@@ -387,10 +402,10 @@ public class ContractTest {
         writeStringToFile(new File(marysContactRequests, "a358c2ed-07d4-4a25-a7db-d860d5c0b895.json"),
             "{\"inviter\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\",\"invitee\":\"a358c2ed-07d4-4a25-a7db-d860d5c0b895\","
             + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":\"chat-bill-for-mary\",\"sharedKey\":"
+            + "\"chatId\":\"" + chatId + "\",\"sharedKey\":"
             + "\"5g3Pwjzwg5gFdJ1VLcsU/3oWZoZsdpeZJ/1dstB/y/tYRXjeWojoXV30BE3WWoMqGr4vo/"
             + "GywXw7XrOtDE95dVDHqrZwmjZ6fn0ux8HA2u5F2VcQh6mX2LnkqCoQnMIVCwheSlJaQ0Wx1ulCdW06MgO"
-            + "+yMugMY/jae47T8Hu7fgKooQ+HbZl637mOULWTjzG6CCPnmpu\"}",
+            + "+yMugMY/jae47T8Hu7fgKooQ+HbZl637mOULWTjzG6CCPnmpu\",\"publicProfileId\":null}",
             UTF_8);
     }
 
@@ -423,6 +438,32 @@ public class ContractTest {
         File profilePicture = new File(getMarysDocuments(),
             "9b71fa98-8616-4222-b03e-d189289ccbd0/files/1f6386d5-cbed-48c3-9ed1-f8e4c1445223");
         copyFile(new File(getMarysDocuments(), "9c59a4f3-ae55-4c4b-9e4a-2079a2446738/metadata.enc"), profilePicture);
+    }
+
+    @State("a document exists")
+    void aDocumentExists(Map<String, Object> params) throws IOException {
+        // Generic counterpart to the persona-specific states above, for documents whose id is
+        // generated at test-run time by imagey-web's setup.ts (see mockOwnedDocument) rather than
+        // being one of the fixed ids baked into src/test/resources/data - e.g. a contact's
+        // public-profile document, reachable via the "member" role (RolesFilter.
+        // isIssuerInKeyChain matches its key entry's issuer against the caller), or a
+        // race-condition "winning" public profile a test invents on the fly.
+        String ownerId = (String) params.get("ownerId");
+        String documentId = (String) params.get("documentId");
+        String kid = (String) params.get("kid");
+        String issuer = (String) params.get("issuer");
+        File documentDir = new File(new File(rootPath, ownerId), "documents/" + documentId);
+        // Reuse a real encrypted fixture so Pact's octet-stream content sniffing sees genuine
+        // binary data (the body itself is not byte-compared, see maryHasAProfilePicture above).
+        File fixtureContent = new File(getMarysDocuments(), "9c59a4f3-ae55-4c4b-9e4a-2079a2446738/metadata.enc");
+        copyFile(fixtureContent, new File(documentDir, "metadata.enc"));
+        new File(documentDir, "keys").mkdirs();
+        writeStringToFile(new File(documentDir, "keys/" + kid + ".json"),
+            "{\"issuer\":\"" + issuer + "\",\"kid\":\"" + kid + "\",\"sharedKey\":\"ZHVtbXk=\"}", UTF_8);
+        Object fileId = params.get("fileId");
+        if (fileId != null) {
+            copyFile(fixtureContent, new File(documentDir, "files/" + fileId));
+        }
     }
 
     @State("mary has no documents")
@@ -584,7 +625,8 @@ public class ContractTest {
             + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
             + "\"chatId\":\"chat-mary\",\"sharedKey\":\""
             + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
-            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
+            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\","
+            + "\"publicProfileId\":null}",
             UTF_8);
 
         // Message storage lives under the chat document itself (see MessageRepository.persist/
@@ -609,7 +651,8 @@ public class ContractTest {
             + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
             + "\"chatId\":\"chat-mary\",\"sharedKey\":\""
             + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
-            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
+            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\","
+            + "\"publicProfileId\":null}",
             UTF_8);
 
         File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");

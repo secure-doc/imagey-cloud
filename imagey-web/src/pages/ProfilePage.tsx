@@ -19,6 +19,14 @@ export default function ProfilePage({ id }: { id: string }) {
   useBackButton();
 
   const [profile, setProfile] = useState<ProfileType>({ name: "", emails: [] });
+  // The profile as last loaded/saved - used by ProfileSaveButton to tell
+  // whether the name actually changed (see docs/plans/chat-public-profile.md
+  // §3.5, trigger 2), without re-triggering a public-profile name update on
+  // every save when the user only changed their picture or emails.
+  const [savedProfile, setSavedProfile] = useState<ProfileType>({
+    name: "",
+    emails: [],
+  });
   const [picture, setPicture] = useState<Blob | undefined>();
   const [newPicture, setNewPicture] = useState<File | undefined>();
   const [loading, setLoading] = useState<boolean>(true);
@@ -42,6 +50,7 @@ export default function ProfilePage({ id }: { id: string }) {
     if (loaded) {
       const p: Profile = { ...loaded, emails: loaded.emails ?? [] };
       setProfile(p);
+      setSavedProfile(p);
       if (p.profilePictureId && p.key) {
         try {
           const content = await documentService.loadContent(
@@ -103,9 +112,11 @@ export default function ProfilePage({ id }: { id: string }) {
             <ProfileSaveButton
               id={id}
               profile={profile}
+              savedName={savedProfile.name}
               newPicture={newPicture}
               onProfileChange={(profile) => {
                 setProfile(profile);
+                setSavedProfile(profile);
                 setNewPicture(undefined);
               }}
             />

@@ -8,6 +8,7 @@ export const contactRepository = {
     inviterEmail: Email,
     invitee: Email,
     publicKey: JsonWebKey,
+    publicProfileId: string,
   ): Promise<void> => {
     const response = await fetch(`/users/${inviter}/contact-requests`, {
       method: "POST",
@@ -17,7 +18,12 @@ export const contactRepository = {
       credentials: "same-origin",
       // inviterEmail is only used server-side to name the inviter in the
       // invitation mail sent to a not-yet-registered invitee; it is not stored.
-      body: JSON.stringify({ invitee, inviterEmail, publicKey }),
+      body: JSON.stringify({
+        invitee,
+        inviterEmail,
+        publicKey,
+        publicProfileId,
+      }),
     });
     if (!response.ok) {
       throw new Error("Failed to send contact request");
@@ -49,6 +55,7 @@ export const contactRepository = {
     publicKey: JsonWebKey,
     chatId: string,
     sharedKey: string,
+    publicProfileId: string,
   ): Promise<void> => {
     const response = await fetch(
       `/users/${invitee}/contact-requests/${inviter}`,
@@ -65,6 +72,7 @@ export const contactRepository = {
           publicKey,
           chatId,
           sharedKey,
+          publicProfileId,
         }),
       },
     );

@@ -1,7 +1,10 @@
 import { MatchersV2 as Matchers, MatchersV3 } from "@pact-foundation/pact";
 import { test, expect } from "./fixtures";
 import {
+  aesGcmEncrypt,
   clearLocalStorage,
+  encryptKeyEnvelope,
+  generateAesGcmKeyJwk,
   inputMarysPassword,
   prepareFreshUserSettings,
   prepareMarysChatsDocument,
@@ -344,9 +347,111 @@ test("new user registers via invite link and accepts the invitation", async ({
     )
     .willRespondWith(200);
 
-  const { settingsKeyJwk } = await prepareFreshUserSettings(
+  const { settingsKeyJwk, profileId } = await prepareFreshUserSettings(
     "35c34cb3-559d-4001-a67b-23259e45e69e",
   );
+
+  // Accepting mary's invitation as the last step of registration first
+  // ensures joe has a named public profile of his own (§3.6, name entered
+  // directly in the password dialog) - his freshly-registered, still
+  // nameless private profile has to be read first (self-wrapped like
+  // documentList/chatList above), then a fresh public-profile is created and
+  // named.
+  const joeProfileKey = await generateAesGcmKeyJwk();
+  const joeProfileContent = await aesGcmEncrypt(
+    joeProfileKey,
+    new TextEncoder().encode(JSON.stringify({ emails: ["joe@imagey.cloud"] })),
+  );
+  const joeProfileWrappedKey = await encryptKeyEnvelope(
+    joeProfileKey,
+    settingsKeyJwk,
+  );
+  provider
+    .addInteraction()
+    .given("Joe is registered")
+    // "Joe is registered" only restores his settings/document-list/chat-list
+    // fixture (see ContractTest.joeIsRegistered) - his profile document
+    // (44444444-..., self-wrapped) has no static fixture of its own, so the
+    // generic "a document exists" state creates it here.
+    .given("a document exists", {
+      ownerId: "35c34cb3-559d-4001-a67b-23259e45e69e",
+      documentId: profileId,
+      kid: "35c34cb3-559d-4001-a67b-23259e45e69e",
+      issuer: "35c34cb3-559d-4001-a67b-23259e45e69e",
+    })
+    .uponReceiving("a request of joe to get his fresh profile document")
+    .withRequest(
+      "GET",
+      `/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/${profileId}`,
+      (r) => r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", joeProfileContent),
+    );
+  provider
+    .addInteraction()
+    .given("Joe is registered")
+    .given("a document exists", {
+      ownerId: "35c34cb3-559d-4001-a67b-23259e45e69e",
+      documentId: profileId,
+      kid: "35c34cb3-559d-4001-a67b-23259e45e69e",
+      issuer: "35c34cb3-559d-4001-a67b-23259e45e69e",
+    })
+    .uponReceiving("a request of joe to get his fresh profile document key")
+    .withRequest(
+      "GET",
+      `/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/${profileId}/keys/35c34cb3-559d-4001-a67b-23259e45e69e`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({
+        issuer: "35c34cb3-559d-4001-a67b-23259e45e69e",
+        kid: "35c34cb3-559d-4001-a67b-23259e45e69e",
+        sharedKey: MatchersV3.string(joeProfileWrappedKey),
+      }),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of joe to create his public profile on registration",
+    )
+    .withRequest(
+      "POST",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/joes-public-profile",
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
+      }),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of joe to name his public profile on registration",
+    )
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        matcher: `/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/(?!${profileId}).+$`,
+        generate:
+          "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/joes-public-profile",
+      }),
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(204, (r) =>
+      r.headers({ ETag: MatchersV3.string('"joes-public-profile-etag"') }),
+    );
 
   // Accepting mary's invitation as the last step of registration also
   // creates the chat's own Document - same shape as
@@ -403,10 +508,35 @@ test("new user registers via invite link and accepts the invitation", async ({
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           chatId: MatchersV3.string("new-chat-id"),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
+          publicProfileId: MatchersV3.string("joes-public-profile"),
         });
       },
     )
     .willRespondWith(204);
+
+  // Joe also shares his freshly-named public profile into the new chat with
+  // mary (§3.2).
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of joe to share his public profile with mary on registration",
+    )
+    .withRequest(
+      "POST",
+      Matchers.regex({
+        matcher: `/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/(?!${profileId}).+/keys$`,
+        generate:
+          "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/joes-public-profile/keys",
+      }),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          kid: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          sharedKey: MatchersV3.string("dummy-shared-key"),
+        });
+      },
+    )
+    .willRespondWith(200);
 
   await provider
     .addInteraction()
@@ -456,16 +586,31 @@ test("new user registers via invite link and accepts the invitation", async ({
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill(TestData.mary.password);
       await page.getByLabel("Confirm Password").fill(TestData.mary.password);
+      // Invite-based registration also asks for a display name directly in
+      // this dialog (§3.6/§10).
+      await page.getByLabel("How should others see you?").fill("Joe Invited");
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       // Then: the accept PUT and the chat-document POST above are verified by
       // executeTest (it fails if an interaction was not called). Confirm the
       // SPA finished registration and landed in the app rather than erroring
-      // on the dialog.
+      // on the dialog. Wait for the activities list to actually render (not
+      // just the "Home" link, which is visible before Activities.tsx even
+      // starts loading) - ActivityService.getActivities awaits the document
+      // list fetch before contact requests turn into visible activity cards,
+      // so this guarantees that fetch has already happened and
+      // runningPactRequests can't dip to 0 while it's still pending - see
+      // the imagey-web-runningpactrequests-race memory. The still-pending
+      // invitation (mary's contact-requests entry is mocked as still
+      // INVITED after accepting - see the interaction above) means the
+      // document-list-empty "Upload Images" panel never renders here, so a
+      // "Contact request" activity card is used as the signal instead.
       await expect(
         page.getByText("An error occurred during authentication"),
       ).toHaveCount(0);
-      await expect(page.getByRole("link", { name: "Home" })).toBeVisible({
+      await expect(
+        page.getByRole("heading", { name: "Contact request" }),
+      ).toBeVisible({
         timeout: 10_000,
       });
       await expect.poll(() => runningPactRequests).toBe(0);
