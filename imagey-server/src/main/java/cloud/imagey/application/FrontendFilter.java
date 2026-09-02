@@ -38,7 +38,7 @@ public class FrontendFilter extends HttpFilter {
     };
 
     private static final String[] SUFFIXES = {
-        ".html", ".json", ".ico", ".png", ".svg"
+        ".html", ".json", ".ico", ".png", ".svg", ".js"
     };
 
     @Override

@@ -16,8 +16,9 @@ test("loads app name from manifest and updates title", async ({ page }) => {
         id: "secure-doc",
         name: "Secure Doc - Your image vault",
         short_name: "Secure Doc",
-        start_url: "https://secure-doc.store",
-        display: "fullscreen",
+        start_url: "/",
+        scope: "/",
+        display: "standalone",
       }),
     );
 

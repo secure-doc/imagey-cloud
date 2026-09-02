@@ -45,7 +45,6 @@ public class ManifestFilter extends HttpFilter {
         String appName = domain.getAppName();
         String shortName = appName;
         String id = appName.toLowerCase().replace(" ", "-");
-        String startUrl = domain.startUrl();
 
         String json = """
             {
@@ -53,8 +52,11 @@ public class ManifestFilter extends HttpFilter {
               "name": "%s",
               "short_name": "%s",
               "description": "Store and share your images and documents safely.",
-              "start_url": "%s",
-              "display": "fullscreen",
+              "start_url": "/",
+              "scope": "/",
+              "display": "standalone",
+              "theme_color": "#ffffff",
+              "background_color": "#ffffff",
               "icons": [
                 {
                   "src": "image192.png",
@@ -64,7 +66,8 @@ public class ManifestFilter extends HttpFilter {
                 {
                   "src": "image512.png",
                   "type": "image/png",
-                  "sizes": "512x512"
+                  "sizes": "512x512",
+                  "purpose": "any maskable"
                 },
                 {
                   "src": "image.svg",
@@ -100,7 +103,7 @@ public class ManifestFilter extends HttpFilter {
                 }
               ]
             }
-            """.formatted(id, appName + " - Your image vault", shortName, startUrl);
+            """.formatted(id, appName + " - Your image vault", shortName);
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");

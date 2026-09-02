@@ -67,6 +67,21 @@ public class FrontendFilterTest {
     }
 
     @Test
+    @DisplayName("Verify the service worker script is served as JavaScript, not forwarded")
+    public void testServiceWorkerScript() throws IOException {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("sw.js")
+            .request()
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        String content = response.readEntity(String.class);
+        assertThat(content).doesNotContain("<html");
+        assertThat(response.getHeaderString("Content-Type")).contains("javascript");
+    }
+
+    @Test
     @DisplayName("Verify API endpoints are not forwarded")
     public void testApiEndpoint() throws IOException {
         Response response = newClient()
