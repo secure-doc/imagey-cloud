@@ -38,4 +38,16 @@ public record DecodedToken(JWTClaimsSet jwt) {
     public boolean isOfType(TokenType expected) {
         return type().filter(expected::equals).isPresent();
     }
+
+    /**
+     * Whether this token carries a {@code true} {@link TokenService#TRUSTED_CLAIM} - i.e. it backs a
+     * "keep me logged in" session. Missing or non-boolean claim counts as not trusted.
+     */
+    public boolean isTrusted() {
+        try {
+            return Boolean.TRUE.equals(jwt.getBooleanClaim(TokenService.TRUSTED_CLAIM));
+        } catch (ParseException e) {
+            return false;
+        }
+    }
 }

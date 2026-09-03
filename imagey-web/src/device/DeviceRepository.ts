@@ -1,5 +1,6 @@
 // imagey.user           - the signed-in account's server id (a UUID)
 // imagey.email           - the address that id was last reached through (display only)
+// imagey.keepLoggedIn    - the last "keep me logged in" choice, remembered across sign-ins
 // imagey.deviceIds[userId]        - this browser's device id for that account
 // imagey.devices[deviceId].key    - the password-encrypted private device key
 export const deviceRepository = {
@@ -20,6 +21,13 @@ export const deviceRepository = {
   },
   storeEmail: (email: string) => {
     localStorage.setItem("imagey.email", email);
+  },
+  loadKeepLoggedIn: (): boolean | undefined => {
+    const value = localStorage.getItem("imagey.keepLoggedIn");
+    return value === null ? undefined : value === "true";
+  },
+  storeKeepLoggedIn: (keepLoggedIn: boolean) => {
+    localStorage.setItem("imagey.keepLoggedIn", String(keepLoggedIn));
   },
   loadDeviceId: (userId: string) => {
     const deviceId = localStorage.getItem(`imagey.deviceIds[${userId}]`);

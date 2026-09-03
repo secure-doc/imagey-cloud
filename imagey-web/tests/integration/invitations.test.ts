@@ -107,7 +107,17 @@ test("accept open invitations", async ({ page }) => {
     const acceptAliceBtn = invitationPanel.getByRole("button", {
       name: "check",
     });
+    // The panel is removed only once the whole acceptContactRequest chain
+    // (PUT contact-request -> POST chat document -> POST public-profile share)
+    // has resolved. Pin the terminal share request so the assertion doesn't
+    // race a slow multi-hop round-trip under load / coverage instrumentation.
+    const profileShared = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        /\/documents\/[^/]+\/keys$/.test(new URL(r.url()).pathname),
+    );
     await acceptAliceBtn.click();
+    await profileShared;
     await expect(invitationPanel).not.toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -149,7 +159,15 @@ test("decline open invitations", async ({ page }) => {
     const declineAliceBtn = invitationPanel.getByRole("button", {
       name: "close",
     });
+    // DeclineInvitationButton removes the card in the DELETE's .then() - pin
+    // that response so the assertion doesn't race the round-trip under load.
+    const invitationDeclined = page.waitForResponse(
+      (r) =>
+        r.request().method() === "DELETE" &&
+        r.url().includes("/contact-requests/"),
+    );
     await declineAliceBtn.click();
+    await invitationDeclined;
     await expect(invitationPanel).not.toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -403,7 +421,15 @@ test("accept invitation prompts for a display name when mary has no public profi
     });
     await expect(namePromptHeading).toBeVisible();
     await page.getByLabel("Name").fill("Mary Doe");
+    // After naming, accepting runs the full chain; pin its terminal share
+    // request so the panel-gone assertion doesn't race it under load.
+    const profileShared = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        /\/documents\/[^/]+\/keys$/.test(new URL(r.url()).pathname),
+    );
     await page.getByRole("button", { name: "Confirm" }).click();
+    await profileShared;
 
     await expect(namePromptHeading).not.toBeVisible();
     await expect(invitationPanel).not.toBeVisible();

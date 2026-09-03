@@ -21,6 +21,7 @@ import static java.util.Optional.empty;
 
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -54,6 +55,16 @@ public class TokenService {
     /** Claim name carrying the {@link TokenType} of a token. */
     public static final String TYPE_CLAIM = "type";
 
+    /**
+     * Claim name (boolean) on an {@code AUTHENTICATION} token: {@code true} when the user asked to
+     * stay signed in ("keep me logged in"). Such a session gets the month-long, persistent cookie
+     * and is slid forward on activity; without the claim the session is treated as short-lived.
+     */
+    public static final String TRUSTED_CLAIM = "trusted";
+
+    /** {@code Max-Age} (seconds) of the persistent "keep me logged in" cookie. */
+    public static final long TRUSTED_COOKIE_MAX_AGE_SECONDS = ONE_MONTH / 1000;
+
     private static final Logger LOG = LogManager.getLogger(TokenService.class);
     private static final String ISSUER = "https://imagey.cloud";
 
@@ -73,7 +84,35 @@ public class TokenService {
 
     /** Session cookie for an authenticated user; subject = {@link User#id()}. */
     public Token generateAuthenticationToken(User user, long validityInMilliseconds) {
-        return generate(user.id().id(), TokenType.AUTHENTICATION, validityInMilliseconds);
+        return generateAuthenticationToken(user, validityInMilliseconds, false);
+    }
+
+    /**
+     * Session cookie for an authenticated user; subject = {@link User#id()}. When {@code trusted}
+     * the token carries the {@link #TRUSTED_CLAIM} so an active session can be slid forward instead
+     * of hard-expiring (see {@code AuthenticationTokenRefreshFilter}).
+     */
+    public Token generateAuthenticationToken(User user, long validityInMilliseconds, boolean trusted) {
+        return generate(
+            user.id().id(),
+            TokenType.AUTHENTICATION,
+            validityInMilliseconds,
+            Map.of(TRUSTED_CLAIM, trusted));
+    }
+
+    /**
+     * The full {@code Set-Cookie} header value for an authenticated session. A {@code trusted}
+     * ("keep me logged in") session lasts a month and is persistent ({@code Max-Age}); an untrusted
+     * one lasts an hour and is dropped when the browser closes.
+     */
+    public String authenticationCookie(User user, boolean trusted) {
+        long validity = trusted ? ONE_MONTH : ONE_HOUR;
+        Token token = generateAuthenticationToken(user, validity, trusted);
+        String cookie = "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/";
+        if (trusted) {
+            cookie += "; Max-Age=" + TRUSTED_COOKIE_MAX_AGE_SECONDS;
+        }
+        return cookie;
     }
 
     /** Emailed link that finishes first-time registration; subject = email address. */
@@ -92,15 +131,20 @@ public class TokenService {
     }
 
     private Token generate(String subject, TokenType type, long validityInMilliseconds) {
+        return generate(subject, type, validityInMilliseconds, Map.of());
+    }
+
+    private Token generate(String subject, TokenType type, long validityInMilliseconds, Map<String, Object> extraClaims) {
         LOG.info("Generate {} token with validity {}", type, validityInMilliseconds);
         try {
             JWSSigner signer = new MACSigner(Base64.getDecoder().decode(sharedSecret));
-            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+            JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
                 .subject(subject)
                 .issuer(ISSUER)
                 .claim(TYPE_CLAIM, type.name())
-                .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds))
-                .build();
+                .expirationTime(new Date(System.currentTimeMillis() + validityInMilliseconds));
+            extraClaims.forEach(claims::claim);
+            JWTClaimsSet claimsSet = claims.build();
             SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
             signedJWT.sign(signer);
             LOG.info("Token generated.");

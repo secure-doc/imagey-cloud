@@ -204,7 +204,14 @@ test("navigate into folder and upload image", async ({ page }) => {
     );
     await expect(backButton).toHaveCount(0);
 
+    // Opening the folder fires a fresh loadDocument (content GET + key GET with
+    // a decrypt in between); pin the terminal key GET so the empty-state
+    // assertion below doesn't race that chain under load / coverage runs.
+    const folderKeyLoaded = page.waitForResponse((r) =>
+      r.url().includes(`/documents/${FOLDER_ID}/keys/`),
+    );
     await folderElem.click({ force: true });
+    await folderKeyLoaded;
 
     // The folder is empty, so the empty-state upload panel is shown
     const uploadPanelButton = page.locator("button.circle.extra");
@@ -218,7 +225,14 @@ test("navigate into folder and upload image", async ({ page }) => {
       uploadPanelButton.click(),
     ]);
 
+    // The upload ends with the app fetching the freshly stored preview back to
+    // render it - pin that GET so the assertion doesn't race the encrypt +
+    // multi-part POST + read-back chain.
+    const previewLoaded = page.waitForResponse((r) =>
+      /\/documents\/[^/]+\/files\//.test(new URL(r.url()).pathname),
+    );
     await fileChooser.setFiles("tests/images/beach-1836467_1920.jpg");
+    await previewLoaded;
 
     // Then: the app generates its own random ids for the uploaded document,
     // so the mocked content response can't line up with the real encryption

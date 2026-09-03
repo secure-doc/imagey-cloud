@@ -39,16 +39,35 @@ export default function DeviceSetupDialog({
     }>
       message={t("Unlock this device")}
       email={email}
+      showKeepLoggedIn
       onWrongUser={onWrongUser}
-      validatePassword={(password) =>
-        deviceService
-          .unlockLocalDeviceKey(deviceId, password)
-          .then((privateDeviceKey) =>
-            authenticationService
-              .loadPrivateMainKey(userId, deviceId, privateDeviceKey)
-              .then((privateMainKey) => ({ privateMainKey, privateDeviceKey })),
-          )
-      }
+      validatePassword={async (password, keepLoggedIn) => {
+        // We reach this dialog with a still-valid session (the public-key
+        // lookup succeeded) - the in-memory key pair was just lost on the last
+        // reload. Unlocking the local device key is enough to rebuild it.
+        // Only when the user asks to stay signed in do we run the full
+        // challenge/response: that is the only path that stores a recovery key
+        // and upgrades the session to the persistent cookie, so that the next
+        // reload logs in without a password.
+        if (keepLoggedIn) {
+          return authenticationService.authenticateWithChallenge(
+            userId,
+            deviceId,
+            password,
+            true,
+          );
+        }
+        const privateDeviceKey = await deviceService.unlockLocalDeviceKey(
+          deviceId,
+          password,
+        );
+        const privateMainKey = await authenticationService.loadPrivateMainKey(
+          userId,
+          deviceId,
+          privateDeviceKey,
+        );
+        return { privateMainKey, privateDeviceKey };
+      }}
       onPasswordValid={({ privateMainKey, privateDeviceKey }) =>
         onPrivateKeysDecrypted(privateMainKey, privateDeviceKey)
       }

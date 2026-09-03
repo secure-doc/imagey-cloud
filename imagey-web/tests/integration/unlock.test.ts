@@ -12,6 +12,7 @@ import {
   setupMarysSecondDevice,
   TestData,
   prepareMarysContactRequests,
+  optOutOfKeepLoggedIn,
 } from "./setup";
 import { MatchersV2 as Matchers } from "@pact-foundation/pact";
 
@@ -365,9 +366,11 @@ test("mary logs into new device", async ({ page }) => {
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill(TestData.mary.password);
-      // Wait, is "mary logs into new device" using DeviceSetupDialog (no confirmation) or Registration?
-      // It is login into a new device (DeviceSetupDialog), so no confirm password field.
-      // Wait, the previous test ("mary registers new device") is Registration.
+      // This flow unlocks an already-authenticated device (DeviceSetupDialog),
+      // so take the lightweight path without the challenge / recovery-key
+      // round-trip - see "mary stays logged in when unlocking a device" below
+      // for the "keep me logged in" variant.
+      await optOutOfKeepLoggedIn(page);
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
       await expect(
         page.getByRole("button", { name: "Confirm", exact: true }),
