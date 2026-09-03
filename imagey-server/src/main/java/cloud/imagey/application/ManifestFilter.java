@@ -61,18 +61,26 @@ public class ManifestFilter extends HttpFilter {
                 {
                   "src": "image192.png",
                   "type": "image/png",
-                  "sizes": "192x192"
+                  "sizes": "192x192",
+                  "purpose": "any"
                 },
                 {
                   "src": "image512.png",
                   "type": "image/png",
                   "sizes": "512x512",
-                  "purpose": "any maskable"
+                  "purpose": "any"
                 },
                 {
-                  "src": "image.svg",
-                  "type": "image/svg+xml",
-                  "sizes": "any"
+                  "src": "maskable-192.png",
+                  "type": "image/png",
+                  "sizes": "192x192",
+                  "purpose": "maskable"
+                },
+                {
+                  "src": "maskable-512.png",
+                  "type": "image/png",
+                  "sizes": "512x512",
+                  "purpose": "maskable"
                 }
               ],
               "shortcuts": [
@@ -84,22 +92,19 @@ public class ManifestFilter extends HttpFilter {
                       "src": "image192.png",
                       "type": "image/png",
                       "sizes": "192x192"
-                    },
-                    {
-                      "src": "image512.png",
-                      "type": "image/png",
-                      "sizes": "512x512"
-                    },
-                    {
-                      "src": "image.svg",
-                      "type": "image/svg+xml",
-                      "sizes": "any"
                     }
                   ]
                 },
                 {
                   "name": "Chats",
-                  "url": "/chats"
+                  "url": "/chats",
+                  "icons": [
+                    {
+                      "src": "image192.png",
+                      "type": "image/png",
+                      "sizes": "192x192"
+                    }
+                  ]
                 }
               ]
             }
