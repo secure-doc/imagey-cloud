@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   authenticationService,
   RegistrationResult,
@@ -15,11 +15,20 @@ export default function AuthenticationDialog({
   const { t } = useTranslation();
   const [registrationResult, setRegistrationResult] =
     useState<RegistrationResult>();
+  // Fire the request exactly once per email address. Without this guard the
+  // effect re-ran on every render (it has no dependency array, and its own
+  // setRegistrationResult triggers a re-render), so registration/login mails
+  // were sent twice.
+  const requestedEmail = useRef<string>();
   useEffect(() => {
+    if (requestedEmail.current === email) {
+      return;
+    }
+    requestedEmail.current = email;
     authenticationService
       .startAuthentication(email)
       .then((registrationResult) => setRegistrationResult(registrationResult));
-  });
+  }, [email]);
   switch (registrationResult) {
     case RegistrationResult.RegistrationStarted:
       return (
