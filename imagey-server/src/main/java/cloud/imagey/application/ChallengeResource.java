@@ -35,7 +35,6 @@ import jakarta.ws.rs.core.Response;
 import cloud.imagey.domain.authentication.ChallengeService;
 import cloud.imagey.domain.authentication.ChallengeService.ChallengeResponse;
 import cloud.imagey.domain.authentication.ChallengeSignature;
-import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
@@ -73,17 +72,7 @@ public class ChallengeResource {
         challengeService.verifyChallenge(user, deviceId, signature);
 
         return Response.ok()
-                .header("Set-Cookie", buildCookie(user, trusted))
+                .header("Set-Cookie", tokenService.authenticationCookie(user, trusted))
                 .build();
-    }
-
-    private String buildCookie(User user, boolean trusted) {
-        long validity = trusted ? TokenService.ONE_MONTH : TokenService.ONE_HOUR;
-        Token token = tokenService.generateAuthenticationToken(user, validity);
-        String cookieHeader = "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/";
-        if (trusted) {
-            cookieHeader += "; Max-Age=2592000";
-        }
-        return cookieHeader;
     }
 }

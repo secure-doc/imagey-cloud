@@ -18,6 +18,7 @@ import {
   setupMockServer,
   TestData,
   runningPactRequests,
+  optOutOfKeepLoggedIn,
 } from "./setup";
 import { cryptoService } from "../../src/authentication/CryptoService";
 
@@ -785,6 +786,7 @@ test("visit page on existing device", async ({ page }) => {
     const passwordInput = page.getByLabel("Password", { exact: true });
     await expect(passwordInput).toBeVisible();
     await passwordInput.fill("MarysPassword123");
+    await optOutOfKeepLoggedIn(page);
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
     // Then
@@ -792,6 +794,37 @@ test("visit page on existing device", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("keep me logged in remembers a previous opt-out", async ({ page }) => {
+  // Given the user unticked "keep me logged in" last time, the box comes back
+  // unticked and the unlock stays on the lightweight path (no challenge).
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+  const given = await prepareMarysContactRequests();
+
+  await given.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await setupMarysDevice(page);
+    await page.evaluate(() =>
+      localStorage.setItem("imagey.keepLoggedIn", "false"),
+    );
+    await page.goto("/");
+
+    const passwordInput = page.getByLabel("Password", { exact: true });
+    await expect(passwordInput).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: "Keep me logged in" }),
+    ).not.toBeChecked();
+    await passwordInput.fill("MarysPassword123");
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+    // Then
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -816,6 +849,7 @@ test("visit page on existing device with wrong password", async ({ page }) => {
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill("wrongPassword");
+      await optOutOfKeepLoggedIn(page);
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
       // Then
@@ -1095,6 +1129,7 @@ test("existing user authenticates via challenge-response on existing device", as
       const passwordInput = page.getByLabel("Password", { exact: true });
       await expect(passwordInput).toBeVisible();
       await passwordInput.fill("MarysPassword123");
+      await optOutOfKeepLoggedIn(page);
 
       const authenticationsResponse = page.waitForResponse(
         "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/*/authentications*",
@@ -1334,6 +1369,191 @@ test("existing user authenticates via challenge-response and selects keep me log
     });
 });
 
+test("device unlock with keep me logged in stores a recovery key and a persistent cookie", async ({
+  page,
+}) => {
+  // Given: the session is still valid (public-key lookup returns 200, so the
+  // app shows DeviceSetupDialog rather than the challenge dialog), but the
+  // in-memory keys were lost on reload. Ticking "keep me logged in" - which is
+  // the default - must run the full trusted challenge so the next reload
+  // auto-logs in. This is the mobile "stay signed in" path.
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysSettingsDocument();
+
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving(
+      "a request to get public key before device-setup keep me logged in",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey));
+
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving(
+      "a request for a challenge from device setup with keep me logged in",
+    )
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        ephemeralPublicKey: Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+        nonce: Matchers.like("some-random-nonce"),
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving(
+      "a request to authenticate a trusted device from device setup",
+    )
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+      (r) =>
+        r
+          .query({ trusted: "true" })
+          .headers({ "Content-Type": "application/json" })
+          .jsonBody({ signature: Matchers.string("any-signature") }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({
+        "Set-Cookie": Matchers.string(
+          "Authorization=test-token; Path=/; Max-Age=2592000",
+        ),
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving("a request to store recovery key from device setup")
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/recovery-key`,
+      (r) =>
+        r
+          .headers({ "Content-Type": "application/json" })
+          .jsonBody(Matchers.string('"any-recovery-key"')),
+    )
+    .willRespondWith(200);
+
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving(
+      "a request to get private key after device-setup keep me logged in",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/private-keys/0`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        kid: "0",
+        encryptingDeviceId: TestData.mary.devices[0].deviceId,
+        key: TestData.mary.devices[0].encryptedPrivateMainKey,
+      }),
+    );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .uponReceiving(
+      "a request to get public device key after device-setup keep me logged in",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/public-keys/0`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody(
+        Matchers.like({
+          crv: TestData.mary.devices[0].publicDeviceKey!.crv,
+          kty: TestData.mary.devices[0].publicDeviceKey!.kty,
+          x: TestData.mary.devices[0].publicDeviceKey!.x,
+          y: TestData.mary.devices[0].publicDeviceKey!.y,
+        }),
+      ),
+    );
+
+  await prepareMarysChatsDocument(
+    [],
+    [
+      "marys second device registered",
+      "marys second device unlocked",
+      "mary has no contacts",
+    ],
+  );
+
+  await provider
+    .addInteraction()
+    .given("marys second device registered")
+    .given("marys second device unlocked")
+    .given("mary has no contacts")
+    .uponReceiving(
+      "a request of mary to get contact requests after device-setup keep me logged in",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]))
+    .executeTest(async (mockServer) => {
+      // When
+      await setupMockServer(page, mockServer);
+      await setupMarysDevice(page);
+
+      await page.goto("/");
+
+      const passwordInput = page.getByLabel("Password", { exact: true });
+      await expect(passwordInput).toBeVisible();
+      await passwordInput.fill("MarysPassword123");
+
+      // "Keep me logged in" is on by default - leave it untouched.
+      await expect(
+        page.getByRole("checkbox", { name: "Keep me logged in" }),
+      ).toBeChecked();
+
+      const recoveryKeyResponse = page.waitForResponse(
+        "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/*/recovery-key",
+      );
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
+
+      // Then
+      await recoveryKeyResponse;
+      await expect(page.getByText(/Upload Images/)).toBeVisible();
+
+      const storedRecoveryKey = await page.evaluate(
+        (deviceId) =>
+          localStorage.getItem(`imagey.devices[${deviceId}].recovery-key`),
+        TestData.mary.devices[0].deviceId,
+      );
+      expect(storedRecoveryKey).not.toBeNull();
+
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
 test("existing user authenticates via challenge-response but provides wrong password", async ({
   page,
 }) => {
@@ -1453,6 +1673,7 @@ test("unlockLocalDeviceKey fails if private key missing locally", async ({
     }, TestData.mary.devices[0].deviceId);
 
     await passwordInput.fill(TestData.mary.password);
+    await optOutOfKeepLoggedIn(page);
     await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
     // Wrong password (since decrypt fails) or error

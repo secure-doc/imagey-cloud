@@ -34,6 +34,9 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
+import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
+
 @MonoMeecrowaveConfig
 public class TokenServiceTest {
 
@@ -97,6 +100,42 @@ public class TokenServiceTest {
         Token token = new Token("invalid.token.format");
         Optional<DecodedToken> decoded = tokenService.decode(token);
         assertThat(decoded).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Authentication token carries the trusted claim it was generated with")
+    public void testTrustedClaim() {
+        User mary = new User(new UserId("mary"));
+
+        DecodedToken trusted = tokenService.decode(
+            tokenService.generateAuthenticationToken(mary, 10000, true)).orElseThrow();
+        DecodedToken untrusted = tokenService.decode(
+            tokenService.generateAuthenticationToken(mary, 10000, false)).orElseThrow();
+        DecodedToken legacy = tokenService.decode(
+            tokenService.generateAuthenticationToken(mary, 10000)).orElseThrow();
+
+        assertThat(trusted.isTrusted()).isTrue();
+        assertThat(untrusted.isTrusted()).isFalse();
+        assertThat(legacy.isTrusted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Trusted authentication cookie is persistent, untrusted one is not")
+    public void testAuthenticationCookie() {
+        User mary = new User(new UserId("mary"));
+
+        String trusted = tokenService.authenticationCookie(mary, true);
+        String untrusted = tokenService.authenticationCookie(mary, false);
+
+        assertThat(trusted)
+            .contains("token=")
+            .contains("HttpOnly")
+            .contains("SameSite=strict")
+            .contains("Max-Age=" + TokenService.TRUSTED_COOKIE_MAX_AGE_SECONDS);
+        assertThat(untrusted)
+            .contains("token=")
+            .contains("HttpOnly")
+            .doesNotContain("Max-Age");
     }
 
     @Test

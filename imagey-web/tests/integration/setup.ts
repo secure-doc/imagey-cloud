@@ -584,6 +584,7 @@ export async function loginAsBill(page: Page) {
   const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(TestData.bill.password);
+  await optOutOfKeepLoggedIn(page);
   const confirmButton = page.getByRole("button", {
     name: "Confirm",
     exact: true,
@@ -1803,10 +1804,24 @@ export async function setupBillsDevice(page: Page) {
   );
 }
 
+// The "keep me logged in" checkbox defaults to on. Tests that only need to
+// reach the logged-in app take the lightweight unlock path (no challenge /
+// recovery-key round-trip), so they opt out first; the dedicated persistence
+// tests tick it back on and register those interactions themselves.
+export async function optOutOfKeepLoggedIn(page: Page) {
+  const keepLoggedIn = page.getByRole("checkbox", {
+    name: "Keep me logged in",
+  });
+  await expect(keepLoggedIn).toBeVisible();
+  await keepLoggedIn.uncheck({ force: true });
+  await expect(keepLoggedIn).not.toBeChecked();
+}
+
 export async function inputMarysPassword(page: Page) {
   const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(TestData.mary.password);
+  await optOutOfKeepLoggedIn(page);
   const confirmButton = page.getByRole("button", {
     name: "Confirm",
     exact: true,
@@ -2258,6 +2273,7 @@ export async function loginAsAlice(page: Page) {
   const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toBeVisible();
   await passwordInput.fill(TestData.alice.password);
+  await optOutOfKeepLoggedIn(page);
   const confirmButton = page.getByRole("button", {
     name: "Confirm",
     exact: true,

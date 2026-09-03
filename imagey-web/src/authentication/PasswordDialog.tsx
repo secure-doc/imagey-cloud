@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { deviceRepository } from "../device/DeviceRepository";
 
 interface PasswordDialogProperties<R> {
   message: string;
@@ -28,7 +29,11 @@ export default function PasswordDialog<R>({
   onPasswordValid,
 }: PasswordDialogProperties<R>) {
   const { t } = useTranslation();
-  const [keepLoggedIn, setKeepLoggedIn] = useState(false);
+  // Remember the last choice across sign-ins and default it on, so a returning
+  // user is not silently downgraded to a session that expires on the next reload.
+  const [keepLoggedIn, setKeepLoggedIn] = useState(
+    () => deviceRepository.loadKeepLoggedIn() ?? true,
+  );
   const [passwordError, setPasswordError] = useState(false);
   const [passwordsDoNotMatch, setPasswordsDoNotMatch] = useState(false);
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -105,7 +110,10 @@ export default function PasswordDialog<R>({
               <input
                 type="checkbox"
                 checked={keepLoggedIn}
-                onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                onChange={(e) => {
+                  setKeepLoggedIn(e.target.checked);
+                  deviceRepository.storeKeepLoggedIn(e.target.checked);
+                }}
               />
               <span>{t("Keep me logged in")}</span>
             </label>
