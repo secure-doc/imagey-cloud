@@ -272,11 +272,8 @@ async function mockChatsDocument(
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: email,
-        kid: email,
-        sharedKey: MatchersV3.string(wrappedKey),
-      }),
+      // ADR 0009: the server no longer discloses issuer / kid.
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedKey) }),
     );
 
   return key;
@@ -392,11 +389,7 @@ async function mockChatDocument({
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: ownerEmail,
-        kid: chatsId,
-        sharedKey: MatchersV3.string(wrappedKey),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedKey) }),
     );
 }
 
@@ -462,11 +455,7 @@ async function mockChatDocumentSharedViaSync({
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: viewerEmail,
-        kid: viewerEmail,
-        sharedKey: MatchersV3.string(wrappedKey),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedKey) }),
     );
 }
 
@@ -1384,11 +1373,7 @@ async function mockOwnedDocument(
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer,
-        kid,
-        sharedKey: MatchersV3.string(wrappedKey),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedKey) }),
     );
 }
 
@@ -2154,11 +2139,7 @@ export async function prepareMarysChatWithContactProfile({
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        kid: TestData.mary.settings!.chats,
-        sharedKey: MatchersV3.string(wrappedChatKey),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedChatKey) }),
     );
 
   if (contactProfileUnavailable) {
@@ -2654,11 +2635,7 @@ export async function prepareFreshUserSettings(email: string) {
       r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: email,
-        kid: "0",
-        sharedKey: MatchersV3.string(settingsKeyEnvelope),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(settingsKeyEnvelope) }),
     );
 
   provider
@@ -2686,11 +2663,7 @@ export async function prepareFreshUserSettings(email: string) {
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: email,
-        kid: email,
-        sharedKey: MatchersV3.string(documentListSharedKey),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(documentListSharedKey) }),
     );
 
   provider
@@ -2716,11 +2689,7 @@ export async function prepareFreshUserSettings(email: string) {
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
-      r.jsonBody({
-        issuer: email,
-        kid: email,
-        sharedKey: MatchersV3.string(chatListSharedKey),
-      }),
+      r.jsonBody({ sharedKey: MatchersV3.string(chatListSharedKey) }),
     );
 
   return { settingsKeyJwk, documentListId, chatListId, profileId };

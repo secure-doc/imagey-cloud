@@ -406,8 +406,6 @@ test("new user registers via invite link and accepts the invitation", async ({
     )
     .willRespondWith(200, (r) =>
       r.jsonBody({
-        issuer: "35c34cb3-559d-4001-a67b-23259e45e69e",
-        kid: "35c34cb3-559d-4001-a67b-23259e45e69e",
         sharedKey: MatchersV3.string(joeProfileWrappedKey),
       }),
     );

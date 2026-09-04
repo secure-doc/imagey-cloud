@@ -33,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.domain.document.AccessPath.Hop;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
@@ -40,6 +41,7 @@ import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserId;
 import cloud.imagey.infrastructure.ResourceConflictException;
+import cloud.imagey.infrastructure.common.KeyFileCrypto;
 
 @MonoMeecrowaveConfig
 public class DocumentRepositoryTest {
@@ -50,6 +52,9 @@ public class DocumentRepositoryTest {
 
     @Inject
     private DocumentRepository documentRepository;
+
+    @Inject
+    private KeyFileCrypto keyFileCrypto;
 
     private User user;
     private DocumentId documentId;
@@ -166,149 +171,259 @@ public class DocumentRepositoryTest {
     @Test
     @DisplayName("findDocumentKey when key does not exist returns empty")
     void findDocumentKeyNonExistent() {
-        Optional<EncryptedSharedKey> key = documentRepository.findDocumentKey(user, documentId, new Kid("friend@example.com"));
+        Optional<WrappedKey> key = documentRepository.findDocumentKey(user, documentId, new Kid("friend@example.com"));
         assertThat(key).isEmpty();
     }
 
     @Test
-    @DisplayName("persist shared key writes a keys/{kid}.json file")
-    void persistSharedKeyWritesJsonFile() {
+    @DisplayName("create writes a key file under a hashed name, without a plaintext issuer or kid")
+    void createHidesIssuerAndKid() {
         Kid friend = new Kid("friend@example.com");
-        File keyFile = keyFile(user, documentId, friend.id());
-        keyFile.getParentFile().mkdirs();
+        documentRepository.create(user, documentId, sharedKey(user, friend.id(), "d3JhcHBlZA=="));
 
-        documentRepository.create(user, documentId, sharedKey(user, friend.id()));
-
-        assertThat(keyFile).exists().content().contains("\"issuer\":\"test-user\"");
+        File keysDir = new File(new File(new File(new File(rootPath, user.id().id()), "documents"),
+            documentId.id()), "keys");
+        assertThat(keysDir.list()).hasSize(1);
+        String contents = readFile(keysDir.listFiles()[0]);
+        assertThat(contents).contains("\"salt\"").contains("\"witness\"").contains("d3JhcHBlZA==");
+        assertThat(contents).doesNotContain("friend@example.com").doesNotContain("\"issuer\"").doesNotContain("\"kid\"");
     }
 
     @Test
-    @DisplayName("persist re-uses an occupied key slot only for identical content, otherwise 409")
-    void persistSharedKeyIsWriteOnce() {
+    @DisplayName("create re-uses an occupied key slot only for an identical sharedKey, otherwise 409")
+    void createIsWriteOnce() {
         Kid friend = new Kid("friend@example.com");
-        documentRepository.create(user, documentId, sharedKey(user, friend.id()));
+        documentRepository.create(user, documentId, sharedKey(user, friend.id(), "d3JhcHBlZA=="));
 
-        // identical content -> no-op
-        documentRepository.create(user, documentId, sharedKey(user, friend.id()));
+        // identical sharedKey -> no-op (salt / witness differ on every write, so only sharedKey is compared)
+        documentRepository.create(user, documentId, sharedKey(user, friend.id(), "d3JhcHBlZA=="));
 
-        // same slot, different issuer -> conflict
-        User other = new User(new UserId("other@example.com"));
-        assertThatThrownBy(() -> documentRepository.create(user, documentId, sharedKey(other, friend.id())))
+        // same slot, different sharedKey -> conflict
+        assertThatThrownBy(() -> documentRepository.create(user, documentId, sharedKey(user, friend.id(), "b3RoZXI=")))
             .isInstanceOf(ResourceConflictException.class);
     }
 
     @Test
-    @DisplayName("findDocumentKey round-trips the persisted issuer and kid")
+    @DisplayName("findDocumentKey returns just the wrapped key ciphertext for the (documentId, kid) pair")
     void findDocumentKeyRoundTrips() {
         User folderUser = new User(new UserId("folder123"));
         User issuer = new User(new UserId("friend@example.com"));
         Kid lookupKid = new Kid("some-folder-id");
 
-        documentRepository.create(folderUser, documentId, sharedKey(issuer, lookupKid.id()));
+        documentRepository.create(folderUser, documentId, sharedKey(issuer, lookupKid.id(), "d3JhcHBlZA=="));
 
-        Optional<EncryptedSharedKey> sharedKey = documentRepository.findDocumentKey(folderUser, documentId, lookupKid);
-        assertThat(sharedKey).isPresent();
-        assertThat(sharedKey.get().issuer()).isEqualTo(issuer);
-        assertThat(sharedKey.get().kid()).isEqualTo(lookupKid);
+        Optional<WrappedKey> wrapped = documentRepository.findDocumentKey(folderUser, documentId, lookupKid);
+        assertThat(wrapped).isPresent();
+        assertThat(wrapped.get().sharedKey()).isEqualTo(new EncryptedSymmetricKey("d3JhcHBlZA=="));
+        // a different kid does not resolve to this file (the name is edge-unique)
+        assertThat(documentRepository.findDocumentKey(folderUser, documentId, new Kid("other-folder-id"))).isEmpty();
     }
 
     @Test
-    @DisplayName("isIssuerInKeyChain is true for a key issued directly by the member")
-    void isIssuerInKeyChainDirect() {
+    @DisplayName("hasDirectGrant is true only for the self-referential (caller, caller) witness")
+    void hasDirectGrant() {
         User member = new User(new UserId("member@example.com"));
         documentRepository.persist(user, documentId, new EncryptedContent("meta".getBytes()));
-        documentRepository.create(user, documentId, sharedKey(member, member.id().id()));
+        documentRepository.create(user, documentId, sharedKey(member, member.id().id(), "d3JhcHBlZA=="));
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, member)).isTrue();
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new UserId("stranger@example.com"))))
+        assertThat(documentRepository.hasDirectGrant(user, documentId, member)).isTrue();
+        assertThat(documentRepository.hasDirectGrant(user, documentId, new User(new UserId("stranger@example.com"))))
             .isFalse();
     }
 
     @Test
-    @DisplayName("isIssuerInKeyChain follows a key filed under a parent document the member can reach")
-    void isIssuerInKeyChainRecursive() {
+    @DisplayName("verifyAccess allows the direct-grant holder with no Access-Path")
+    void verifyAccessDirectGrant() {
+        User member = new User(new UserId("member@example.com"));
+        documentRepository.persist(user, documentId, new EncryptedContent("meta".getBytes()));
+        documentRepository.create(user, documentId, sharedKey(member, member.id().id(), "d3JhcHBlZA=="));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, null)).isTrue();
+        assertThat(documentRepository.verifyAccess(user, documentId, new User(new UserId("nobody")), null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyAccess follows a one-hop Access-Path from a nested document to a shared folder")
+    void verifyAccessOneHop() {
         User member = new User(new UserId("member@example.com"));
         DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
 
         documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
-        documentRepository.create(user, folder, sharedKey(member, member.id().id()));
+        documentRepository.create(user, folder, sharedKey(member, member.id().id(), "Zm9sZGVy"));
 
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
-        documentRepository.create(user, documentId, sharedKey(user, folder.id()));
+        documentRepository.create(user, documentId, sharedKey(user, folder.id(), "ZG9j"));
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, member)).isTrue();
+        AccessPath path = new AccessPath(java.util.List.of(
+            new Hop(documentId, user, folder),
+            new Hop(folder, user, folder)));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, path)).isTrue();
+        // without the chain the nested document is not reachable
+        assertThat(documentRepository.verifyAccess(user, documentId, member, null)).isFalse();
     }
 
     @Test
-    @DisplayName("isIssuerInKeyChain follows a key into the parent's owner's tree (contribution to a shared folder)")
-    void isIssuerInKeyChainCrossesTrees() {
+    @DisplayName("verifyAccess follows a hop into the folder owner's tree (contribution to a shared folder)")
+    void verifyAccessCrossesTrees() {
         User folderOwner = new User(new UserId("bob@example.com"));
         User member = new User(new UserId("carol@example.com"));
         DocumentId folder = new DocumentId("shared-folder-" + UUID.randomUUID());
 
-        // Bob's folder, shared with Carol (a key she issued)
         documentRepository.persist(folderOwner, folder, new EncryptedContent("folder".getBytes()));
-        documentRepository.create(folderOwner, folder, sharedKey(member, member.id().id()));
+        documentRepository.create(folderOwner, folder, sharedKey(member, member.id().id(), "Zm9sZGVy"));
 
-        // Carol's document, added to Bob's folder - its key is issued by Bob (owner of the folder key)
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
-        documentRepository.create(user, documentId, sharedKey(folderOwner, folder.id()));
+        documentRepository.create(user, documentId, sharedKey(folderOwner, folder.id(), "ZG9j"));
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, member)).isTrue();
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, folderOwner)).isTrue();
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new UserId("dave@example.com"))))
+        AccessPath path = new AccessPath(java.util.List.of(
+            new Hop(documentId, user, folder),
+            new Hop(folder, folderOwner, folder)));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, path)).isTrue();
+        assertThat(documentRepository.verifyAccess(user, documentId, folderOwner, path)).isTrue();
+        assertThat(documentRepository.verifyAccess(user, documentId, new User(new UserId("dave@example.com")), path))
             .isFalse();
     }
 
     @Test
-    @DisplayName("isIssuerInKeyChain is false when the reachable parent document has no key for the member")
-    void isIssuerInKeyChainParentWithoutMember() {
+    @DisplayName("verifyAccess rejects a chain whose wrappedBy link does not match the next hop")
+    void verifyAccessWrongLink() {
+        User member = new User(new UserId("member@example.com"));
+        DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
+        DocumentId other = new DocumentId("other-" + UUID.randomUUID());
+
+        documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
+        documentRepository.create(user, folder, sharedKey(member, member.id().id(), "Zm9sZGVy"));
+        documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
+        documentRepository.create(user, documentId, sharedKey(user, folder.id(), "ZG9j"));
+
+        AccessPath path = new AccessPath(java.util.List.of(
+            new Hop(documentId, user, other),
+            new Hop(folder, user, folder)));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, path)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyAccess rejects a forged chain whose first hop is not the requested document")
+    void verifyAccessForgedFirstHop() {
+        User member = new User(new UserId("member@example.com"));
+        DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
+        documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
+        documentRepository.create(user, folder, sharedKey(member, member.id().id(), "Zm9sZGVy"));
+
+        AccessPath path = new AccessPath(java.util.List.of(new Hop(folder, user, folder)));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, path)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyAccess rejects an empty chain and a first hop naming the wrong owner")
+    void verifyAccessEmptyChainAndWrongOwner() {
+        User member = new User(new UserId("member@example.com"));
+        DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
+        documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
+        documentRepository.create(user, folder, sharedKey(member, member.id().id(), "Zm9sZGVy"));
+        documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
+        documentRepository.create(user, documentId, sharedKey(user, folder.id(), "ZG9j"));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, new AccessPath(java.util.List.of())))
+            .isFalse();
+
+        AccessPath wrongOwner = new AccessPath(java.util.List.of(
+            new Hop(documentId, new User(new UserId("someone-else")), folder),
+            new Hop(folder, user, folder)));
+        assertThat(documentRepository.verifyAccess(user, documentId, member, wrongOwner)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyAccess denies a well-formed chain that never reaches a direct grant")
+    void verifyAccessNoTerminus() {
         User member = new User(new UserId("member@example.com"));
         DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
 
         documentRepository.persist(user, folder, new EncryptedContent("folder".getBytes()));
-        documentRepository.create(user, folder, sharedKey(user, "0"));
+        documentRepository.create(user, folder, sharedKey(user, "0", "Zm9sZGVy"));
+        documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
+        documentRepository.create(user, documentId, sharedKey(user, folder.id(), "ZG9j"));
+
+        AccessPath path = new AccessPath(java.util.List.of(
+            new Hop(documentId, user, folder),
+            new Hop(folder, user, folder)));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, member, path)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyAccess rejects a chain hopping through a hop-owner's own settings document")
+    void verifyAccessRejectsHopThroughOwnSettingsDocument() {
+        // O = user/documentId (real content), Y legitimately received a direct
+        // grant on it. Y then plants a fake "direct grant to M" key file under
+        // Y's *own* settings document (docId == Y's own userId) - the same slot
+        // every direct grant's witness is filed under. M must not be able to use
+        // that self-planted witness as a chain terminus for O's document.
+        User yvonne = new User(new UserId("yvonne@example.com"));
+        User mallory = new User(new UserId("mallory@example.com"));
+        DocumentId yvonneSettings = new DocumentId(yvonne.id().id());
 
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
-        documentRepository.create(user, documentId, sharedKey(user, folder.id()));
+        documentRepository.create(user, documentId, sharedKey(yvonne, yvonne.id().id(), "Zm9yWXZvbm5l"));
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, member)).isFalse();
+        documentRepository.persist(yvonne, yvonneSettings, new EncryptedContent("settings".getBytes()));
+        documentRepository.create(yvonne, yvonneSettings, sharedKey(mallory, mallory.id().id(), "Zm9yTWFsbG9yeQ=="));
+
+        AccessPath path = new AccessPath(java.util.List.of(
+            new Hop(documentId, user, yvonneSettings),
+            new Hop(yvonneSettings, yvonne, yvonneSettings)));
+
+        assertThat(documentRepository.verifyAccess(user, documentId, mallory, path)).isFalse();
+        // Yvonne herself still legitimately reaches the document through the same chain.
+        assertThat(documentRepository.verifyAccess(user, documentId, yvonne, path)).isTrue();
     }
 
     @Test
-    @DisplayName("isIssuerInKeyChain terminates when keys point in a cycle")
-    void isIssuerInKeyChainCycle() {
-        DocumentId a = new DocumentId("a-" + UUID.randomUUID());
-        DocumentId b = new DocumentId("b-" + UUID.randomUUID());
-        documentRepository.persist(user, a, new EncryptedContent("a".getBytes()));
-        documentRepository.persist(user, b, new EncryptedContent("b".getBytes()));
-        documentRepository.create(user, a, sharedKey(user, b.id()));
-        documentRepository.create(user, b, sharedKey(user, a.id()));
-
-        assertThat(documentRepository.isIssuerInKeyChain(user, a, new User(new UserId("member@example.com")))).isFalse();
-    }
-
-    @Test
-    @DisplayName("isIssuerInKeyChain ignores an unreadable key file")
-    void isIssuerInKeyChainSkipsUnreadableKeyFile() {
+    @DisplayName("anyWitnessMatches (via verifyAccess) ignores an unreadable key file")
+    void skipsUnreadableKeyFile() {
         documentRepository.persist(user, documentId, new EncryptedContent("doc".getBytes()));
         writeRawKeyFile(user, documentId, "garbage", "not json");
 
-        assertThat(documentRepository.isIssuerInKeyChain(user, documentId, new User(new UserId("member@example.com"))))
+        assertThat(documentRepository.verifyAccess(user, documentId, new User(new UserId("member@example.com")), null))
             .isFalse();
     }
 
-    private static EncryptedSharedKey sharedKey(User issuer, String kid) {
-        return new EncryptedSharedKey(issuer, new Kid(kid), new EncryptedSymmetricKey("d3JhcHBlZA=="));
+    @Test
+    @DisplayName("create over an unreadable occupied slot is a 409 (cannot confirm the sharedKey matches)")
+    void createOverUnreadableSlotConflicts() {
+        Kid friend = new Kid("friend@example.com");
+        File target = new File(new File(new File(new File(new File(rootPath, user.id().id()), "documents"),
+            documentId.id()), "keys"), keyFileCrypto.fileName(documentId.id(), friend.id()));
+        target.getParentFile().mkdirs();
+        try {
+            java.nio.file.Files.writeString(target.toPath(), "not json");
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+
+        assertThatThrownBy(() -> documentRepository.create(user, documentId, sharedKey(user, friend.id(), "d3JhcHBlZA==")))
+            .isInstanceOf(ResourceConflictException.class);
     }
 
-    private File keyFile(User owner, DocumentId docId, String kid) {
-        return new File(new File(new File(new File(new File(rootPath, owner.id().id()), "documents"),
-            docId.id()), "keys"), kid + ".json");
+    private static EncryptedSharedKey sharedKey(User issuer, String kid, String wrapped) {
+        return new EncryptedSharedKey(issuer, new Kid(kid), new EncryptedSymmetricKey(wrapped));
     }
 
-    private void writeRawKeyFile(User owner, DocumentId docId, String kid, String content) {
-        File keyFile = keyFile(owner, docId, kid);
+    private static String readFile(File file) {
+        try {
+            return java.nio.file.Files.readString(file.toPath());
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void writeRawKeyFile(User owner, DocumentId docId, String name, String content) {
+        File keyFile = new File(new File(new File(new File(new File(rootPath, owner.id().id()), "documents"),
+            docId.id()), "keys"), name + ".json");
         keyFile.getParentFile().mkdirs();
         try {
             java.nio.file.Files.writeString(keyFile.toPath(), content);

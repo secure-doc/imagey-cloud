@@ -500,17 +500,11 @@ test("view shared document from another user", async ({ page }) => {
       (r) => r.headers({ Accept: "application/json" }),
     )
     .willRespondWith(200, (r) =>
+      // ADR 0009: response is just { sharedKey }. This is a genuine encryption
+      // of bb66aba3's document key (TestData "k") under the real Alice<->Mary
+      // chat symmetric key, so the app's decryptKey() succeeds end-to-end.
+      // Matched loosely provider-side - the ContractTest fixture carries its own bytes.
       r.jsonBody({
-        issuer: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
-        // The key is filed under the recipient's own kid (their email), which is
-        // exactly the path segment requested above - the server echoes it back.
-        kid: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
-        // This is a genuine encryption of bb66aba3's document key
-        // (TestData "k": "NWx3KUTQIOMBUKIcF7aOoIuCsRiaNeUo5hcHBfHSoI8") using
-        // the real Alice<->Mary chat symmetric key (the same key that
-        // decrypts TestData.mary.chats[1].encryptedSharedKey), so that the
-        // app's actual decryptKey() call succeeds end-to-end. Matched loosely on
-        // the provider side - the ContractTest fixture carries its own bytes.
         sharedKey: MatchersV3.string(
           "B7OIlG+D7Z15BcJ6DpjC1DDsBmSPXO0ZubqsWF/cCWWHseD6HS5hGiqAgn9WQ5dqLADklsIjeAVaoP+XYpA3bQa8azD2rAzpioGo5D6zO9rbJR/+ZiLmIicw4da4VVcdsBl2Xm6JmexlpSUfI1kv+++YArKMS8Ci1/vuVPOD8tipem5V4s8hUewfDPUdMo1NrrzUFeUm",
         ),

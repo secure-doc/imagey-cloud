@@ -83,15 +83,18 @@ public class DocumentService {
      * @throws ResourceForbiddenException  if {@code caller} is neither the folder owner nor a member
      * @throws ValidationException         if the shared key is not issued by {@code folderOwner} for this folder
      * @throws PreconditionFailedException if {@code folderETag} no longer matches the stored folder
+     * @param accessPath the client-asserted chain proving {@code caller} reaches {@code folderId}
+     *                   through a shared folder (ADR 0009); {@code null} for an own-tree or
+     *                   direct-grant upload
      * @return the folder document's new ETag, so the caller can set the upload response header (and
      *         chain another change onto it) without re-reading {@code metadata.enc} a third time
      */
-    public String uploadDocument(User caller, DocumentUpload upload) {
+    public String uploadDocument(User caller, DocumentUpload upload, AccessPath accessPath) {
         User folderOwner = upload.folderOwner();
         DocumentId folderId = upload.folderId();
         DocumentId documentId = upload.documentId();
         EncryptedSharedKey sharedKey = upload.sharedKey();
-        validate(caller, upload);
+        validate(caller, upload, accessPath);
 
         synchronized (folderLock(folderOwner, folderId)) {
             // Re-check under the lock: a concurrent upload into the same folder may have landed
@@ -116,7 +119,7 @@ public class DocumentService {
         return folderLocks[stripe];
     }
 
-    private void validate(User caller, DocumentUpload upload) {
+    private void validate(User caller, DocumentUpload upload, AccessPath accessPath) {
         requireComplete(upload);
         User folderOwner = upload.folderOwner();
         DocumentId folderId = upload.folderId();
@@ -130,7 +133,7 @@ public class DocumentService {
             // its metadata silently overwritten before create() 409s on the write-once key file.
             throw new ResourceConflictException("Document " + upload.documentId().id() + " already exists.");
         }
-        requireFolderAccess(folderOwner, caller, folderId);
+        requireFolderAccess(folderOwner, caller, folderId, accessPath);
         if (!folderOwner.equals(sharedKey.issuer())) {
             throw new ValidationException("The shared key issuer must be the folder owner.");
         }
@@ -160,8 +163,9 @@ public class DocumentService {
         }
     }
 
-    private void requireFolderAccess(User folderOwner, User caller, DocumentId folderId) {
-        if (!caller.equals(folderOwner) && !documentRepository.isIssuerInKeyChain(folderOwner, folderId, caller)) {
+    private void requireFolderAccess(User folderOwner, User caller, DocumentId folderId, AccessPath accessPath) {
+        if (!caller.equals(folderOwner)
+            && !documentRepository.verifyAccess(folderOwner, folderId, caller, accessPath)) {
             throw new ResourceForbiddenException("The current user is not a member of folder " + folderId.id() + ".");
         }
     }

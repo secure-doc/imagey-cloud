@@ -463,8 +463,6 @@ test.describe("publicProfileService error/race paths", () => {
       )
       .willRespondWith(200, (r) =>
         r.jsonBody({
-          issuer: userId,
-          kid: profileId,
           sharedKey: MatchersV3.string(wrappedWinnerKey),
         }),
       );

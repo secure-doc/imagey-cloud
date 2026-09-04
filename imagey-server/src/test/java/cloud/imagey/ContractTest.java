@@ -64,6 +64,7 @@ import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserId;
+import cloud.imagey.infrastructure.common.KeyFileCrypto;
 import cloud.imagey.junit.GreenMail;
 
 @GreenMail
@@ -93,6 +94,8 @@ public class ContractTest {
     private TokenService tokenService;
     @Inject
     private DocumentRepository documentRepository;
+    @Inject
+    private KeyFileCrypto keyFileCrypto;
 
     private TokenState tokenState = VALID_TOKEN;
     private User user;
@@ -205,6 +208,23 @@ public class ContractTest {
         context.verifyInteraction();
     }
 
+    // Files a wrapped key the way DocumentRepository.create does (hashed, edge-unique file name +
+    // salted witness, ADR 0009) - the raw keys/{kid}.json shape is gone. Overwrites an existing
+    // fixture key (unlike the write-once production path) so a state can restate a document's key.
+    private void writeKey(String ownerId, String documentId, String issuer, String kid, String sharedKey) {
+        byte[] salt = keyFileCrypto.randomSalt();
+        String json = "{\"salt\":\"" + java.util.Base64.getEncoder().encodeToString(salt)
+            + "\",\"witness\":\"" + keyFileCrypto.witness(salt, issuer, kid)
+            + "\",\"sharedKey\":\"" + sharedKey + "\"}";
+        File keyFile = new File(new File(rootPath, ownerId),
+            "documents/" + documentId + "/keys/" + keyFileCrypto.fileName(documentId, kid));
+        try {
+            writeStringToFile(keyFile, json, UTF_8);
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     private static String binaryPart(String boundary, String name) {
         return "--" + boundary + "\r\n"
             + "Content-Disposition: form-data; name=\"" + name + "\"\r\n"
@@ -222,13 +242,10 @@ public class ContractTest {
         File settingsDoc = new File(documents, "35c34cb3-559d-4001-a67b-23259e45e69e");
         settingsDoc.mkdirs();
         writeStringToFile(new File(settingsDoc, "metadata.enc"), "{}", UTF_8);
-        File settingsKeys = new File(settingsDoc, "keys");
-        settingsKeys.mkdirs();
         // The settings document's self-key is filed under kid "0" (matching the public/private
-        // key versioning convention), not the owner's userId - see the keys/0.json files under
-        // each persona's <userId>/documents/<userId> directory in src/test/resources/data.
-        writeStringToFile(new File(settingsKeys, "0.json"),
-            "{\"issuer\":\"35c34cb3-559d-4001-a67b-23259e45e69e\",\"kid\":\"0\",\"sharedKey\":\"ZHVtbXk=\"}", UTF_8);
+        // key versioning convention), not the owner's userId.
+        writeKey("35c34cb3-559d-4001-a67b-23259e45e69e", "35c34cb3-559d-4001-a67b-23259e45e69e",
+            "35c34cb3-559d-4001-a67b-23259e45e69e", "0", "ZHVtbXk=");
 
         File devices = new File(joesData, "devices");
         devices.mkdirs();
@@ -425,9 +442,7 @@ public class ContractTest {
         File aliceChatMary = new File(getAlicesData(), "documents/chat-mary");
         File chatDocument = new File(getAlicesData(), "documents/chat-alice-owned");
         copyFile(new File(aliceChatMary, "metadata.enc"), new File(chatDocument, "metadata.enc"));
-        writeStringToFile(new File(chatDocument, "keys/" + MARY + ".json"),
-            "{\"issuer\":\"" + MARY + "\",\"kid\":\"" + MARY + "\",\"sharedKey\":\"c3luY2VkLWNoYXQta2V5\"}",
-            UTF_8);
+        writeKey(getAlicesData().getName(), "chat-alice-owned", MARY, MARY, "c3luY2VkLWNoYXQta2V5");
     }
 
     @State("Mary has a profile picture")
@@ -445,9 +460,9 @@ public class ContractTest {
         // Generic counterpart to the persona-specific states above, for documents whose id is
         // generated at test-run time by imagey-web's setup.ts (see mockOwnedDocument) rather than
         // being one of the fixed ids baked into src/test/resources/data - e.g. a contact's
-        // public-profile document, reachable via the "member" role (RolesFilter.
-        // isIssuerInKeyChain matches its key entry's issuer against the caller), or a
-        // race-condition "winning" public profile a test invents on the fly.
+        // public-profile document, reachable via the "member" role by a direct grant
+        // (issuer == kid == caller), or a race-condition "winning" public profile a test invents
+        // on the fly.
         String ownerId = (String) params.get("ownerId");
         String documentId = (String) params.get("documentId");
         String kid = (String) params.get("kid");
@@ -457,9 +472,7 @@ public class ContractTest {
         // binary data (the body itself is not byte-compared, see maryHasAProfilePicture above).
         File fixtureContent = new File(getMarysDocuments(), "9c59a4f3-ae55-4c4b-9e4a-2079a2446738/metadata.enc");
         copyFile(fixtureContent, new File(documentDir, "metadata.enc"));
-        new File(documentDir, "keys").mkdirs();
-        writeStringToFile(new File(documentDir, "keys/" + kid + ".json"),
-            "{\"issuer\":\"" + issuer + "\",\"kid\":\"" + kid + "\",\"sharedKey\":\"ZHVtbXk=\"}", UTF_8);
+        writeKey(ownerId, documentId, issuer, kid, "ZHVtbXk=");
         Object fileId = params.get("fileId");
         if (fileId != null) {
             copyFile(fixtureContent, new File(documentDir, "files/" + fileId));
@@ -479,18 +492,16 @@ public class ContractTest {
         maryHasNoDocuments();
         File folder = new File(getMarysDocuments(), "folder-uuid-1234");
         folder.mkdirs();
-        File keysDir = new File(folder, "keys");
-        keysDir.mkdirs();
         File metadataEnc = new File(folder, "metadata.enc");
         java.nio.file.Files.write(metadataEnc.toPath(),
             java.util.Base64.getDecoder().decode("9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs+ZVQCgQHdU"
             + "+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U"
             + "+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX"));
-        writeStringToFile(new File(keysDir, "root-folder-id.json"),
-            "{\"issuer\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\",\"kid\":\"root-folder-id\",\"sharedKey\":\""
-            + "DpZid3W9uclNjSCcWaGqvtETZuImyP+xISDVpXHVoUjkoC/vwUqAtLpv2IW/vB0Gs64fd"
+        writeKey("d20cf443-4f96-418f-a957-c8cbef8677c3", "folder-uuid-1234",
+            "d20cf443-4f96-418f-a957-c8cbef8677c3", "root-folder-id",
+            "DpZid3W9uclNjSCcWaGqvtETZuImyP+xISDVpXHVoUjkoC/vwUqAtLpv2IW/vB0Gs64fd"
             + "RYqK2Gf4RC6QJmYS1w9C3AsONu2EcYA0BOo1kOC8b22uYNR5Ikt0QaIjr5V6VGGjWY15ah66"
-            + "nqfCR3iFepNR2XMqHZnPREyuJdHDCMNbnxqHxf9dpJ3TlCbTqe4JwOMCp41\"}", UTF_8);
+            + "nqfCR3iFepNR2XMqHZnPREyuJdHDCMNbnxqHxf9dpJ3TlCbTqe4JwOMCp41");
     }
 
     @State("Mary has a chat with alice")
@@ -669,16 +680,14 @@ public class ContractTest {
     void aRequestToLoadSharedKeyAsRecipient() throws IOException, URISyntaxException {
         user = new User(new UserId("10ad1cce-816b-4e12-b94d-7ef824c0d162"));
         maryHasUploadedDocument(); // ensures bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3 exists
-        // Alice issued this key (she wrapped Mary's document key under her own chat key), which is
-        // what gives her the "member" role on Mary's document (see RolesFilter / isIssuerInKeyChain).
-        File keys = new File(getMarysDocuments(), "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3/keys");
-        keys.mkdirs();
-        writeStringToFile(new File(keys, "10ad1cce-816b-4e12-b94d-7ef824c0d162.json"),
-            "{\"issuer\":\"10ad1cce-816b-4e12-b94d-7ef824c0d162\",\"kid\":\"10ad1cce-816b-4e12-b94d-7ef824c0d162\",\"sharedKey\":\""
-            + "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
+        // Alice issued this direct-grant key (issuer == kid == alice), which is what gives her the
+        // "member" role on Mary's document (see RolesFilter / DocumentRepository.hasDirectGrant).
+        writeKey("d20cf443-4f96-418f-a957-c8cbef8677c3", "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+            "10ad1cce-816b-4e12-b94d-7ef824c0d162", "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+            "lezn+6YMgHCKigQhu4DcXQMJiyF9z"
             + "RVNN1YdB2muAVJmAxU7AXRDfTemxSxOGiccG+ujTXE+IpyduOXVmcLvA925GR19K1HkA07"
             + "geFDdtRRzj0acDOq1nrhaTr+SSwTk0m0d/QLSeqt0CiHlwpwmD3MUOTyDHN91fumcwcyAR"
-            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8\"}", UTF_8);
+            + "3P4vmVi/3K4EcyBeKhxJnPmvxa8/bo8");
     }
 
 
