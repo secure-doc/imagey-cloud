@@ -85,7 +85,15 @@ public class DeviceRepository extends AbstractUserFileRepository {
 
     public void storeDeviceRecoveryKey(User user, DeviceId deviceId, String recoveryKey) {
         File deviceDirectory = new File(new File(getUserHome(user), "devices"), deviceId.id());
-        createNewFileWithContent(deviceDirectory, "recovery-key.txt", recoveryKey);
+        if (!deviceDirectory.exists()) {
+            deviceDirectory.mkdirs();
+        }
+        // Overwrite, do not create-only: the client mints a fresh random recovery key on every
+        // "keep me logged in" sign-in and re-encrypts its local device-key blob with it. A
+        // create-only write left the server holding the previous key, which then could not
+        // decrypt that new local blob - auto-login failed and the user was thrown back to the
+        // "unlock device" dialog on every single reload.
+        writeStringToFile(new File(deviceDirectory, "recovery-key.txt"), recoveryKey);
     }
 
     public Optional<String> loadDeviceRecoveryKey(User user, DeviceId deviceId) {
