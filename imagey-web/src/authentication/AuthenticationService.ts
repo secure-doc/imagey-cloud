@@ -266,14 +266,18 @@ export const authenticationService = {
           privateDeviceKey,
           recoveryKey,
         );
-      deviceRepository.storeRecoveryKey(deviceId, encryptedRecoveryDeviceKey);
 
       try {
+        // Persist the new key on the server FIRST, then the matching local blob:
+        // the two must stay in lock-step for auto-login to work. If the server
+        // write fails we keep the previous (still consistent) local blob rather
+        // than leaving a local blob the server can no longer decrypt.
         await authenticationRepository.storeRecoveryKey(
           userId,
           deviceId,
           recoveryKey,
         );
+        deviceRepository.storeRecoveryKey(deviceId, encryptedRecoveryDeviceKey);
       } catch {
         console.warn("Failed to store recovery key on server");
       }
