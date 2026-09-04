@@ -72,7 +72,7 @@ public class RegistrationFilter extends HttpFilter {
         User user = new User(userId);
         userService.create(user);
         Token authenticationToken = tokenService.generateAuthenticationToken(user, ONE_HOUR);
-        response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
+        response.setHeader("Set-Cookie", tokenService.sessionAuthenticationCookie(authenticationToken));
         response.sendRedirect("/?email=" + email.address() + "&userId=" + userId.id());
         LOG.info("User registered");
     }

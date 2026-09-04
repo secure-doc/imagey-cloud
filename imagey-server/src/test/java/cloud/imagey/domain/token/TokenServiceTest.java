@@ -130,11 +130,12 @@ public class TokenServiceTest {
         assertThat(trusted)
             .contains("token=")
             .contains("HttpOnly")
-            .contains("SameSite=strict")
+            .contains("SameSite=Lax")
             .contains("Max-Age=" + TokenService.TRUSTED_COOKIE_MAX_AGE_SECONDS);
         assertThat(untrusted)
             .contains("token=")
             .contains("HttpOnly")
+            .contains("SameSite=Lax")
             .doesNotContain("Max-Age");
     }
 
