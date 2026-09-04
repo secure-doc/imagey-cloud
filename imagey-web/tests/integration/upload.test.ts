@@ -95,12 +95,15 @@ test("upload portrait", async ({ page }) => {
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(path.join("tests", "images", imageName));
 
-    // Then
+    // Then: assert on the document tile being attached, not visible - the tile
+    // (or the "Error loading" fallback) is what the sibling upload tests wait
+    // for, and `toBeVisible` here raced the encrypt + multi-part POST + preview
+    // read-back + decrypt chain under load / coverage runs.
     await expect(
       page
         .getByAltText(imageName)
         .or(page.locator(`text=Error loading ${imageName}`)),
-    ).toBeVisible();
+    ).toBeAttached();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

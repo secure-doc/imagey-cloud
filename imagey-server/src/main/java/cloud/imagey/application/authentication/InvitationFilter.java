@@ -73,7 +73,7 @@ public class InvitationFilter extends HttpFilter {
         UserId inviter = new UserId(request.getParameter("invited-by"));
         userService.create(user);
         Token authenticationToken = tokenService.generateAuthenticationToken(user, ONE_HOUR);
-        response.setHeader("Set-Cookie", "token=" + authenticationToken.token() + "; HttpOnly; SameSite=strict; Path=/");
+        response.setHeader("Set-Cookie", tokenService.sessionAuthenticationCookie(authenticationToken));
         response.sendRedirect(buildRedirect(email, userId, inviter));
         LOG.info("User registered");
     }

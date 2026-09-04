@@ -65,6 +65,17 @@ public class TokenService {
     /** {@code Max-Age} (seconds) of the persistent "keep me logged in" cookie. */
     public static final long TRUSTED_COOKIE_MAX_AGE_SECONDS = ONE_MONTH / 1000;
 
+    /**
+     * Attributes shared by every {@code token} cookie we set. {@code SameSite=Lax} - deliberately
+     * not {@code Strict}: a {@code Strict} cookie is withheld by the browser on the top-level
+     * navigation that launches the installed (standalone) PWA from the home screen, and on the
+     * redirect that lands an emailed sign-in link, because neither is initiated from our own origin.
+     * That threw the user back to the password prompt on every launch. {@code Lax} still keeps the
+     * cookie off cross-site subrequests and cross-site {@code POST}s, which is the CSRF protection
+     * that matters.
+     */
+    private static final String COOKIE_ATTRIBUTES = "; HttpOnly; SameSite=Lax; Path=/";
+
     private static final Logger LOG = LogManager.getLogger(TokenService.class);
     private static final String ISSUER = "https://imagey.cloud";
 
@@ -108,11 +119,20 @@ public class TokenService {
     public String authenticationCookie(User user, boolean trusted) {
         long validity = trusted ? ONE_MONTH : ONE_HOUR;
         Token token = generateAuthenticationToken(user, validity, trusted);
-        String cookie = "token=" + token.token() + "; HttpOnly; SameSite=strict; Path=/";
+        String cookie = sessionAuthenticationCookie(token);
         if (trusted) {
             cookie += "; Max-Age=" + TRUSTED_COOKIE_MAX_AGE_SECONDS;
         }
         return cookie;
+    }
+
+    /**
+     * Session cookie (no {@code Max-Age}, so the browser drops it when it closes) wrapping an
+     * already-issued short-lived token - used by the emailed sign-in / registration / invitation
+     * link filters, which mint their own one-hour {@code AUTHENTICATION} token.
+     */
+    public String sessionAuthenticationCookie(Token token) {
+        return "token=" + token.token() + COOKIE_ATTRIBUTES;
     }
 
     /** Emailed link that finishes first-time registration; subject = email address. */
