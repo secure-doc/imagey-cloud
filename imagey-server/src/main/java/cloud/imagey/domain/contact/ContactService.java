@@ -181,7 +181,7 @@ public class ContactService {
     // {@code chatKey} is the chat key re-wrapped by the inviter under their own chats-document key
     // (issuer = the inviter). We file it under the chat document (in the invitee's tree, its
     // canonical home) - that key entry is what grants the inviter the "member" role on the chat
-    // from then on, see RolesFilter / DocumentRepository.isIssuerInKeyChain. It is optional only so
+    // from then on, see RolesFilter / DocumentRepository.hasDirectGrant. It is optional only so
     // an inviter on an older client (see ContactRequestTest) can still close out the handshake; the
     // exchange always carries a chatId once ACCEPTED (see acceptInvitation).
     public void confirmReceipt(User inviter, User invitee, EncryptedSharedKey chatKey) throws IOException {

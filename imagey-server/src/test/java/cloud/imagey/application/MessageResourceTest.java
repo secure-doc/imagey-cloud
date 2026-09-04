@@ -47,6 +47,11 @@ import org.junit.jupiter.api.Test;
 
 import cloud.imagey.domain.contact.Message;
 import cloud.imagey.domain.contact.MessageId;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserId;
@@ -61,7 +66,7 @@ public class MessageResourceTest {
 
     // Messages hang off the chat's Document ({owner}/documents/{chatId}/messages), so the tests
     // only need a chatId and - for the non-owner party - a shared key they issued filed under the
-    // chat Document so the "member" role resolves (see RolesFilter / isIssuerInKeyChain).
+    // chat Document so the "member" role resolves (see RolesFilter / DocumentRepository.hasDirectGrant).
     private static final String CHAT_ID = "test-chat-id";
 
     @ConfigurationInject
@@ -71,6 +76,8 @@ public class MessageResourceTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private DocumentRepository documentRepository;
 
     private Cookie ownerCookie;
     private Cookie contactCookie;
@@ -97,13 +104,11 @@ public class MessageResourceTest {
             "encrypted-chat-metadata",
             UTF_8);
 
-        // The non-owner party only reaches the chat via the "member" role: a shared key they
-        // issued, filed under the chat Document owned by `owner` - exactly what
-        // ContactService.confirmReceipt syncs there in the real flow (kid = the chat id).
-        writeStringToFile(
-            new File(data, "owner/documents/" + CHAT_ID + "/keys/" + CHAT_ID + ".json"),
-            "{\"issuer\":\"contact\",\"kid\":\"" + CHAT_ID + "\",\"sharedKey\":\"d3JhcHBlZA==\"}",
-            UTF_8);
+        // The non-owner party only reaches the chat via the "member" role: a direct-grant key they
+        // issued (issuer == kid == themselves), filed under the chat Document owned by `owner` -
+        // exactly what ContactService.confirmReceipt syncs there in the real flow.
+        documentRepository.create(owner, new DocumentId(CHAT_ID), new EncryptedSharedKey(
+            contact, new Kid(contact.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
 
         ownerCookie = tokenCookie(owner);
         ownerClient = messages(owner, ownerCookie);

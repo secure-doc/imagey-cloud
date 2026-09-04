@@ -95,16 +95,17 @@ public class UserResourceTest {
         assertThat(new File(joesData, "devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/public-keys/0.json")).exists();
         assertThat(new File(joesData, "devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/private-keys/0.json")).exists();
         // Settings is filed under the user's own userId, the other three under their client-generated ids.
-        assertDocument(joesData, joe, "0");
-        assertDocument(joesData, "22222222-2222-2222-2222-222222222222", joe);
-        assertDocument(joesData, "33333333-3333-3333-3333-333333333333", joe);
-        assertDocument(joesData, "44444444-4444-4444-4444-444444444444", joe);
+        assertDocument(joesData, joe);
+        assertDocument(joesData, "22222222-2222-2222-2222-222222222222");
+        assertDocument(joesData, "33333333-3333-3333-3333-333333333333");
+        assertDocument(joesData, "44444444-4444-4444-4444-444444444444");
     }
 
-    private static void assertDocument(File userData, String documentId, String keyKid) {
+    private static void assertDocument(File userData, String documentId) {
         File document = new File(userData, "documents/" + documentId);
         assertThat(new File(document, "metadata.enc")).exists();
-        assertThat(new File(document, "keys/" + keyKid + ".json")).exists();
+        // The wrapped key is filed under a hashed, edge-unique name (ADR 0009), not keys/{kid}.json.
+        assertThat(new File(document, "keys").list()).hasSize(1);
     }
 
     private Response register(String userId) {

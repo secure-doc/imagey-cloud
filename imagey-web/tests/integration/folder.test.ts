@@ -1,3 +1,4 @@
+import { MatchersV3 } from "@pact-foundation/pact";
 import { test, expect } from "./fixtures";
 import * as fs from "fs";
 
@@ -10,10 +11,18 @@ import {
   prepareMarysEmptyDocumentsFolder,
   prepareMarysFolderCreation,
   prepareMarysLogin,
+  provider,
   runningPactRequests,
   setupMockServer,
   TestData,
 } from "./setup";
+import type { documentService } from "../../src/document/DocumentService";
+
+declare global {
+  interface Window {
+    documentService: typeof documentService;
+  }
+}
 
 const FOLDER_ID = "90838b2c-cea8-4d0c-85eb-9937cda788fc";
 
@@ -82,6 +91,77 @@ test("create folder", async ({ page }) => {
 
     // Then
     await expect(page.getByAltText("My Vacation")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("a well-formed but non-matching Access-Path header does not grant access", async ({
+  page,
+}) => {
+  // The Access-Path header (ADR 0009) is a client-asserted hint the server only
+  // *verifies*, never trusts outright - a syntactically valid chain that names no
+  // real grant must still be denied. Unlike the header's happy path (no UI flow
+  // yet produces a real cross-owner chain to click through - see FolderContext's
+  // buildAccessPath), this negative case needs no matching UI fixture, so it can
+  // be asserted directly against the real server via Pact/ContractTest instead of
+  // a same-repo page.route stand-in: the "Alice has no access to Mary's uploaded
+  // document" provider state (ContractTest.java) authenticates the replay as
+  // Alice - a real user with no witness at all for this document - so this chain
+  // is the only thing she can bring; the server must still refuse her.
+  const owner = "d20cf443-4f96-418f-a957-c8cbef8677c3"; // mary
+  const documentId = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3"; // her uploaded document
+  const accessPath = Buffer.from(
+    JSON.stringify({
+      chain: [{ doc: documentId, owner, wrappedBy: documentId }],
+    }),
+  )
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  const rejectionInteraction = provider
+    .addInteraction()
+    .given("Alice has no access to Mary's uploaded document")
+    .uponReceiving(
+      "a request of alice to read mary's document via a well-formed but non-matching Access-Path chain",
+    )
+    .withRequest("GET", `/users/${owner}/documents/${documentId}`, (r) =>
+      r.headers({
+        Accept: "application/octet-stream",
+        "Access-Path": MatchersV3.string(accessPath),
+      }),
+    )
+    .willRespondWith(401);
+
+  await rejectionInteraction.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    // No login needed: documentService.loadDocument() takes every id/key it
+    // needs as arguments and doesn't read any authenticated app state - who the
+    // real server treats the caller as is entirely up to the provider state
+    // above (see errors.test.ts's "window.*Service" tests for the same pattern
+    // of calling a service directly, without going through the UI).
+    await page.goto("/");
+
+    // documentService.loadDocument() swallows the underlying HTTP error and
+    // resolves a discriminable `loadFailed` placeholder instead (so a read
+    // path can render *something* rather than reject) - the interaction
+    // above still asserts the real server actually refused the request,
+    // Pact/ContractTest fails this test otherwise.
+    const result = await page.evaluate(
+      ({ owner, documentId, accessPath }) =>
+        window.documentService.loadDocument(
+          owner,
+          documentId,
+          owner,
+          { kty: "oct", k: "irrelevant" } as JsonWebKey,
+          undefined,
+          accessPath,
+        ),
+      { owner, documentId, accessPath },
+    );
+
+    expect(result.loadFailed).toBe(true);
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

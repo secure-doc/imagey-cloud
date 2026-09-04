@@ -18,32 +18,23 @@ package cloud.imagey.domain.encryption;
 
 import static java.util.Objects.requireNonNull;
 
-import jakarta.json.bind.annotation.JsonbCreator;
-import jakarta.json.bind.annotation.JsonbProperty;
-import jakarta.json.bind.annotation.JsonbTypeAdapter;
-
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
-import cloud.imagey.domain.user.UserId;
 
-public record EncryptedSharedKey(
-    @JsonbProperty("issuer") @JsonbTypeAdapter(User.Adapter.class) User issuer,
-    @JsonbProperty("kid") Kid kid,
-    @JsonbProperty("sharedKey") @JsonbTypeAdapter(EncryptedSymmetricKey.Adapter.class) EncryptedSymmetricKey sharedKey) {
+/**
+ * The wire / in-memory shape of a shared key: the request body of {@code POST .../keys} and the
+ * multipart {@code key} part of a document upload, (de)serialized reflectively by
+ * {@code RecordMessageBodyReader}/{@code AbstractRecordMessageBodyWriter} - not JSON-B, so no
+ * {@code @JsonbCreator}/{@code @JsonbTypeAdapter} annotations are needed here. Since ADR 0009 this
+ * is no longer the on-disk format either (see {@link StoredKeyFile}):
+ * {@link cloud.imagey.domain.document.DocumentRepository} derives a {@code StoredKeyFile} from one
+ * of these on write, and never serializes this type directly.
+ */
+public record EncryptedSharedKey(User issuer, Kid kid, EncryptedSymmetricKey sharedKey) {
 
     public EncryptedSharedKey {
         requireNonNull(issuer, "issuer");
         requireNonNull(kid, "kid");
         requireNonNull(sharedKey, "sharedKey");
-    }
-
-    // JSON-B (Johnzon) cannot build a record whose components are adapter-typed wrappers - see the
-    // same pattern on Message / PrivateKeyMetadata. DocumentRepository stores shared keys as JSON.
-    @JsonbCreator
-    public EncryptedSharedKey(
-        @JsonbProperty("issuer") String issuer,
-        @JsonbProperty("kid") String kid,
-        @JsonbProperty("sharedKey") String sharedKey) {
-        this(new User(new UserId(issuer)), new Kid(kid), new EncryptedSymmetricKey(sharedKey));
     }
 }

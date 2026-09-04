@@ -38,6 +38,7 @@ import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.Provider;
 
+import cloud.imagey.domain.document.AccessPath;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.token.DecodedToken;
@@ -73,6 +74,11 @@ public class RolesFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
+        // Parse the Access-Path proof hint once, here: a malformed header is a 400 before the
+        // resource runs (see AccessPath.parse -> ValidationException), and both the "member" check
+        // below and DocumentResource.uploadDocument read the parsed value off this attribute.
+        request.setAttribute(AccessPath.class.getName(),
+            AccessPath.parse(requestContext.getHeaderString(AccessPath.HEADER)));
         Optional<Cookie> cookie = ofNullable(requestContext.getCookies().get("token"));
         Optional<DecodedToken> decodedToken = cookie
             .flatMap(c -> tokenService.decode(new Token(c.getValue())))
@@ -137,7 +143,8 @@ public class RolesFilter implements ContainerRequestFilter {
         if (cached != null) {
             return cached;
         }
-        boolean result = documentRepository.isIssuerInKeyChain(owner, documentId, member);
+        AccessPath accessPath = (AccessPath) request.getAttribute(AccessPath.class.getName());
+        boolean result = documentRepository.verifyAccess(owner, documentId, member, accessPath);
         if (result) {
             membershipCache.put(owner, documentId, member, true);
         }

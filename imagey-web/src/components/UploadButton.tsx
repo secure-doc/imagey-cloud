@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import Document from "../document/Document";
-import { useKey } from "../contexts/FolderContext";
+import { useAccessPath, useKey } from "../contexts/FolderContext";
 
 export default function UploadButton({
   className,
@@ -26,6 +26,10 @@ export default function UploadButton({
   const user = authentication.user;
   const [isUploading, setIsUploading] = useState(false);
   const folderKey = useKey(folder.documentId);
+  // Set only when `folder` was reached through a contact's shared tree
+  // (ADR 0009); undefined for our own folders, where the server's
+  // direct-grant scan needs no header.
+  const accessPath = useAccessPath(folder.documentId, folder.owner ?? "");
 
   const handleUpload = async (files: File[]) => {
     if (!user || !folderKey) return;
@@ -39,6 +43,7 @@ export default function UploadButton({
             file,
             folder,
             folderKey,
+            accessPath,
           );
           if (onUploadComplete) {
             onUploadComplete(result);
