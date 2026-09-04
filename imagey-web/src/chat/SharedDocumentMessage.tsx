@@ -5,7 +5,7 @@ import Document from "../document/Document";
 import ImageComponent from "../components/ImageComponent";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useDocumentsId } from "../contexts/SettingsContext";
-import { useKey } from "../contexts/FolderContext";
+import { useAccessPath, useKey } from "../contexts/FolderContext";
 
 interface SharedDocumentMessageProps {
   documentId: string;
@@ -38,13 +38,25 @@ export function SharedDocumentMessage({
   const parentId = isOwner ? documentsId : user;
   const parentKey = isOwner ? rootFolderKey : chatKey;
 
+  // A chat share is a direct grant (issuer == kid == viewer), so this resolves
+  // to undefined and no header is sent; kept so a future folder-share view goes
+  // through one code path.
+  const accessPath = useAccessPath(documentId, owner);
+
   const [document, setDocument] = useState<Document>();
   const [error, setError] = useState(false);
 
   useEffect(() => {
     if (user && parentId && parentKey) {
       documentService
-        .loadDocument(owner, documentId, parentId, parentKey)
+        .loadDocument(
+          owner,
+          documentId,
+          parentId,
+          parentKey,
+          undefined,
+          accessPath,
+        )
         .then((doc) => {
           if (!doc.key) {
             setError(true);
@@ -54,7 +66,7 @@ export function SharedDocumentMessage({
         })
         .catch(() => setError(true));
     }
-  }, [user, owner, documentId, parentId, parentKey]);
+  }, [user, owner, documentId, parentId, parentKey, accessPath]);
 
   if (error) {
     return <div className="error">{t("Error loading shared document")}</div>;

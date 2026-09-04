@@ -36,8 +36,14 @@ export const documentService = {
     kid: string,
     wrappingKey: JsonWebKey,
     privateKey?: JsonWebKey,
+    accessPath?: string,
   ): Promise<JsonWebKey> => {
-    const key = await documentRepository.loadKey(userId, documentId, kid);
+    const key = await documentRepository.loadKey(
+      userId,
+      documentId,
+      kid,
+      accessPath,
+    );
     return cryptoService.decryptKey(key.sharedKey, wrappingKey, privateKey);
   },
   storeFolder: async (
@@ -45,6 +51,10 @@ export const documentService = {
     name: string,
     parentFolder: Document,
     parentFolderKey: JsonWebKey,
+    // Access-Path chain for contributing into a contact's shared folder reached
+    // transitively (ADR 0009); omit when the folder is your own or shared with
+    // you directly.
+    accessPath?: string,
   ): Promise<StoreResult> => {
     const file = new File([], name, { type: "Folder" });
     return documentService.storeDocument(
@@ -52,6 +62,7 @@ export const documentService = {
       file,
       parentFolder,
       parentFolderKey,
+      accessPath,
     );
   },
 
@@ -60,6 +71,10 @@ export const documentService = {
     file: File,
     parentFolder: Document,
     parentFolderKey: JsonWebKey,
+    // Access-Path chain for contributing into a contact's shared folder reached
+    // transitively (ADR 0009); omit when the folder is your own or shared with
+    // you directly.
+    accessPath?: string,
   ): Promise<StoreResult> => {
     // Adding a child is a read-modify-write of the parent's (encrypted, so
     // server-un-mergeable) child list. If the folder we were handed is a
@@ -165,6 +180,7 @@ export const documentService = {
             sharedKey: encryptedKey,
           },
           files,
+          accessPath,
         );
         return {
           document: documentMetadata,
@@ -182,6 +198,7 @@ export const documentService = {
           folderOwner,
           parentFolder.documentId,
           parentFolderKey,
+          accessPath,
         );
         currentDocuments = reloaded.documents;
         currentETag = reloaded.etag;
@@ -294,17 +311,22 @@ export const documentService = {
     parentFolderId: string,
     parentFolderKey: JsonWebKey,
     privateKey?: JsonWebKey,
+    // The Access-Path chain header for a document reached through a contact's
+    // shared folder (ADR 0009); omit for own-tree or direct-grant access.
+    accessPath?: string,
   ): Promise<DocumentMetadata> => {
     try {
       const documentsResponse = await documentRepository.loadDocument(
         user,
         documentId,
+        accessPath,
       );
       const encryptedDocument = documentsResponse.content;
       const encryptedDocumentKey = await documentRepository.loadKey(
         user,
         documentId,
         parentFolderId,
+        accessPath,
       );
       const decryptedDocumentKey = await cryptoService.decryptKey(
         encryptedDocumentKey.sharedKey,
@@ -381,6 +403,7 @@ export const documentService = {
     document: DocumentMetadata,
     contentId?: string,
     folder?: { id: string; key: JsonWebKey },
+    accessPath?: string,
   ): Promise<ArrayBuffer> => {
     // `document.owner` (stamped by loadDocument) is the account whose tree
     // the document lives in - use it for the content URL rather than `user`
@@ -395,6 +418,7 @@ export const documentService = {
         owner,
         document.documentId,
         folder.id,
+        accessPath,
       );
       documentKey = await cryptoService.decryptKey(
         encryptedDocumentKey.sharedKey,
@@ -409,6 +433,7 @@ export const documentService = {
       owner,
       document.documentId,
       fileId,
+      accessPath,
     );
     return cryptoService.decryptDocument(documentKey, content);
   },
@@ -445,10 +470,12 @@ async function reloadFolderDocuments(
   owner: string,
   folderId: string,
   folderKey: JsonWebKey,
+  accessPath?: string,
 ): Promise<{ documents?: string[]; etag: string | null }> {
   const { content, etag } = await documentRepository.loadDocument(
     owner,
     folderId,
+    accessPath,
   );
   const decrypted = await cryptoService.decryptDocument(folderKey, content);
   const payload = JSON.parse(new TextDecoder().decode(decrypted));
@@ -459,8 +486,6 @@ export async function decryptDocument(
   documentId: string,
   encryptedMetadata: ArrayBuffer,
   encryptedKey: {
-    issuer: string;
-    kid: string;
     sharedKey: string;
   },
   decryptedDocumentKey: JsonWebKey,

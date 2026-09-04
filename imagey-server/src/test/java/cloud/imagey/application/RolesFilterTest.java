@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -93,7 +95,7 @@ public class RolesFilterTest {
     }
 
     @Test
-    @DisplayName("A member of a folder reaches a document nested in it")
+    @DisplayName("A member of a folder reaches a document nested in it when they assert the Access-Path chain")
     void memberOfFolderReachesNestedDocument() {
         DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
         DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
@@ -102,7 +104,33 @@ public class RolesFilterTest {
         documentRepository.persist(mary, documentId, new EncryptedContent("doc".getBytes()));
         documentRepository.create(mary, documentId, sharedKey(mary, folder.id()));
 
-        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(OK.getStatusCode());
+        String chain = accessPath(
+            hop(documentId, mary, folder),
+            hop(folder, mary, folder));
+
+        assertThat(getDocumentAs(mary, documentId, laura, chain).getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Without the Access-Path chain a folder member is denied a document merely nested in it")
+    void nestedDocumentWithoutChainIsDenied() {
+        DocumentId folder = new DocumentId("folder-" + UUID.randomUUID());
+        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
+        documentRepository.persist(mary, folder, new EncryptedContent("folder".getBytes()));
+        documentRepository.create(mary, folder, sharedKey(laura, laura.id().id()));
+        documentRepository.persist(mary, documentId, new EncryptedContent("doc".getBytes()));
+        documentRepository.create(mary, documentId, sharedKey(mary, folder.id()));
+
+        assertThat(getDocumentAs(mary, documentId, laura).getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A malformed Access-Path header is a 400")
+    void malformedAccessPathHeader() {
+        DocumentId documentId = new DocumentId(UUID.randomUUID().toString());
+        documentRepository.persist(mary, documentId, new EncryptedContent("{}".getBytes()));
+
+        assertThat(getDocumentAs(mary, documentId, laura, "not-base64url!!").getStatus()).isEqualTo(400);
     }
 
     @Test
@@ -146,12 +174,29 @@ public class RolesFilterTest {
     }
 
     private Response getDocumentAs(User owner, DocumentId documentId, User caller) {
-        return newClient()
+        return getDocumentAs(owner, documentId, caller, null);
+    }
+
+    private Response getDocumentAs(User owner, DocumentId documentId, User caller, String accessPath) {
+        var request = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users").path(owner.id().id()).path("documents").path(documentId.id())
             .request()
-            .cookie(tokenCookie(caller))
-            .get();
+            .cookie(tokenCookie(caller));
+        if (accessPath != null) {
+            request = request.header("Access-Path", accessPath);
+        }
+        return request.get();
+    }
+
+    private static String hop(DocumentId doc, User owner, DocumentId wrappedBy) {
+        return "{\"doc\":\"" + doc.id() + "\",\"owner\":\"" + owner.id().id()
+            + "\",\"wrappedBy\":\"" + wrappedBy.id() + "\"}";
+    }
+
+    private static String accessPath(String... hops) {
+        String json = "{\"chain\":[" + String.join(",", hops) + "]}";
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8));
     }
 
     private Response marysPublicKeyAs(User caller) {

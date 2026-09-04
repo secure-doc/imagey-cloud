@@ -463,8 +463,6 @@ test.describe("publicProfileService error/race paths", () => {
       )
       .willRespondWith(200, (r) =>
         r.jsonBody({
-          issuer: userId,
-          kid: profileId,
           sharedKey: MatchersV3.string(wrappedWinnerKey),
         }),
       );
@@ -891,6 +889,123 @@ test.describe("DocumentService error paths", () => {
     expect(result.documents[0]).toBe(siblingId);
     expect(result.documents[1]).not.toBe(siblingId);
     expect(result.etag).toBe('"folder-v3"');
+  });
+
+  test("storeDocument's concurrent-change retry carries the Access-Path header through to the reload", async ({
+    page,
+  }) => {
+    // A folder reached only transitively through a contact's shared tree
+    // (ADR 0009) - the initial upload AND the 412 retry's reload must both
+    // carry the same Access-Path header, or the reload is rejected by the
+    // server's verifyAccess and the retry throws instead of recovering.
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const folderOwner = "bob-owns-this-shared-folder";
+    const folderId = "retry-folder-shared";
+    const accessPath = "eyJjaGFpbiI6W119"; // opaque - only its propagation is under test
+
+    const folderKey = await generateAesGcmKeyJwk();
+    const reloadedFolder = await aesGcmEncrypt(
+      folderKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          documentId: folderId,
+          name: "Vacation",
+          type: "Folder",
+          documents: [],
+        }),
+      ),
+    );
+
+    let uploadAttempts = 0;
+    let uploadAccessPath: string | undefined;
+    let reloadAccessPath: string | undefined;
+    await page.route(`**/users/${user}/documents`, (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      uploadAttempts += 1;
+      uploadAccessPath = route.request().headers()["access-path"];
+      return uploadAttempts === 1
+        ? route.fulfill({ status: 412 })
+        : route.fulfill({
+            status: 201,
+            headers: {
+              Location: `/users/${user}/documents/new-doc`,
+              ETag: '"folder-v2"',
+            },
+          });
+    });
+    await page.route(
+      `**/users/${folderOwner}/documents/${folderId}`,
+      (route) => {
+        reloadAccessPath = route.request().headers()["access-path"];
+        return route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          headers: { ETag: '"folder-v1"' },
+          body: Buffer.from(reloadedFolder),
+        });
+      },
+    );
+    await page.goto("/");
+
+    await page.evaluate(
+      async ({ user, folderOwner, folderId, folderKey, accessPath }) => {
+        await window.documentService.storeDocument(
+          user,
+          new File([], "note.txt", { type: "text/plain" }),
+          {
+            documentId: folderId,
+            name: "Vacation",
+            type: "Folder",
+            documents: [],
+            owner: folderOwner,
+            etag: '"folder-v0"',
+          },
+          folderKey as JsonWebKey,
+          accessPath,
+        );
+      },
+      { user, folderOwner, folderId, folderKey, accessPath },
+    );
+
+    expect(uploadAttempts).toBe(2);
+    expect(uploadAccessPath).toBe(accessPath);
+    expect(reloadAccessPath).toBe(accessPath);
+  });
+
+  test("storeDocument rejects a successful upload response that carries no Location header", async ({
+    page,
+  }) => {
+    // A malformed 201 a real provider would never intentionally send - the
+    // document id is only known from Location, so there is nothing sensible
+    // to return.
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const folderId = "folder-without-location";
+    const folderKey = await generateAesGcmKeyJwk();
+
+    await page.route(`**/users/${user}/documents`, (route) =>
+      route.fulfill({ status: 201, headers: { ETag: '"folder-v1"' } }),
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      ({ user, folderId, folderKey }) =>
+        window.documentService.storeDocument(
+          user,
+          new File([], "note.txt", { type: "text/plain" }),
+          {
+            documentId: folderId,
+            name: "Vacation",
+            type: "Folder",
+            documents: [],
+            etag: '"folder-v0"',
+          },
+          folderKey as JsonWebKey,
+        ),
+      { user, folderId, folderKey },
+    );
+
+    expect(message).toBe("No location header");
   });
 
   test("updateDocumentMetadata rejects with a precondition error when the document changed since load", async ({
