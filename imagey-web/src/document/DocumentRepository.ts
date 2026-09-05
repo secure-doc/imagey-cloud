@@ -9,6 +9,17 @@ export class PreconditionFailedError extends Error {
   }
 }
 
+// The client-asserted chain that proves a non-owner reaches a document through a
+// shared folder (ADR 0009). base64url(JSON) of { chain: [{doc, owner, wrappedBy}] }.
+// `undefined` for an own-tree or direct-grant access - no header is then sent.
+export type AccessPathHeader = string;
+
+function accessPathHeaders(
+  accessPath?: AccessPathHeader,
+): Record<string, string> {
+  return accessPath ? { "Access-Path": accessPath } : {};
+}
+
 export const documentRepository = {
   uploadDocument: async (
     userId: string,
@@ -27,6 +38,7 @@ export const documentRepository = {
       sharedKey: string;
     },
     files: { filename: string; buffer: ArrayBuffer }[],
+    accessPath?: AccessPathHeader,
   ): Promise<{ documentId: string; folderETag: string | null }> => {
     const formData = new FormData();
     // Mirrors the registration request (see AuthenticationRepository.register): one JSON
@@ -70,6 +82,7 @@ export const documentRepository = {
       method: "POST",
       credentials: "same-origin",
       body: formData,
+      headers: accessPathHeaders(accessPath),
       // The browser sets Content-Type (including the multipart boundary) itself.
     });
     if (response.status === 412) {
@@ -88,12 +101,14 @@ export const documentRepository = {
   loadDocument: async (
     userId: string,
     documentId: string,
+    accessPath?: AccessPathHeader,
   ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
     const url = `/users/${userId}/documents/${documentId}`;
     const response = await fetch(url, {
       method: "GET",
       headers: {
         Accept: "application/octet-stream",
+        ...accessPathHeaders(accessPath),
       },
       credentials: "same-origin",
     });
@@ -153,12 +168,10 @@ export const documentRepository = {
     userId: string,
     documentId: string,
     kid: string,
-  ): Promise<{
-    issuerType?: string;
-    issuer: string;
-    kid: string;
-    sharedKey: string;
-  }> => {
+    accessPath?: AccessPathHeader,
+  ): Promise<{ sharedKey: string }> => {
+    // The server no longer discloses issuer / kid (ADR 0009) - the client sent
+    // `kid` and tracks the owner itself, so the response is just { sharedKey }.
     const targetKid = kid ?? userId;
     const response = await fetch(
       "/users/" + userId + "/documents/" + documentId + "/keys/" + targetKid,
@@ -166,6 +179,7 @@ export const documentRepository = {
         method: "GET",
         headers: {
           Accept: "application/json",
+          ...accessPathHeaders(accessPath),
         },
         credentials: "same-origin",
         cache: "no-cache",
@@ -177,12 +191,14 @@ export const documentRepository = {
     userId: string,
     documentId: string,
     contentId: string,
+    accessPath?: AccessPathHeader,
   ): Promise<{ content: ArrayBuffer; etag: string | null }> => {
     const path = `/users/${userId}/documents/${documentId}/files/${contentId}`;
     const response = await fetch(path, {
       method: "GET",
       headers: {
         Accept: "application/octet-stream",
+        ...accessPathHeaders(accessPath),
       },
       credentials: "same-origin",
       cache: "no-cache",

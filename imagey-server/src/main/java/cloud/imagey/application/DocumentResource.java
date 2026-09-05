@@ -34,6 +34,7 @@ import java.util.Optional;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
@@ -54,6 +55,7 @@ import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.document.AccessPath;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.document.DocumentService;
@@ -61,6 +63,7 @@ import cloud.imagey.domain.document.DocumentUpload;
 import cloud.imagey.domain.document.EncryptedMetadata;
 import cloud.imagey.domain.document.FileName;
 import cloud.imagey.domain.document.UploadMetadata;
+import cloud.imagey.domain.document.WrappedKey;
 import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.token.Kid;
@@ -77,6 +80,9 @@ public class DocumentResource {
 
     @Inject
     private DocumentService documentService;
+
+    @Context
+    private HttpServletRequest httpRequest;
 
     @GET
     @RolesAllowed({"owner", "member"})
@@ -148,13 +154,17 @@ public class DocumentResource {
     @RolesAllowed({"owner", "member"})
     @Path("{documentId}/keys/{kid}")
     @Produces(APPLICATION_JSON)
-    public EncryptedSharedKey getSharedKey(
+    public Map<String, String> getSharedKey(
         @PathParam("userId") User user,
         @PathParam("documentId") DocumentId documentId,
         @PathParam("kid") Kid kid) throws IOException {
 
-        return documentRepository.findDocumentKey(user, documentId, kid)
-                .orElseThrow(NotFoundException::new);
+        WrappedKey key = documentRepository.findDocumentKey(user, documentId, kid)
+            .orElseThrow(NotFoundException::new);
+        // { "sharedKey": "<ciphertext>" } - issuer / kid are no longer disclosed (ADR 0009). A
+        // Map rather than the WrappedKey record so the reflective record writer emits an object
+        // instead of unwrapping the single component to a bare string.
+        return Map.of("sharedKey", key.sharedKey().content());
     }
 
     @POST
@@ -199,7 +209,8 @@ public class DocumentResource {
             documentContent,
             metadata.key(),
             uploadedFiles);
-        String folderETag = documentService.uploadDocument(user, upload);
+        AccessPath accessPath = (AccessPath) httpRequest.getAttribute(AccessPath.class.getName());
+        String folderETag = documentService.uploadDocument(user, upload, accessPath);
 
         URI location = uriInfo.getAbsolutePathBuilder().path(metadata.documentId().id()).build();
         // Hand back the folder's new ETag (computed by the service from the bytes it just wrote, so

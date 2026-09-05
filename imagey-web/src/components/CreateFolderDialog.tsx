@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
+import { useAccessPath } from "../contexts/FolderContext";
 import Document from "../document/Document";
 
 interface CreateFolderDialogProps {
@@ -27,6 +28,13 @@ export default function CreateFolderDialog({
   const [isCreating, setIsCreating] = useState(false);
   const authentication = useAuthentication();
   const user = authentication.user;
+  // Set only when the parent folder was reached through a contact's shared
+  // tree (ADR 0009); undefined for our own folders, where the server's
+  // direct-grant scan needs no header.
+  const accessPath = useAccessPath(
+    parentFolder?.documentId ?? "",
+    parentFolder?.owner ?? "",
+  );
 
   const handleCreate = async () => {
     if (!folderName.trim() || !user || !parentFolder || !parentFolderKey)
@@ -38,6 +46,7 @@ export default function CreateFolderDialog({
         folderName.trim(),
         parentFolder,
         parentFolderKey,
+        accessPath,
       );
       onCreated(result);
     } catch (e) {

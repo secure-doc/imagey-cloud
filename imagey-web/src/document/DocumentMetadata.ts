@@ -23,10 +23,9 @@ export default interface DocumentMetadata {
   // as a precondition on the next read-modify-write of this document so a
   // concurrent change is detected instead of silently overwritten.
   etag?: string;
+  // The wrapped key envelope as returned by GET .../keys/{kid} - just the
+  // ciphertext since ADR 0009 (issuer / kid are no longer disclosed).
   sharedKey?: {
-    issuerType?: string;
-    issuer: string;
-    kid: string;
     sharedKey: string;
   };
   emails?: string[];
