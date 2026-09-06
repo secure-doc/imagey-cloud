@@ -97,4 +97,6 @@ jobs:
           export ROOT_PATH=${{ secrets.ROOT_PATH }}
           export ACME_CHALLENGE_PATH=${{ secrets.ACME_CHALLENGE_PATH }}
           export AUTHENTICATION_SECRET=${{ secrets.AUTHENTICATION_SECRET }}
+          export USER_MAPPING_SECRET=${{ secrets.USER_MAPPING_SECRET }}
+          export DOCUMENT_MAPPING_SECRET=${{ secrets.DOCUMENT_MAPPING_SECRET }}
           ~/imagey-server-distribution/bin/meecrowave.sh start
