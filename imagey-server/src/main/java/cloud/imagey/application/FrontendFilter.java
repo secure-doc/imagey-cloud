@@ -34,7 +34,7 @@ public class FrontendFilter extends HttpFilter {
     private static final Logger LOG = LogManager.getLogger(FrontendFilter.class);
 
     private static final String[] PREFIXES = {
-        "/users", "/authentications", "/registrations", "/invitations", "/.well-known", "/assets"
+        "/users", "/authentications", "/registrations", "/invitations", "/assets"
     };
 
     private static final String[] SUFFIXES = {
