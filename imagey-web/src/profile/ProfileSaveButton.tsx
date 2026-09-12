@@ -26,17 +26,12 @@ export default function ProfileSaveButton({
   const [showSnackbar, setShowSnackbar] = useState<boolean>(false);
 
   const handleSave = async () => {
-    if (!profile.key) {
-      console.error("Cannot save profile without its document key");
-      return;
-    }
-
     setSaving(true);
     try {
       let profileToSave: Profile = { ...profile };
 
       if (newPicture) {
-        profileToSave.profilePictureId = await documentService.storeContent(
+        profileToSave.profileImageId = await documentService.storeContent(
           auth.user,
           id,
           profile.key,
@@ -85,21 +80,22 @@ export default function ProfileSaveButton({
         }
       }
 
-      const newEtag = await documentService.updateDocumentMetadata(
+      const newRevision = await documentService.updateDocumentMetadata(
         auth.user,
         id,
         profile.key,
         {
+          type: "profile",
           name: profileToSave.name,
           emails: profileToSave.emails,
-          profilePictureId: profileToSave.profilePictureId,
+          profileImageId: profileToSave.profileImageId,
           publicProfileId: profileToSave.publicProfileId,
         },
-        profileToSave.etag,
+        profileToSave.revision,
       );
-      // Adopt the ETag the server just assigned, otherwise a second save in the
-      // same session still sends the old If-Match and gets a 412.
-      profileToSave.etag = newEtag ?? undefined;
+      // Adopt the revision the server just assigned, otherwise a second save
+      // in the same session still sends the old If-Match and gets a 412.
+      profileToSave.revision = newRevision ?? profileToSave.revision;
 
       onProfileChange(profileToSave);
       setShowSnackbar(true);

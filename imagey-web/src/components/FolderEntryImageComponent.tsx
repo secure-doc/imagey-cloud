@@ -2,60 +2,60 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import { documentService } from "../document/DocumentService";
 import { useObjectUrl } from "../hooks/useObjectUrl";
-import { NewDocumentMetadata } from "../document/DocumentMetadata";
+import { FolderEntry } from "../document/DocumentMetadata";
 
-// Renders an already-loaded Document (has its own `key`) or a
-// freshly-uploaded NewDocumentMetadata (no `revision` yet) - used by the
-// chat message view and the share dialog, both of which already have a
-// fully resolved document in hand. For a folder grid entry that has NOT
-// been loaded (only its FolderEntry is known), use FolderEntryImageComponent
-// instead.
-export default function ImageComponent({
-  image,
+// Renders one folder grid entry's thumbnail directly off the FolderEntry
+// embedded in the parent folder - no per-child metadata+key request (see
+// documentService.loadFolderEntryContent), unlike ImageComponent which
+// needs an already-loaded Document.
+export default function FolderEntryImageComponent({
+  entry,
+  folderOwner,
+  folderKey,
+  accessPath,
   className = "small-width small-height",
 }: {
-  image: NewDocumentMetadata;
+  entry: FolderEntry;
+  folderOwner: string;
+  folderKey: JsonWebKey;
+  accessPath?: string;
   className?: string;
 }) {
   const { t } = useTranslation();
-
   const [content, setContent] = useState<ArrayBuffer | undefined>();
   const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
-    // A reused/re-ordered slot may hand this component a different `image` -
-    // clear the previous document's resolved content and error state so it
-    // doesn't show through while the new content loads.
     setContent(undefined);
     setError(false);
-
     documentService
-      .loadContent(image)
+      .loadFolderEntryContent(folderOwner, entry, folderKey, accessPath)
       .then((content) => setContent(content))
       .catch((e) => {
         console.error("Error loading image content", e);
         setError(true);
       });
-  }, [image]);
+  }, [folderOwner, entry, folderKey, accessPath]);
 
-  const mimeType = "mimeType" in image ? image.mimeType : undefined;
   const blob = useMemo(
     () =>
       content
         ? new Blob([content], {
-            type: mimeType?.startsWith("image/") ? "image/png" : mimeType,
+            type: entry.mimeType?.startsWith("image/")
+              ? "image/png"
+              : entry.mimeType,
           })
         : undefined,
-    [content, mimeType],
+    [content, entry.mimeType],
   );
   const objectUrl = useObjectUrl(blob);
 
   if (objectUrl) {
     return (
       <img
-        key={image.documentId}
+        key={entry.documentId}
         src={objectUrl}
-        alt={image.name}
+        alt={entry.name}
         loading="lazy"
         className={className}
         style={{ objectFit: "cover" }}
@@ -64,7 +64,7 @@ export default function ImageComponent({
   } else if (error) {
     return (
       <div
-        key={image.documentId}
+        key={entry.documentId}
         className={`${className} border surface-container-highest center-align`}
         style={{
           display: "inline-flex",
@@ -87,13 +87,13 @@ export default function ImageComponent({
             maxWidth: "100%",
           }}
         >
-          {t("Error loading {{name}}", { name: image.name })}
+          {t("Error loading {{name}}", { name: entry.name })}
         </div>
       </div>
     );
   } else {
     return (
-      <div key={image.documentId} className={className}>
+      <div key={entry.documentId} className={className}>
         <progress className="circle small"></progress>
       </div>
     );

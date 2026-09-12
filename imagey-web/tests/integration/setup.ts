@@ -239,16 +239,35 @@ async function mockChatsDocument(
   email: string,
   chatsId: string,
   settingsKey: JsonWebKey,
-  contacts: { userId: string; chatId: string; owner: string }[],
+  contacts: {
+    userId: string;
+    chatId: string;
+    owner: string;
+    name?: string;
+    avatarId?: string;
+    profileRevision?: string;
+  }[],
   given?: string | string[],
   chatsDocumentKey?: JsonWebKey,
 ): Promise<JsonWebKey> {
   const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
   const key = chatsDocumentKey ?? (await generateAesGcmKeyJwk());
+  // Defaulted here (rather than forcing every call site to supply them) -
+  // only tests exercising the profile-revision-mismatch behavior need to
+  // pass explicit values.
+  const contactEntries = contacts.map((c) => ({
+    ...c,
+    name: c.name ?? c.userId,
+    profileRevision: c.profileRevision ?? "0",
+  }));
   const content = await aesGcmEncrypt(
     key,
     new TextEncoder().encode(
-      JSON.stringify({ contacts, type: "folder", name: "Chats" }),
+      JSON.stringify({
+        contacts: contactEntries,
+        type: "chatList",
+        name: "Chats",
+      }),
     ),
   );
   const wrappedKey = await encryptKeyEnvelope(key, settingsKey);
@@ -358,7 +377,12 @@ async function mockChatDocument({
   const content = await aesGcmEncrypt(
     chatDocumentKey,
     new TextEncoder().encode(
-      JSON.stringify({ documentId: chatId, name: "Chat", type: "Chat" }),
+      JSON.stringify({
+        documentId: chatId,
+        name: "Chat",
+        type: "chat",
+        publicProfiles: {},
+      }),
     ),
   );
 
@@ -423,7 +447,12 @@ async function mockChatDocumentSharedViaSync({
   const content = await aesGcmEncrypt(
     chatDocumentKey,
     new TextEncoder().encode(
-      JSON.stringify({ documentId: chatId, name: "Chat", type: "Chat" }),
+      JSON.stringify({
+        documentId: chatId,
+        name: "Chat",
+        type: "chat",
+        publicProfiles: {},
+      }),
     ),
   );
 
@@ -1136,8 +1165,8 @@ export async function prepareMarysFolderCreation() {
 // with the profile document's own key, plus a keys/mary@imagey.cloud.json holding
 // that key wrapped with Mary's settingsKey (documentService.loadDocument(user, id,
 // user, settingsKey)). The profile picture is a file attached to the same
-// document (documentService.loadContent(user, id, profile.key, profilePictureId)),
-// not a separate document.
+// document (documentService.loadContent(profile, profileImageId)), not a
+// separate document.
 // A registered interaction is only ever matched once by Pact's mock
 // server - a test that genuinely revisits the profile page (and so
 // re-fetches it) must register it again with a distinct suffix so each
@@ -1343,6 +1372,10 @@ async function mockOwnedDocument(
     new TextEncoder().encode(JSON.stringify(content)),
   );
   const wrappedKey = await encryptKeyEnvelope(documentKey, wrappingKey);
+  // A real revision, so documentService.loadDocument's caller can tell this
+  // document apart from one that's never been saved (the server always sets
+  // this in practice - see DocumentResource.java's unconditional GET tag()).
+  const revision = `"${documentId}-v1"`;
 
   let contentBuilder = provider
     .addInteraction()
@@ -1356,7 +1389,9 @@ async function mockOwnedDocument(
       r.headers({ Accept: "application/octet-stream" }),
     )
     .willRespondWith(200, (r) =>
-      r.body("application/octet-stream", encryptedContent),
+      r
+        .headers({ ETag: MatchersV3.string(revision) })
+        .body("application/octet-stream", encryptedContent),
     );
 
   let keyBuilder = provider
@@ -1412,7 +1447,7 @@ export async function prepareMarysNamedPublicProfile(
     "d20cf443-4f96-418f-a957-c8cbef8677c3",
     TestData.mary.settingsKey!,
     profileKey,
-    { emails: ["mary@imagey.cloud"], publicProfileId },
+    { type: "profile", emails: ["mary@imagey.cloud"], publicProfileId },
     given,
     ` (named public profile)${callSuffix}`,
   );
@@ -1422,7 +1457,7 @@ export async function prepareMarysNamedPublicProfile(
     profileId,
     profileKey,
     publicProfileKey,
-    { type: "public-profile", name },
+    { type: "publicProfile", name },
     given,
     callSuffix,
   );
@@ -1444,7 +1479,7 @@ export async function prepareMarysProfileWithoutPublicProfile(
     "d20cf443-4f96-418f-a957-c8cbef8677c3",
     TestData.mary.settingsKey!,
     profileKey,
-    { emails: ["mary@imagey.cloud"] },
+    { type: "profile", emails: ["mary@imagey.cloud"] },
     given,
     " (no public profile yet)",
   );
@@ -2102,7 +2137,7 @@ export async function prepareMarysChatWithContactProfile({
       JSON.stringify({
         documentId: chatId,
         name: "Chat",
-        type: "Chat",
+        type: "chat",
         publicProfiles: {
           "d20cf443-4f96-418f-a957-c8cbef8677c3": maryPublicProfileId,
           [contactUserId]: contactPublicProfileId,
@@ -2166,7 +2201,7 @@ export async function prepareMarysChatWithContactProfile({
       chatDocumentKey,
       publicProfileKey,
       {
-        type: "public-profile",
+        type: "publicProfile",
         name: contactName,
         ...(contactAvatarId ? { avatarId: contactAvatarId } : {}),
       },
@@ -2592,7 +2627,7 @@ export async function prepareFreshUserSettings(email: string) {
   // above) - a freshly registered user starts with an empty contacts list,
   // same shape as the empty document list below.
   const chatList = await encryptWithSettingsKey(
-    JSON.stringify({ contacts: [], type: "folder", name: "Chats" }),
+    JSON.stringify({ contacts: [], type: "chatList", name: "Chats" }),
   );
   // The document-list/chat-list keys are "self-wrapped" with the settings
   // key (i.e. we reuse the same key as their own key) - one fewer key to

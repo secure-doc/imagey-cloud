@@ -91,9 +91,9 @@ export const authenticationService = {
         `{"documents": [], "type": "folder", "name": "Documents"}`,
       ),
       encryptBootstrapDocument(
-        `{"contacts": [], "type": "folder", "name": "Chats"}`,
+        `{"contacts": [], "type": "chatList", "name": "Chats"}`,
       ),
-      encryptBootstrapDocument(`{"emails": ["${email}"]}`),
+      encryptBootstrapDocument(`{"emails": ["${email}"], "type": "profile"}`),
     ]);
 
     await authenticationRepository.register(

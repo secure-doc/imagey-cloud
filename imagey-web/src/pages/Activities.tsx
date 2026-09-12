@@ -6,7 +6,7 @@ import ActivityPanel from "../activity/ActivityPanel";
 import { activityService } from "../activity/ActivityService";
 import { documentService } from "../document/DocumentService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
-import { Contact } from "../contact/Contact";
+import { ContactEntry } from "../document/DocumentMetadata";
 import { ActivityType } from "../activity/Activity";
 import {
   useChatsId,
@@ -20,7 +20,7 @@ export default function Activities() {
   const user = authentication.user;
 
   const [activities, setActivities] = useState<Activity[]>();
-  const [contacts, setContacts] = useState<Contact[]>();
+  const [contacts, setContacts] = useState<ContactEntry[]>();
   const settingsKey = useSettingsKey();
   const documentsId = useDocumentsId();
   const chatsId = useChatsId();
@@ -32,18 +32,24 @@ export default function Activities() {
       .catch((e) => console.error("Failed to fetch activities", e));
     // Contacts now live inside the (also encrypted) "chats" document,
     // same as on the Chats page, instead of a dedicated /contacts endpoint.
-    const chatsDocument = await documentService.loadDocument(
-      user,
-      chatsId,
-      user,
-      settingsKey,
-    );
-    if (chatsDocument.loadFailed) {
-      console.error("Failed to load chats document");
-      return false;
+    try {
+      const chatsDocument = await documentService.loadDocument(
+        user,
+        chatsId,
+        user,
+        settingsKey,
+      );
+      if (chatsDocument.type !== "chatList") {
+        throw new Error(
+          `Expected the chats document to be a chatList, got ${chatsDocument.type}`,
+        );
+      }
+      setContacts(chatsDocument.contacts);
+      return true;
+    } catch (e) {
+      console.error("Failed to load chats document", e);
+      throw e;
     }
-    setContacts(chatsDocument.contacts ?? []);
-    return true;
   }, [user, settingsKey, documentsId, chatsId]);
 
   return (

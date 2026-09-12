@@ -795,6 +795,26 @@ test("view chat shows the contact's display name and avatar", async ({
       ]),
     );
 
+  // Laura's ContactEntry snapshot (prepareMarysChatsDocument's default
+  // profileRevision, "0") is stale against her real, just-loaded
+  // PublicProfileMetadata.revision (mockOwnedDocument's real ETag) - opening
+  // the chat should refresh it in the "chats" document (see Chat.tsx's
+  // profile-revision-mismatch effect / ContactService.
+  // updateContactProfileSnapshot).
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to refresh laura's contact profile snapshot",
+    )
+    .withRequest(
+      "PUT",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}`,
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(204, (r) =>
+      r.headers({ ETag: MatchersV3.string('"chats-v2"') }),
+    );
+
   await builder.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);
     await loginAsMary(page);
@@ -804,6 +824,17 @@ test("view chat shows the contact's display name and avatar", async ({
       .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
       .first();
     await expect(lauraContact).toBeVisible();
+    // The stale-snapshot refresh (see Chat.tsx's profile-revision-mismatch
+    // effect) fires as soon as the contact's real profile loads, which can
+    // happen before any assertion below gets a chance to await it - start
+    // listening before the click that kicks the whole chain off.
+    const snapshotRefreshResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/documents/${TestData.mary.settings!.chats}`) &&
+        response.request().method() === "PUT",
+    );
     await lauraContact.click();
 
     // The chat header now shows Laura's display name, not her raw userId
@@ -812,6 +843,8 @@ test("view chat shows the contact's display name and avatar", async ({
       page.getByRole("heading", { name: "Laura Doe" }).first(),
     ).toBeVisible();
     await expect(page.getByRole("img", { name: "Laura Doe" })).toBeVisible();
+
+    await snapshotRefreshResponse;
 
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await expect.poll(() => runningPactRequests).toBe(0);

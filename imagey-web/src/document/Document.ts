@@ -1,9 +1,8 @@
 import DocumentMetadata from "./DocumentMetadata";
 
-// Document is a DocumentMetadata that has actually been loaded/decrypted:
-// it carries everything DocumentMetadata does (size, contentId, sharedKey,
-// ETag, etc.) plus the fields only meaningful once loaded (raw content).
-export default interface Document extends DocumentMetadata {
-  content?: ArrayBuffer;
-  profilePictureId?: string;
-}
+// Document is a DocumentMetadata variant that has actually been
+// loaded/decrypted. Generic so a caller that has already narrowed to e.g.
+// FolderMetadata keeps that narrowing through Document<FolderMetadata>.
+type Document<M extends DocumentMetadata = DocumentMetadata> = M;
+
+export default Document;

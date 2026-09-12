@@ -1,47 +1,42 @@
-import DocumentMetadata from "../document/DocumentMetadata";
-import ImageComponent from "./ImageComponent";
+import { FolderEntry } from "../document/DocumentMetadata";
+import FolderEntryImageComponent from "./FolderEntryImageComponent";
 import FolderImageComponent from "./FolderImageComponent";
 
 interface ImageListProps {
-  documents: DocumentMetadata[];
-  onImageClick?: (document: DocumentMetadata) => void;
-  onFolderClick?: (document: DocumentMetadata) => void;
+  entries: FolderEntry[];
+  folderOwner: string;
+  folderKey: JsonWebKey;
+  accessPath?: string;
+  onFolderClick?: (entry: FolderEntry) => void;
 }
 
 export default function ImageList({
-  documents,
-  onImageClick,
+  entries,
+  folderOwner,
+  folderKey,
+  accessPath,
   onFolderClick,
 }: ImageListProps) {
   return (
     <div className="column">
-      {documents.map((doc) => {
-        if (doc.type?.toLowerCase() === "folder") {
-          return (
-            <FolderImageComponent
-              key={doc.documentId}
-              folder={doc}
-              onClick={() => onFolderClick?.(doc)}
+      {entries.map((entry) =>
+        entry.type === "folder" ? (
+          <FolderImageComponent
+            key={entry.documentId}
+            folder={entry}
+            onClick={() => onFolderClick?.(entry)}
+          />
+        ) : (
+          <div key={entry.documentId}>
+            <FolderEntryImageComponent
+              entry={entry}
+              folderOwner={folderOwner}
+              folderKey={folderKey}
+              accessPath={accessPath}
             />
-          );
-        }
-
-        if (onImageClick) {
-          return (
-            <a
-              key={doc.documentId}
-              onClick={(e) => {
-                e.preventDefault();
-                onImageClick(doc);
-              }}
-              className="pointer"
-            >
-              <ImageComponent image={doc} />
-            </a>
-          );
-        }
-        return <ImageComponent key={doc.documentId} image={doc} />;
-      })}
+          </div>
+        ),
+      )}
     </div>
   );
 }

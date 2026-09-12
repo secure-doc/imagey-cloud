@@ -361,7 +361,9 @@ test("new user registers via invite link and accepts the invitation", async ({
   const joeProfileKey = await generateAesGcmKeyJwk();
   const joeProfileContent = await aesGcmEncrypt(
     joeProfileKey,
-    new TextEncoder().encode(JSON.stringify({ emails: ["joe@imagey.cloud"] })),
+    new TextEncoder().encode(
+      JSON.stringify({ type: "profile", emails: ["joe@imagey.cloud"] }),
+    ),
   );
   const joeProfileWrappedKey = await encryptKeyEnvelope(
     joeProfileKey,

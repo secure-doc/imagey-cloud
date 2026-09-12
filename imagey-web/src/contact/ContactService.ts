@@ -2,7 +2,7 @@ import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { PublicProfile } from "../profile/PublicProfile";
-import { Contact } from "./Contact";
+import { ContactEntry } from "../document/DocumentMetadata";
 import { ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
 import { documentRepository } from "../document/DocumentRepository";
@@ -17,10 +17,10 @@ import { documentService } from "../document/DocumentService";
 // point our first attempt's list write has already landed. Deduping here
 // keeps the retry from growing the list without bound.
 function appendContact(
-  existing: Contact[] | undefined,
-  contact: Contact,
-): Contact[] {
-  const others = (existing ?? []).filter((c) => c.chatId !== contact.chatId);
+  existing: ContactEntry[],
+  contact: ContactEntry,
+): ContactEntry[] {
+  const others = existing.filter((c) => c.chatId !== contact.chatId);
   return [...others, contact];
 }
 
@@ -40,7 +40,7 @@ export const contactService = {
     ownPublicProfile: PublicProfile,
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
-  ): Promise<Contact> => {
+  ): Promise<ContactEntry> => {
     try {
       const chatsDocument = await documentService.loadDocument(
         userId,
@@ -48,11 +48,10 @@ export const contactService = {
         userId,
         settings.settingsKey,
       );
-      // A failed load returns a key-less placeholder, so this also guards
-      // against rebuilding the contacts list off a placeholder (which would
-      // persist an empty list and drop every existing contact).
-      if (!chatsDocument.key) {
-        throw new Error("Chats document key not found");
+      if (chatsDocument.type !== "chatList") {
+        throw new Error(
+          `Expected the "chats" document to be a chatList, got ${chatsDocument.type}`,
+        );
       }
 
       const chatId = cryptoService.generateUuid();
@@ -75,7 +74,7 @@ export const contactService = {
             JSON.stringify({
               documentId: chatId,
               name: contactId,
-              type: "Chat",
+              type: "chat",
               publicProfiles,
             }),
           ).buffer,
@@ -86,7 +85,19 @@ export const contactService = {
         chatsDocument.key,
       );
 
-      const contact: Contact = { userId: contactId, chatId, owner: userId };
+      // The contact's own name/avatar aren't known yet at accept time (only
+      // their userId, and maybe their public-profile id) - name falls back
+      // to the userId for now, and profileRevision starts as "" so the first
+      // time this chat is opened, the mismatch against the real loaded
+      // PublicProfileMetadata.revision triggers a snapshot refresh (see
+      // Chat.tsx / updateContactProfileSnapshot).
+      const contact: ContactEntry = {
+        userId: contactId,
+        chatId,
+        owner: userId,
+        name: contactId,
+        profileRevision: "",
+      };
       const updatedContacts = appendContact(chatsDocument.contacts, contact);
       const [encryptedChatsContent] = await cryptoService.encryptDocument(
         chatsDocument.key,
@@ -108,7 +119,7 @@ export const contactService = {
         encryptedChatsContent,
         // Reject (rather than silently clobber) if the "chats" document changed
         // since we loaded it - another accepted request would otherwise be lost.
-        chatsDocument.etag ?? null,
+        chatsDocument.revision,
         chatId,
         encryptedChatContent,
         {
@@ -142,11 +153,7 @@ export const contactService = {
       // uses for any other document shared into a chat.
       await documentService.shareDocument(
         userId,
-        {
-          documentId: ownPublicProfile.documentId,
-          name: "",
-          key: ownPublicProfile.key,
-        },
+        { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
         contactId,
         chatDocumentKey,
       );
@@ -174,7 +181,7 @@ export const contactService = {
     ownPublicProfile: PublicProfile,
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
-  ): Promise<Contact> => {
+  ): Promise<ContactEntry> => {
     if (!request.chatId || !request.sharedKey) {
       throw new Error("Accepted contact request is missing chatId/sharedKey");
     }
@@ -185,10 +192,10 @@ export const contactService = {
       userId,
       settings.settingsKey,
     );
-    // A failed load returns a key-less placeholder, so this also guards
-    // against rebuilding the contacts list off one.
-    if (!chatsDocument.key) {
-      throw new Error("Chats document key not found");
+    if (chatsDocument.type !== "chatList") {
+      throw new Error(
+        `Expected the "chats" document to be a chatList, got ${chatsDocument.type}`,
+      );
     }
 
     // Decrypt the ECDH-wrapped chat Document key from the invitee, then
@@ -211,19 +218,19 @@ export const contactService = {
     // (issuer = them, filed under our own ppId).
     await documentService.shareDocument(
       userId,
-      {
-        documentId: ownPublicProfile.documentId,
-        name: "",
-        key: ownPublicProfile.key,
-      },
+      { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
       request.invitee,
       chatDocumentKey,
     );
 
-    const contact: Contact = {
+    // Same reasoning as acceptContactRequest's ContactEntry above: the
+    // invitee's own name/avatar aren't known yet here, only their userId.
+    const contact: ContactEntry = {
       userId: request.invitee,
       chatId: request.chatId,
       owner: request.invitee,
+      name: request.invitee,
+      profileRevision: "",
     };
     const updatedContacts = appendContact(chatsDocument.contacts, contact);
     await documentService.updateDocumentMetadata(
@@ -235,7 +242,7 @@ export const contactService = {
         type: chatsDocument.type,
         contacts: updatedContacts,
       },
-      chatsDocument.etag,
+      chatsDocument.revision,
     );
 
     await contactRepository.confirmContactRequestReceived(
@@ -260,10 +267,10 @@ export const contactService = {
   // our own chats-document key.
   loadChatKey: async (
     user: UserId,
-    contact: Contact,
+    contact: ContactEntry,
     chatsId: string,
     chatsDocumentKey: JsonWebKey,
-  ): Promise<{ key: JsonWebKey; publicProfiles?: Record<string, string> }> => {
+  ): Promise<{ key: JsonWebKey; publicProfiles: Record<string, string> }> => {
     const document =
       contact.owner === user
         ? await documentService.loadDocument(
@@ -278,9 +285,50 @@ export const contactService = {
             user,
             chatsDocumentKey,
           );
-    if (!document.key) {
-      throw new Error("Chat document key not found");
+    if (document.type !== "chat") {
+      throw new Error(`Expected a chat document, got ${document.type}`);
     }
     return { key: document.key, publicProfiles: document.publicProfiles };
+  },
+
+  // Patches one contact's denormalized public-profile snapshot (name/avatarId
+  // /profileRevision) in the "chats" document - called from the chat view
+  // when the freshly-loaded PublicProfileMetadata.revision no longer matches
+  // the cached ContactEntry.profileRevision. Same read-modify-write shape as
+  // accept/receiveContactRequest's own writes to the same document.
+  updateContactProfileSnapshot: async (
+    userId: UserId,
+    chatsDocument: {
+      documentId: string;
+      name: string;
+      key: JsonWebKey;
+      revision: string | null;
+      contacts: ContactEntry[];
+    },
+    contactUserId: string,
+    snapshot: { name: string; avatarId?: string; revision: string },
+  ): Promise<{ contacts: ContactEntry[]; revision: string | null }> => {
+    const updatedContacts = chatsDocument.contacts.map((contact) =>
+      contact.userId === contactUserId
+        ? {
+            ...contact,
+            name: snapshot.name,
+            avatarId: snapshot.avatarId,
+            profileRevision: snapshot.revision,
+          }
+        : contact,
+    );
+    const newRevision = await documentService.updateDocumentMetadata(
+      userId,
+      chatsDocument.documentId,
+      chatsDocument.key,
+      {
+        name: chatsDocument.name,
+        type: "chatList",
+        contacts: updatedContacts,
+      },
+      chatsDocument.revision,
+    );
+    return { contacts: updatedContacts, revision: newRevision };
   },
 };

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useUser } from "../contexts/AuthenticationContext";
 import { documentService } from "../document/DocumentService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
-import { Profile, Profile as ProfileType } from "../profile/Profile";
+import { Profile as ProfileType } from "../profile/Profile";
 import ProfilePicturePanel from "../profile/ProfilePicturePanel";
 import ProfileEmailList from "../profile/ProfileEmailList";
 import ProfileNameInput from "../profile/ProfileNameInput";
@@ -18,66 +18,49 @@ export default function ProfilePage({ id }: { id: string }) {
   const settingsKey = useSettingsKey();
   useBackButton();
 
-  const [profile, setProfile] = useState<ProfileType>({ name: "", emails: [] });
+  const [profile, setProfile] = useState<ProfileType | undefined>();
   // The profile as last loaded/saved - used by ProfileSaveButton to tell
   // whether the name actually changed (see docs/plans/chat-public-profile.md
   // §3.5, trigger 2), without re-triggering a public-profile name update on
   // every save when the user only changed their picture or emails.
-  const [savedProfile, setSavedProfile] = useState<ProfileType>({
-    name: "",
-    emails: [],
-  });
+  const [savedProfile, setSavedProfile] = useState<ProfileType | undefined>();
   const [picture, setPicture] = useState<Blob | undefined>();
   const [newPicture, setNewPicture] = useState<File | undefined>();
   const [loading, setLoading] = useState<boolean>(true);
 
-  // loadDocument never rejects - a failed fetch/decrypt is a `loadFailed`
-  // placeholder. Surface it and retry rather than showing an empty profile.
+  // A failed load rejects (documentService.DocumentLoadError); useReloadableLoad
+  // catches it, surfaces `loadFailed`, and retries rather than showing an
+  // empty profile.
   const { failed: loadFailed } = useReloadableLoad(async () => {
     setLoading(true);
-    const loadedDoc = await documentService.loadDocument(
-      user,
-      id,
-      user,
-      settingsKey,
-    );
-    if (loadedDoc.loadFailed) {
-      console.error("Failed to load profile document");
-      setLoading(false);
-      return false;
-    }
-    const loaded = loadedDoc as Profile;
-    if (loaded) {
-      const p: Profile = { ...loaded, emails: loaded.emails ?? [] };
-      setProfile(p);
-      setSavedProfile(p);
-      if (p.profilePictureId && p.key) {
+    try {
+      const loaded = await documentService.loadDocument(
+        user,
+        id,
+        user,
+        settingsKey,
+      );
+      if (loaded.type !== "profile") {
+        throw new Error(`Expected a profile document, got ${loaded.type}`);
+      }
+      setProfile(loaded);
+      setSavedProfile(loaded);
+      if (loaded.profileImageId) {
         try {
           const content = await documentService.loadContent(
-            user,
-            loadedDoc,
-            p.profilePictureId,
+            loaded,
+            loaded.profileImageId,
           );
           setPicture(new Blob([content]));
         } catch (e) {
           console.error("Failed to load profile picture", e);
         }
       }
+      return true;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    return true;
   }, [user, id, settingsKey]);
-
-  if (loading) {
-    return (
-      <main className="responsive">
-        <div className="space"></div>
-        <article className="round elevate">
-          <progress className="circle"></progress>
-        </article>
-      </main>
-    );
-  }
 
   return (
     <main className="grid no-margin">
@@ -91,36 +74,44 @@ export default function ProfilePage({ id }: { id: string }) {
               {t("Could not load your profile. Retrying...")}
             </div>
           )}
-          <ProfilePicturePanel
-            picture={picture}
-            onPictureChange={setNewPicture}
-          />
-          <ProfileNameInput
-            name={profile.name}
-            fallback={user}
-            onNameChange={(val) => setProfile({ ...profile, name: val })}
-          />
-          <hr className="large" />
-          <ProfileEmailList
-            emails={profile.emails}
-            onEmailsChange={(updated) =>
-              setProfile({ ...profile, emails: updated })
-            }
-          />
+          {loading || !profile || !savedProfile ? (
+            <div className="center-align">
+              <progress className="circle"></progress>
+            </div>
+          ) : (
+            <>
+              <ProfilePicturePanel
+                picture={picture}
+                onPictureChange={setNewPicture}
+              />
+              <ProfileNameInput
+                name={profile.name}
+                fallback={user}
+                onNameChange={(val) => setProfile({ ...profile, name: val })}
+              />
+              <hr className="large" />
+              <ProfileEmailList
+                emails={profile.emails}
+                onEmailsChange={(updated) =>
+                  setProfile({ ...profile, emails: updated })
+                }
+              />
 
-          <nav className="right-align">
-            <ProfileSaveButton
-              id={id}
-              profile={profile}
-              savedName={savedProfile.name}
-              newPicture={newPicture}
-              onProfileChange={(profile) => {
-                setProfile(profile);
-                setSavedProfile(profile);
-                setNewPicture(undefined);
-              }}
-            />
-          </nav>
+              <nav className="right-align">
+                <ProfileSaveButton
+                  id={id}
+                  profile={profile}
+                  savedName={savedProfile.name}
+                  newPicture={newPicture}
+                  onProfileChange={(profile) => {
+                    setProfile(profile);
+                    setSavedProfile(profile);
+                    setNewPicture(undefined);
+                  }}
+                />
+              </nav>
+            </>
+          )}
         </article>
         <div className="space"></div>
       </div>

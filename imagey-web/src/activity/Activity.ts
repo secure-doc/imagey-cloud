@@ -1,6 +1,6 @@
 import { UserId } from "../authentication/UserId";
 import { MessageContent } from "../chat/Message";
-import Document from "../document/Document";
+import { NewDocumentMetadata } from "../document/DocumentMetadata";
 
 export type ActivityId = string;
 
@@ -24,7 +24,10 @@ export interface InvitationActivity {
 export interface ImageActivity {
   id: ActivityId;
   type: ActivityType.IMAGE;
-  image: Document;
+  // Either an already-loaded Document (from loadFolderChildren) or a
+  // freshly-uploaded NewDocumentMetadata (from UploadPanel's onUploadComplete,
+  // whose own revision is not known yet) - see document/DocumentMetadata.ts.
+  image: NewDocumentMetadata & { content?: ArrayBuffer };
 }
 
 export interface UploadActivity {

@@ -7,7 +7,7 @@ import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
 import { contactService } from "../contact/ContactService";
-import { Contact } from "../contact/Contact";
+import { ContactEntry } from "../document/DocumentMetadata";
 import { ContactRequest } from "../contact/ContactRequest";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
@@ -36,11 +36,17 @@ export function ChatsList({
   id: string;
   className?: string;
   activeContactUserId?: string;
-  // Reports the loaded contacts and the "chats" document's own key back to
-  // the caller, once known - lets Chat.tsx reuse this fetch instead of
-  // loading the same chats document a second time itself (it needs both to
-  // resolve a chat's Document key via contactService.loadChatKey).
-  onLoaded?: (contacts: Contact[], chatsDocumentKey: JsonWebKey) => void;
+  // Reports the loaded "chats" document back to the caller, once known - lets
+  // Chat.tsx reuse this fetch instead of loading the same document a second
+  // time itself: `key` resolves a chat's Document key via
+  // contactService.loadChatKey, `name`/`revision` are needed to write back a
+  // refreshed contact snapshot via contactService.updateContactProfileSnapshot.
+  onLoaded?: (chatsDocument: {
+    contacts: ContactEntry[];
+    key: JsonWebKey;
+    name: string;
+    revision: string;
+  }) => void;
   // Reports whether the "chats" document failed to load, so a caller waiting
   // on onLoaded (Chat.tsx) can show an error instead of an eternal spinner.
   onLoadError?: (failed: boolean) => void;
@@ -52,8 +58,10 @@ export function ChatsList({
   const settings = authentication.settings;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>();
-  const [contacts, setContacts] = useState<Contact[]>();
+  const [contacts, setContacts] = useState<ContactEntry[]>();
   const [chatsDocumentKey, setChatsDocumentKey] = useState<JsonWebKey>();
+  const [chatsName, setChatsName] = useState<string>();
+  const [chatsRevision, setChatsRevision] = useState<string>();
   const settingsKey = useSettingsKey();
   const { requestContact, namePrompt, confirmDisplayName, cancelDisplayName } =
     useSendContactRequest(
@@ -78,31 +86,39 @@ export function ChatsList({
   );
   useActionIcons(actionIcons);
 
-  // loadDocument never rejects - a failed fetch/decrypt comes back as a
-  // `loadFailed` placeholder. Without noticing that, a transient 5xx would
-  // leave the list silently empty forever (onLoaded is skipped, Chat.tsx
-  // spins). Report it up and retry on a short timer.
+  // A failed load rejects (documentService.DocumentLoadError); without
+  // catching that, a transient 5xx would leave the list silently empty
+  // forever (onLoaded is skipped, Chat.tsx spins). Report it up and retry on
+  // a short timer.
   const { failed: chatsLoadFailed } = useReloadableLoad(async () => {
     contactRepository
       .getContactRequests(user)
       .then((contactRequests) => setContactRequests(contactRequests))
       .catch((e) => console.error("Failed to fetch contact requests", e));
 
-    const chatsDocument = await documentService.loadDocument(
-      user,
-      id,
-      user,
-      settingsKey,
-    );
-    if (chatsDocument.loadFailed || !chatsDocument.key) {
-      console.error("Failed to load chats document");
+    try {
+      const chatsDocument = await documentService.loadDocument(
+        user,
+        id,
+        user,
+        settingsKey,
+      );
+      if (chatsDocument.type !== "chatList") {
+        throw new Error(
+          `Expected the chats document to be a chatList, got ${chatsDocument.type}`,
+        );
+      }
+      onLoadError?.(false);
+      setContacts(chatsDocument.contacts);
+      setChatsDocumentKey(chatsDocument.key);
+      setChatsName(chatsDocument.name);
+      setChatsRevision(chatsDocument.revision);
+      return true;
+    } catch (e) {
+      console.error("Failed to load chats document", e);
       onLoadError?.(true);
-      return false;
+      throw e;
     }
-    onLoadError?.(false);
-    setContacts(chatsDocument.contacts ?? []);
-    setChatsDocumentKey(chatsDocument.key);
-    return true;
   }, [user, id, settingsKey]);
 
   // Re-publish to onLoaded whenever the contacts list changes - not just on the
@@ -110,10 +126,20 @@ export function ChatsList({
   // inviter picking up an ACCEPTED request via receiveContactRequest) is
   // immediately reachable in Chat.tsx instead of only after a full reload.
   useEffect(() => {
-    if (chatsDocumentKey && contacts) {
-      onLoaded?.(contacts, chatsDocumentKey);
+    if (
+      chatsDocumentKey &&
+      contacts &&
+      chatsName !== undefined &&
+      chatsRevision !== undefined
+    ) {
+      onLoaded?.({
+        contacts,
+        key: chatsDocumentKey,
+        name: chatsName,
+        revision: chatsRevision,
+      });
     }
-  }, [contacts, chatsDocumentKey, onLoaded]);
+  }, [contacts, chatsDocumentKey, chatsName, chatsRevision, onLoaded]);
 
   // The inviter's side of the handshake: once the invitee has ACCEPTED the
   // request, pick up our ECDH-wrapped copy of the chat key, record the
@@ -243,10 +269,12 @@ export function ChatsList({
                   }
                 >
                   <button className="circle transparent">
-                    {contact.userId.charAt(0).toLocaleUpperCase()}
+                    {(contact.name || contact.userId)
+                      .charAt(0)
+                      .toLocaleUpperCase()}
                   </button>
                   <div className="max">
-                    <h6 className="small">{contact.userId}</h6>
+                    <h6 className="small">{contact.name || contact.userId}</h6>
                     <div>{contact.userId}</div>
                   </div>
                   <label>{new Date().toLocaleDateString(i18n.language)}</label>
