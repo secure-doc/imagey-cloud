@@ -286,9 +286,8 @@ test.describe("ContactService error paths", () => {
   test("acceptContactRequest rejects when the chats document can't be loaded", async ({
     page,
   }) => {
-    // documentService.loadDocument() swallows the 500 and returns a
-    // key-less placeholder, so acceptContactRequest hits its own
-    // "Chats document key not found" guard.
+    // documentService.loadDocument() rejects with a DocumentLoadError on the
+    // 500, which propagates straight out of acceptContactRequest.
     await page.route(
       "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chats-broken",
       (route) => route.fulfill({ status: 500 }),
@@ -315,7 +314,64 @@ test.describe("ContactService error paths", () => {
       ),
     );
 
-    expect(message).toBe("Chats document key not found");
+    expect(message).toBe("Failed to load document chats-broken");
+  });
+
+  test("acceptContactRequest rejects when the chats document isn't actually a chatList", async ({
+    page,
+  }) => {
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const chatsKey = await generateAesGcmKeyJwk();
+    const settingsKey = await generateAesGcmKeyJwk();
+    const content = await aesGcmEncrypt(
+      chatsKey,
+      new TextEncoder().encode(
+        JSON.stringify({ type: "folder", name: "Not Chats", documents: [] }),
+      ),
+    );
+    const wrappedKey = await encryptKeyEnvelope(chatsKey, settingsKey);
+    await page.route(`**/users/${userId}/documents/chats-wrong-type`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: content,
+      }),
+    );
+    await page.route(
+      `**/users/${userId}/documents/chats-wrong-type/keys/${userId}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+    );
+    await page.goto("/");
+
+    const message = await page.evaluate(
+      async ({ userId, settingsKey }) => {
+        try {
+          await window.contactService.acceptContactRequest(
+            userId,
+            "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+            {} as JsonWebKey,
+            undefined,
+            { documentId: "pp", key: {} as JsonWebKey },
+            {
+              documents: "docs",
+              chats: "chats-wrong-type",
+              profile: "profile",
+              settingsKey: settingsKey as JsonWebKey,
+            },
+            { publicKey: {} as JsonWebKey, privateKey: {} as JsonWebKey },
+          );
+          return "<resolved>";
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+      },
+      { userId, settingsKey },
+    );
+
+    expect(message).toBe(
+      'Expected the "chats" document to be a chatList, got folder',
+    );
   });
 
   test("receiveContactRequest rejects when the chats document can't be loaded", async ({
@@ -369,7 +425,123 @@ test.describe("ContactService error paths", () => {
       },
     );
 
-    expect(message).toBe("Chats document key not found");
+    expect(message).toBe("Failed to load document chats-broken");
+  });
+
+  test("receiveContactRequest rejects when the chats document isn't actually a chatList", async ({
+    page,
+  }) => {
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const chatsKey = await generateAesGcmKeyJwk();
+    const settingsKey = await generateAesGcmKeyJwk();
+    const chatKey = await generateAesGcmKeyJwk();
+    const wrappedChatKey = await encryptKeyEnvelopeEcdh(
+      chatKey,
+      TestData.mary.privateMainKey!,
+      TestData.mary.publicMainKey,
+    );
+    const content = await aesGcmEncrypt(
+      chatsKey,
+      new TextEncoder().encode(
+        JSON.stringify({ type: "folder", name: "Not Chats", documents: [] }),
+      ),
+    );
+    const wrappedChatsKey = await encryptKeyEnvelope(chatsKey, settingsKey);
+    await page.route(`**/users/${userId}/documents/chats-wrong-type`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: content,
+      }),
+    );
+    await page.route(
+      `**/users/${userId}/documents/chats-wrong-type/keys/${userId}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedChatsKey } }),
+    );
+    await page.goto("/");
+
+    const message = await page.evaluate(
+      async ({ userId, settingsKey, wrappedChatKey, pub, priv }) => {
+        try {
+          await window.contactService.receiveContactRequest(
+            userId,
+            {
+              inviter: userId,
+              invitee: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+              publicKey: pub as JsonWebKey,
+              status: "ACCEPTED",
+              chatId: "chat-1",
+              sharedKey: wrappedChatKey,
+            },
+            { documentId: "pp", key: pub as JsonWebKey },
+            {
+              documents: "docs",
+              chats: "chats-wrong-type",
+              profile: "profile",
+              settingsKey: settingsKey as JsonWebKey,
+            },
+            { publicKey: pub as JsonWebKey, privateKey: priv as JsonWebKey },
+          );
+          return "<resolved>";
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+      },
+      {
+        userId,
+        settingsKey,
+        wrappedChatKey,
+        pub: TestData.mary.publicMainKey,
+        priv: TestData.mary.privateMainKey!,
+      },
+    );
+
+    expect(message).toBe(
+      'Expected the "chats" document to be a chatList, got folder',
+    );
+  });
+
+  test("loadChatKey rejects when the chat document isn't actually a chat", async ({
+    page,
+  }) => {
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const chatsDocumentKey = await generateAesGcmKeyJwk();
+    const wrongKey = await generateAesGcmKeyJwk();
+    const content = await aesGcmEncrypt(
+      wrongKey,
+      new TextEncoder().encode(
+        JSON.stringify({ type: "folder", name: "Not A Chat", documents: [] }),
+      ),
+    );
+    const wrappedKey = await encryptKeyEnvelope(wrongKey, chatsDocumentKey);
+    await page.route(`**/users/${userId}/documents/not-a-chat`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: content,
+      }),
+    );
+    await page.route(
+      `**/users/${userId}/documents/not-a-chat/keys/${userId}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      ({ userId, chatsDocumentKey }) =>
+        window.contactService.loadChatKey(
+          userId,
+          { userId, chatId: "not-a-chat", owner: userId },
+          userId,
+          chatsDocumentKey as JsonWebKey,
+        ),
+      { userId, chatsDocumentKey },
+    );
+
+    expect(message).toBe("Expected a chat document, got folder");
   });
 });
 
@@ -422,7 +594,7 @@ test.describe("publicProfileService error/race paths", () => {
     const winnerContent = await aesGcmEncrypt(
       winnerKey,
       new TextEncoder().encode(
-        JSON.stringify({ type: "public-profile", name: "Mary Doe" }),
+        JSON.stringify({ type: "publicProfile", name: "Mary Doe" }),
       ),
     );
     provider
@@ -569,6 +741,54 @@ test.describe("publicProfileService error/race paths", () => {
     expect(message).toBe("Http Error 500");
   });
 
+  test("loadProfileAndEnsurePublicProfile rejects when the profile document isn't actually a profile", async ({
+    page,
+  }) => {
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const profileKey = await generateAesGcmKeyJwk();
+    const settingsKey = await generateAesGcmKeyJwk();
+    const content = await aesGcmEncrypt(
+      profileKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "folder",
+          name: "Not A Profile",
+          documents: [],
+        }),
+      ),
+    );
+    const wrappedKey = await encryptKeyEnvelope(profileKey, settingsKey);
+    await page.route(
+      `**/users/${userId}/documents/profile-wrong-type`,
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          body: content,
+        }),
+    );
+    await page.route(
+      `**/users/${userId}/documents/profile-wrong-type/keys/${userId}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      ({ userId, settingsKey }) =>
+        window.publicProfileService.loadProfileAndEnsurePublicProfile(userId, {
+          profile: "profile-wrong-type",
+          settingsKey: settingsKey as JsonWebKey,
+        }),
+      { userId, settingsKey },
+    );
+
+    expect(message).toBe(
+      "Expected the profile document to be a profile, got folder",
+    );
+  });
+
   test("ensurePublicProfile rejects when the linked public profile can no longer be loaded", async ({
     page,
   }) => {
@@ -622,23 +842,6 @@ test.describe("publicProfileService error/race paths", () => {
 // -------------------------------------------------------------------------
 
 test.describe("DocumentService error paths", () => {
-  test("shareDocument rejects a document that carries no key", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const message = await messageFromBrowser(page, () =>
-      window.documentService.shareDocument(
-        "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        { documentId: "doc-1", name: "doc-1" },
-        "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
-        {} as JsonWebKey,
-      ),
-    );
-
-    expect(message).toBe("Document key not found");
-  });
-
   test("shareDocument tolerates a 409 - the document is already shared into this chat", async ({
     page,
   }) => {
@@ -674,93 +877,21 @@ test.describe("DocumentService error paths", () => {
     await page.goto("/");
 
     const message = await messageFromBrowser(page, () =>
-      window.documentService.loadContent(
-        "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        {
-          documentId: "doc-1",
-          name: "doc-1",
-          key: { kty: "oct", k: "irrelevant" } as JsonWebKey,
-        },
-      ),
+      window.documentService.loadContent({
+        documentId: "doc-1",
+        name: "doc-1",
+        owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        type: "file",
+        mimeType: "text/plain",
+        size: 0,
+        contentId: "",
+        key: { kty: "oct", k: "irrelevant" } as JsonWebKey,
+      }),
     );
 
     expect(message).toBe(
       "Document has no preview image and no contentId given",
     );
-  });
-
-  test("loadContent rejects a key-less document when no parent folder is given", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const message = await messageFromBrowser(page, () =>
-      window.documentService.loadContent(
-        "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        {
-          documentId: "doc-1",
-          name: "doc-1",
-        },
-      ),
-    );
-
-    expect(message).toBe("Either document.key or folder is required");
-  });
-
-  test("loadContent unwraps the document key via the parent folder when the document has none", async ({
-    page,
-  }) => {
-    const owner = "d20cf443-4f96-418f-a957-c8cbef8677c3";
-    const documentId = "shared-doc-1";
-    const folderId = "parent-folder-1";
-    const contentId = "content-1";
-    const plaintext = "the decrypted bytes";
-
-    const folderKey = await generateAesGcmKeyJwk();
-    const documentKey = await generateAesGcmKeyJwk();
-    const wrappedDocumentKey = await encryptKeyEnvelope(documentKey, folderKey);
-    const encryptedContent = await aesGcmEncrypt(
-      documentKey,
-      new TextEncoder().encode(plaintext),
-    );
-
-    await page.route(
-      `**/users/${owner}/documents/${documentId}/keys/${folderId}`,
-      (route) =>
-        route.fulfill({
-          status: 200,
-          json: {
-            issuer: owner,
-            kid: folderId,
-            sharedKey: wrappedDocumentKey,
-          },
-        }),
-    );
-    await page.route(
-      `**/users/${owner}/documents/${documentId}/files/${contentId}`,
-      (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/octet-stream",
-          body: encryptedContent,
-        }),
-    );
-    await page.goto("/");
-
-    const decoded = await page.evaluate(
-      async ({ owner, documentId, folderId, folderKey, contentId }) => {
-        const buffer = await window.documentService.loadContent(
-          owner,
-          { documentId, name: documentId },
-          contentId,
-          { id: folderId, key: folderKey as JsonWebKey },
-        );
-        return new TextDecoder().decode(buffer);
-      },
-      { owner, documentId, folderId, folderKey, contentId },
-    );
-
-    expect(decoded).toBe(plaintext);
   });
 
   test("getSettings rejects when the settings document is missing its ids", async ({
@@ -869,15 +1000,15 @@ test.describe("DocumentService error paths", () => {
           {
             documentId: folderId,
             name: "Vacation",
-            type: "Folder",
+            type: "folder",
             documents: [],
-            etag: '"folder-v1"',
+            revision: '"folder-v1"',
           },
           folderKey as JsonWebKey,
         );
         return {
           documents: r.parentFolderDocuments,
-          etag: r.parentFolderETag,
+          etag: r.parentFolderRevision,
         };
       },
       { user, folderId, folderKey },
@@ -955,10 +1086,10 @@ test.describe("DocumentService error paths", () => {
           {
             documentId: folderId,
             name: "Vacation",
-            type: "Folder",
+            type: "folder",
             documents: [],
             owner: folderOwner,
-            etag: '"folder-v0"',
+            revision: '"folder-v0"',
           },
           folderKey as JsonWebKey,
           accessPath,
@@ -996,9 +1127,9 @@ test.describe("DocumentService error paths", () => {
           {
             documentId: folderId,
             name: "Vacation",
-            type: "Folder",
+            type: "folder",
             documents: [],
-            etag: '"folder-v0"',
+            revision: '"folder-v0"',
           },
           folderKey as JsonWebKey,
         ),
@@ -1037,30 +1168,6 @@ test.describe("DocumentService error paths", () => {
 
     expect(message).toContain("changed");
     expect(sentIfMatch).toBe('"doc-v1"');
-  });
-
-  test("storeDocument refuses to add to a folder that did not load cleanly", async ({
-    page,
-  }) => {
-    // A failed loadDocument() returns a placeholder flagged `loadFailed` (no
-    // documents/etag). Adding to it would persist a one-item child list and
-    // silently drop every existing child - storeDocument must reject instead.
-    await page.goto("/");
-
-    const message = await messageFromBrowser(page, () =>
-      window.documentService.storeDocument(
-        "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        new File(["hi"], "note.txt", { type: "text/plain" }),
-        {
-          documentId: "half-loaded-folder",
-          name: "Encrypted Document",
-          loadFailed: true,
-        },
-        {} as JsonWebKey,
-      ),
-    );
-
-    expect(message).toContain("was not loaded cleanly");
   });
 });
 
@@ -1304,7 +1411,7 @@ test.describe("Component error handlers", () => {
     await expect(page.getByText("Error activating device")).toBeVisible();
   });
 
-  test("profile save button no-ops gracefully when the profile failed to load", async ({
+  test("profile page shows a retry message, not a broken form, when the profile fails to load", async ({
     page,
   }) => {
     const profileId = TestData.mary.settings!.profile;
@@ -1313,16 +1420,14 @@ test.describe("Component error handlers", () => {
       await p.route(`**/users/${MARY}/contact-requests`, (route) =>
         route.fulfill({ status: 200, json: [] }),
       );
-      // Let the profile document load fail; loadDocument() swallows it and
-      // ProfilePage still renders the (keyless) Save button - clicking it
-      // must not throw, just log and no-op (§ProfileSaveButton.handleSave's
-      // `!profile.key` guard).
+      // Let the profile document load fail; loadDocument() rejects, and
+      // ProfilePage shows a retry message instead of a Save button for a
+      // profile it never actually has (nothing to no-op on anymore).
       await p.route(`**/users/${MARY}/documents/${profileId}`, (route) =>
         route.fulfill({ status: 500 }),
       );
     });
 
-    const consoleErrors = collectConsoleErrors(page);
     await page.getByRole("link", { name: "Settings" }).first().click();
     await page
       .getByRole("heading", { name: "Profile", exact: true })
@@ -1332,16 +1437,56 @@ test.describe("Component error handlers", () => {
     await expect(
       page.getByText("Could not load your profile. Retrying..."),
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).not.toBeVisible();
+  });
 
-    await page.getByRole("button", { name: "Save" }).click();
+  test("profile page shows a retry message when the profile document isn't actually a profile", async ({
+    page,
+  }) => {
+    const profileId = TestData.mary.settings!.profile;
+    const profileKey = await generateAesGcmKeyJwk();
+    const content = await aesGcmEncrypt(
+      profileKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "folder",
+          name: "Not A Profile",
+          documents: [],
+        }),
+      ),
+    );
+    const wrappedKey = await encryptKeyEnvelope(
+      profileKey,
+      TestData.mary.settingsKey!,
+    );
 
-    await expect
-      .poll(() =>
-        consoleErrors.some((e) =>
-          e.includes("Cannot save profile without its document key"),
-        ),
-      )
-      .toBe(true);
+    await loginMary(page, async (p) => {
+      await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+        route.fulfill({ status: 200, json: [] }),
+      );
+      await p.route(`**/users/${MARY}/documents/${profileId}`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          body: content,
+        }),
+      );
+      await p.route(
+        `**/users/${MARY}/documents/${profileId}/keys/${MARY}`,
+        (route) =>
+          route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+      );
+    });
+
+    await page.getByRole("link", { name: "Settings" }).first().click();
+    await page
+      .getByRole("heading", { name: "Profile", exact: true })
+      .first()
+      .click();
+
+    await expect(
+      page.getByText("Could not load your profile. Retrying..."),
+    ).toBeVisible();
   });
 
   test("the folder page shows an error when the folder document can't be loaded", async ({
@@ -1365,6 +1510,44 @@ test.describe("Component error handlers", () => {
       // ...but the folder document itself fails to load.
       await p.route(`**/users/${MARY}/documents/${documentsId}`, (route) =>
         route.fulfill({ status: 500 }),
+      );
+    });
+
+    await page.getByRole("link", { name: "Images" }).first().click();
+
+    await expect(page.getByText("Could not load this folder.")).toBeVisible();
+  });
+
+  test("the folder page shows an error when the folder document isn't actually a folder", async ({
+    page,
+  }) => {
+    const documentsId = TestData.mary.settings!.documents;
+    const rootKey = TestData.mary.documents[0].key!;
+    const content = await aesGcmEncrypt(
+      rootKey,
+      new TextEncoder().encode(
+        JSON.stringify({ type: "profile", name: "Not A Folder", emails: [] }),
+      ),
+    );
+
+    await loginMary(page, async (p) => {
+      await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+        route.fulfill({ status: 200, json: [] }),
+      );
+      await p.route(
+        `**/users/${MARY}/documents/${documentsId}/keys/${MARY}`,
+        (route) =>
+          route.fulfill({
+            status: 200,
+            path: `tests/images/encrypted/${documentsId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
+          }),
+      );
+      await p.route(`**/users/${MARY}/documents/${documentsId}`, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          body: content,
+        }),
       );
     });
 
@@ -1404,7 +1587,7 @@ async function prepareMarysBrokenChatAndOpenIt(
     new TextEncoder().encode(
       JSON.stringify({
         name: "Chats",
-        type: "folder",
+        type: "chatList",
         contacts: [
           {
             userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",

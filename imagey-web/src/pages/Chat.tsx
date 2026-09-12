@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { contactService } from "../contact/ContactService";
-import { Contact } from "../contact/Contact";
+import { ContactEntry } from "../document/DocumentMetadata";
 import { SendMessageForm } from "../chat/SendMessageForm";
 import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
@@ -26,8 +26,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   // reused here instead of loading that same document a second time (see
   // Chats.tsx's ChatsList onLoaded prop).
   const [chatsDocumentInfo, setChatsDocumentInfo] = useState<{
-    contacts: Contact[];
+    contacts: ContactEntry[];
     chatsDocumentKey: JsonWebKey;
+    name: string;
+    revision: string;
   }>();
   const { messages, setMessages } = usePolling(
     user,
@@ -38,7 +40,12 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { name: contactName, avatarUrl: contactAvatarUrl } = useContactProfile(
+  const {
+    name: contactName,
+    avatarUrl: contactAvatarUrl,
+    avatarId: contactAvatarId,
+    revision: contactProfileRevision,
+  } = useContactProfile(
     user,
     contactUserId,
     publicProfiles?.[contactUserId],
@@ -49,10 +56,70 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   useTitle(contactName || contactUserId);
 
   const handleChatsListLoaded = useCallback(
-    (contacts: Contact[], chatsDocumentKey: JsonWebKey) =>
-      setChatsDocumentInfo({ contacts, chatsDocumentKey }),
+    (chatsDocument: {
+      contacts: ContactEntry[];
+      key: JsonWebKey;
+      name: string;
+      revision: string;
+    }) =>
+      setChatsDocumentInfo({
+        contacts: chatsDocument.contacts,
+        chatsDocumentKey: chatsDocument.key,
+        name: chatsDocument.name,
+        revision: chatsDocument.revision,
+      }),
     [],
   );
+
+  // The chat list's own ContactEntry.name/avatarId is a snapshot taken at
+  // accept/receive time - refresh it in the "chats" document whenever the
+  // contact's PublicProfile has moved on since (a real name/avatar change).
+  useEffect(() => {
+    if (!chatsDocumentInfo || !contactProfileRevision) {
+      return;
+    }
+    const contact = chatsDocumentInfo.contacts.find(
+      (c) => c.userId === contactUserId,
+    );
+    if (!contact || contact.profileRevision === contactProfileRevision) {
+      return;
+    }
+    contactService
+      .updateContactProfileSnapshot(
+        user,
+        {
+          documentId: chatsId,
+          name: chatsDocumentInfo.name,
+          key: chatsDocumentInfo.chatsDocumentKey,
+          revision: chatsDocumentInfo.revision,
+          contacts: chatsDocumentInfo.contacts,
+        },
+        contactUserId,
+        {
+          name: contactName || contact.name,
+          avatarId: contactAvatarId,
+          revision: contactProfileRevision,
+        },
+      )
+      .then(({ contacts, revision }) => {
+        if (revision) {
+          setChatsDocumentInfo((prev) =>
+            prev ? { ...prev, contacts, revision } : prev,
+          );
+        }
+      })
+      .catch((e) =>
+        console.error("Failed to refresh contact profile snapshot", e),
+      );
+  }, [
+    chatsDocumentInfo,
+    contactUserId,
+    contactName,
+    contactAvatarId,
+    contactProfileRevision,
+    chatsId,
+    user,
+  ]);
 
   useEffect(() => {
     if (!contactUserId || !privateKey || !chatsDocumentInfo) {

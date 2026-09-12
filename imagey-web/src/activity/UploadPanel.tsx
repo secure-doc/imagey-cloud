@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { documentService, StoreResult } from "../document/DocumentService";
 import { useUser } from "../contexts/AuthenticationContext";
 import Document from "../document/Document";
+import { FolderMetadata } from "../document/DocumentMetadata";
 
 export default function UploadPanel({
   className,
@@ -19,13 +20,28 @@ export default function UploadPanel({
   const user = useUser();
   const settingsKey = useSettingsKey();
   const documentsId = useDocumentsId();
-  const [rootFolder, setRootFolder] = useState<Document | undefined>();
+  const [rootFolder, setRootFolder] = useState<Document<FolderMetadata>>();
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     documentService
       .loadDocument(user, documentsId, user, settingsKey)
-      .then((document) => setRootFolder(document as Document));
+      .then((document) => {
+        if (document.type !== "folder") {
+          console.error(`Expected a folder document, got ${document.type}`);
+          setLoadError(true);
+          return;
+        }
+        setRootFolder(document);
+      })
+      .catch((e) => {
+        console.error("Failed to load the root folder", e);
+        setLoadError(true);
+      });
   }, [user, settingsKey, documentsId]);
+  if (loadError) {
+    return <>{t("Could not load your images. Retrying...")}</>;
+  }
   if (!rootFolder) {
     return <>{t("Loading...")}</>;
   }

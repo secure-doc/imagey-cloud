@@ -6,7 +6,7 @@ import { documentService } from "../document/DocumentService";
 import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
 
 import DocumentMetadata from "../document/DocumentMetadata";
-import ImageList from "../components/ImageList";
+import ImageComponent from "../components/ImageComponent";
 
 interface SendMessageFormProps {
   userId: string;
@@ -137,10 +137,20 @@ export function SendMessageForm({
           ) : documents.length === 0 ? (
             <div>{t("No documents available")}</div>
           ) : (
-            <ImageList
-              documents={documents}
-              onImageClick={handleShareDocument}
-            />
+            <div className="column">
+              {documents.map((doc) => (
+                <a
+                  key={doc.documentId}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleShareDocument(doc);
+                  }}
+                  className="pointer"
+                >
+                  <ImageComponent image={doc} />
+                </a>
+              ))}
+            </div>
           )}
         </div>
         <nav className="right-align">

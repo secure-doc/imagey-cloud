@@ -2,7 +2,7 @@ import { useState } from "react";
 import { contactService } from "../contact/ContactService";
 import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import { Contact } from "../contact/Contact";
+import { ContactEntry } from "../document/DocumentMetadata";
 import { PublicProfile } from "../profile/PublicProfile";
 import { publicProfileService } from "../profile/publicProfileService";
 
@@ -22,7 +22,7 @@ export default function AcceptInvitationButton({
   // request (see docs/plans/chat-public-profile.md §4). May be absent (an
   // older client, or an inviter whose public-profile somehow does not exist).
   contactPublicProfileId?: string;
-  onAccepted: (contact: Contact) => void;
+  onAccepted: (contact: ContactEntry) => void;
 }) {
   const authentication = useAuthentication();
   const mainKeyPair = authentication.keyPairs.mainKeyPair;

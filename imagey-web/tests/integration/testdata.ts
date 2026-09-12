@@ -175,11 +175,12 @@ export const TestData: TestDataStructure = {
         metadata: "",
         decryptedMetadata: {
           name: "beach-4524911_1920.jpg",
-          type: "image/jpeg",
-          size: "3334311",
+          type: "image",
+          mimeType: "image/jpeg",
+          size: 3334311,
           contentId: "f232a44d-6396-42bb-9196-f0013d46ded5",
           smallImageId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-          previewImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+          mediumImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
         },
         key: {
           alg: "A256GCM",

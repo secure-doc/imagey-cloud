@@ -143,25 +143,30 @@ test("a well-formed but non-matching Access-Path header does not grant access", 
     // of calling a service directly, without going through the UI).
     await page.goto("/");
 
-    // documentService.loadDocument() swallows the underlying HTTP error and
-    // resolves a discriminable `loadFailed` placeholder instead (so a read
-    // path can render *something* rather than reject) - the interaction
-    // above still asserts the real server actually refused the request,
-    // Pact/ContractTest fails this test otherwise.
-    const result = await page.evaluate(
-      ({ owner, documentId, accessPath }) =>
-        window.documentService.loadDocument(
-          owner,
-          documentId,
-          owner,
-          { kty: "oct", k: "irrelevant" } as JsonWebKey,
-          undefined,
-          accessPath,
-        ),
+    // documentService.loadDocument() rejects with a DocumentLoadError on the
+    // underlying HTTP error - the interaction above still asserts the real
+    // server actually refused the request, Pact/ContractTest fails this test
+    // otherwise.
+    const errorName = await page.evaluate(
+      async ({ owner, documentId, accessPath }) => {
+        try {
+          await window.documentService.loadDocument(
+            owner,
+            documentId,
+            owner,
+            { kty: "oct", k: "irrelevant" } as JsonWebKey,
+            undefined,
+            accessPath,
+          );
+          return "<resolved>";
+        } catch (e) {
+          return e instanceof Error ? e.name : String(e);
+        }
+      },
       { owner, documentId, accessPath },
     );
 
-    expect(result.loadFailed).toBe(true);
+    expect(errorName).toBe("DocumentLoadError");
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

@@ -363,13 +363,46 @@ async function main() {
   console.log(
     "decrypted settings: " + new TextDecoder().decode(decryptedSettings),
   );
+  // The child keys must be wrapped (under the root folder's own key) BEFORE
+  // the root folder's own content can be built, since each FolderEntry
+  // embeds its child's wrapped key directly (see document/DocumentMetadata.ts's
+  // FolderEntry - this lets a folder listing unwrap a child's key locally,
+  // with no keys/{kid} request).
+  const encrypted_f9910aa7_4db6_4b02_b596_c3ccf872ae98_key =
+    await cryptoService.encryptKey(
+      TestData.mary.documents[1].key!,
+      TestData.mary.documents[0].key!,
+    );
+  const encrypted_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3_key =
+    await cryptoService.encryptKey(
+      TestData.mary.documents[2].key!,
+      TestData.mary.documents[0].key!,
+    );
   const rootFolder = {
-    documents: [
-      "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
-      "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-    ],
     type: "folder",
     name: "Documents",
+    documents: [
+      {
+        documentId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+        name: "beach-1836467_1920.jpg",
+        type: "image",
+        mimeType: "image/jpeg",
+        mediumImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
+        sharedKey: {
+          sharedKey: encrypted_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3_key,
+        },
+      },
+      {
+        documentId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
+        name: "beach-4524911_1920.jpg",
+        type: "image",
+        mimeType: "image/jpeg",
+        mediumImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+        sharedKey: {
+          sharedKey: encrypted_f9910aa7_4db6_4b02_b596_c3ccf872ae98_key,
+        },
+      },
+    ],
   };
   const rootFolderText = JSON.stringify(rootFolder);
   const encrytpedRootFolder = await cryptoService.encryptDocument(
@@ -398,11 +431,12 @@ async function main() {
   );
   const document_f9910aa7_4db6_4b02_b596_c3ccf872ae98 = {
     name: "beach-4524911_1920.jpg",
-    type: "image/jpeg",
-    size: "3334311",
+    type: "image",
+    mimeType: "image/jpeg",
+    size: 3334311,
     contentId: "f232a44d-6396-42bb-9196-f0013d46ded5",
     smallImageId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-    previewImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+    mediumImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
   };
   const document_f9910aa7_4db6_4b02_b596_c3ccf872ae98_text = JSON.stringify(
     document_f9910aa7_4db6_4b02_b596_c3ccf872ae98,
@@ -428,11 +462,6 @@ async function main() {
         decrypted_document_f9910aa7_4db6_4b02_b596_c3ccf872ae98,
       ),
   );
-  const encrypted_f9910aa7_4db6_4b02_b596_c3ccf872ae98_key =
-    await cryptoService.encryptKey(
-      TestData.mary.documents[1].key!,
-      TestData.mary.documents[0].key!,
-    );
   console.log(
     "encrypted f9910aa7-4db6-4b02-b596-c3ccf872ae98 key: " +
       encrypted_f9910aa7_4db6_4b02_b596_c3ccf872ae98_key,
@@ -447,12 +476,13 @@ async function main() {
       JSON.stringify(decrytped_f9910aa7_4db6_4b02_b596_c3ccf872ae98_key),
   );
   const document_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3 = {
-    name: "beach-4524911_1920.jpg",
-    type: "image/jpeg",
-    size: "3334311",
-    contentId: "f232a44d-6396-42bb-9196-f0013d46ded5",
-    smallImageId: "f9910aa7-4db6-4b02-b596-c3ccf872ae98",
-    previewImageId: "330e1a82-6626-4a4b-b1ca-9c8a59c859e4",
+    name: "beach-1836467_1920.jpg",
+    type: "image",
+    mimeType: "image/jpeg",
+    size: 1891585,
+    contentId: "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b",
+    smallImageId: "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3",
+    mediumImageId: "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0",
   };
   const document_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3_text = JSON.stringify(
     document_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3,
@@ -478,11 +508,6 @@ async function main() {
         decrypted_document_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3,
       ),
   );
-  const encrypted_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3_key =
-    await cryptoService.encryptKey(
-      TestData.mary.documents[2].key!,
-      TestData.mary.documents[0].key!,
-    );
   console.log(
     "encrypted bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3 key: " +
       encrypted_bb66aba3_8338_4ef4_a6f8_43ed0b39ecd3_key,

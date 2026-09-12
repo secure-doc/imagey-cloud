@@ -1,13 +1,13 @@
-import DocumentMetadata from "../document/DocumentMetadata";
+import { FolderEntry } from "../document/DocumentMetadata";
 
 export default function FolderImageComponent({
   folder,
   className = "small-width small-height",
   onClick,
 }: {
-  folder: DocumentMetadata;
+  folder: FolderEntry;
   className?: string;
-  onClick?: () => void;
+  onClick: () => void;
 }) {
   const name = folder.name || "Folder";
 
@@ -30,7 +30,7 @@ export default function FolderImageComponent({
       loading="lazy"
       className={className}
       onClick={onClick}
-      style={{ cursor: onClick ? "pointer" : "default" }}
+      style={{ cursor: "pointer" }}
     />
   );
 }

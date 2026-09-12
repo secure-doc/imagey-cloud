@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import Document from "../document/Document";
+import { FolderMetadata } from "../document/DocumentMetadata";
 import { useAccessPath, useKey } from "../contexts/FolderContext";
 
 export default function UploadButton({
@@ -18,7 +19,7 @@ export default function UploadButton({
   onUploadComplete?: (result: StoreResult) => void;
   children?: React.ReactNode;
   "aria-label"?: string;
-  folder: Document;
+  folder: Document<FolderMetadata>;
   asMenuItem?: boolean;
 }) {
   const fileChooser = useRef<HTMLInputElement>(null);
@@ -29,7 +30,7 @@ export default function UploadButton({
   // Set only when `folder` was reached through a contact's shared tree
   // (ADR 0009); undefined for our own folders, where the server's
   // direct-grant scan needs no header.
-  const accessPath = useAccessPath(folder.documentId, folder.owner ?? "");
+  const accessPath = useAccessPath(folder.documentId, folder.owner);
 
   const handleUpload = async (files: File[]) => {
     if (!user || !folderKey) return;

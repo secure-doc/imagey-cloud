@@ -16,13 +16,13 @@ interface Options {
 //     so the second invocation recognizes the load for this identity is already
 //     under way and skips re-issuing it - while a genuine remount starts with a
 //     fresh ref and reloads normally.
-//   - `documentService.loadDocument` never rejects: a failed fetch/decrypt
-//     comes back as a `loadFailed` placeholder. `load` must detect that and
-//     return `false`, otherwise a transient 5xx would leave the caller silently
-//     empty forever behind the load-once ref.
+//   - `load` can either resolve `false` or reject (e.g. a documentService
+//     DocumentLoadError) to signal failure - either way the ref is cleared so
+//     a retry is scheduled, instead of a transient 5xx leaving the caller
+//     silently empty forever behind the load-once ref.
 //
-// `load` returns `true` when the data is good and `false` when it is not (the
-// hook then clears the ref and schedules a retry).
+// `load` returns `true` when the data is good and `false` (or a rejection)
+// when it is not (the hook then clears the ref and schedules a retry).
 export function useReloadableLoad(
   load: () => Promise<boolean>,
   deps: DependencyList,
@@ -43,13 +43,20 @@ export function useReloadableLoad(
     }
     loadedForRef.current = loadKey;
 
-    loadRef.current().then((ok) => {
-      setFailed(!ok);
-      if (!ok) {
-        // Let the retry effect (or a dependency change) re-issue the load.
+    loadRef.current().then(
+      (ok) => {
+        setFailed(!ok);
+        if (!ok) {
+          // Let the retry effect (or a dependency change) re-issue the load.
+          loadedForRef.current = null;
+        }
+      },
+      () => {
+        // A rejected load is a failure too - same as an `ok === false`.
+        setFailed(true);
         loadedForRef.current = null;
-      }
-    });
+      },
+    );
   }, [depsKey, reloadCount]);
 
   useEffect(() => {

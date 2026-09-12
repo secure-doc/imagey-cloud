@@ -57,13 +57,7 @@ export function SharedDocumentMessage({
           undefined,
           accessPath,
         )
-        .then((doc) => {
-          if (!doc.key) {
-            setError(true);
-            return;
-          }
-          setDocument(doc);
-        })
+        .then((doc) => setDocument(doc))
         .catch(() => setError(true));
     }
   }, [user, owner, documentId, parentId, parentKey, accessPath]);

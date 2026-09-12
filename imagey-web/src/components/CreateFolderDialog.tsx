@@ -4,6 +4,7 @@ import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useAccessPath } from "../contexts/FolderContext";
 import Document from "../document/Document";
+import { FolderMetadata } from "../document/DocumentMetadata";
 
 interface CreateFolderDialogProps {
   // The already-loaded parent folder Document (name, type, its existing
@@ -11,7 +12,7 @@ interface CreateFolderDialogProps {
   // (with the new child id appended) as the parent's updated metadata, so
   // a stub carrying only documentId/documents would silently wipe out the
   // parent's real name/type on every subfolder creation.
-  parentFolder?: Document;
+  parentFolder?: Document<FolderMetadata>;
   parentFolderKey?: JsonWebKey;
   onClose: () => void;
   onCreated: (result: StoreResult) => void;

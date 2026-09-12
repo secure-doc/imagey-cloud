@@ -15,10 +15,12 @@ export function useContactProfile(
   contactUserId: string | undefined,
   publicProfileId: string | undefined,
   chatKey: JsonWebKey | undefined,
-): { name?: string; avatarUrl?: string } {
+): { name?: string; avatarUrl?: string; avatarId?: string; revision?: string } {
   const [profile, setProfile] = useState<{
     name?: string;
     avatarBlob?: Blob;
+    avatarId?: string;
+    revision?: string;
   }>();
   const avatarUrl = useObjectUrl(profile?.avatarBlob);
 
@@ -44,5 +46,10 @@ export function useContactProfile(
   // Treat a blank/whitespace-only name as "no name" so callers fall back to
   // the contact's userId/initial instead of rendering an empty label.
   const name = profile?.name?.trim() || undefined;
-  return { name, avatarUrl };
+  return {
+    name,
+    avatarUrl,
+    avatarId: profile?.avatarId,
+    revision: profile?.revision,
+  };
 }
