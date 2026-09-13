@@ -12,9 +12,13 @@ import { NewDocumentMetadata } from "../document/DocumentMetadata";
 // instead.
 export default function ImageComponent({
   image,
+  contentId,
+  accessPath,
   className = "small-width small-height",
 }: {
   image: NewDocumentMetadata;
+  contentId?: string;
+  accessPath?: string;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -30,13 +34,13 @@ export default function ImageComponent({
     setError(false);
 
     documentService
-      .loadContent(image)
+      .loadContent(image, contentId, accessPath)
       .then((content) => setContent(content))
       .catch((e) => {
         console.error("Error loading image content", e);
         setError(true);
       });
-  }, [image]);
+  }, [image, contentId, accessPath]);
 
   const mimeType = "mimeType" in image ? image.mimeType : undefined;
   const blob = useMemo(

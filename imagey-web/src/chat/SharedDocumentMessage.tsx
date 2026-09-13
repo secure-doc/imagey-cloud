@@ -72,7 +72,14 @@ export function SharedDocumentMessage({
 
   return (
     <div className="shared-document">
-      <ImageComponent image={document} className="responsive max" />
+      <ImageComponent
+        image={document}
+        contentId={
+          document.type === "image" ? document.smallImageId : undefined
+        }
+        accessPath={accessPath}
+        className="responsive max"
+      />
     </div>
   );
 }
