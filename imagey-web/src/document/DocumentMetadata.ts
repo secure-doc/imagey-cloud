@@ -48,7 +48,7 @@ export interface ImageMetadata extends BaseMetadata {
   mimeType: string;
   size: number;
   contentId: string;
-  // ~480px, written on upload; nothing in the app reads this today.
+  // ~480px, written on upload; read by SharedDocumentMessage for the chat preview.
   smallImageId: string;
   // ~1024px, renamed from previewImageId - what the grid actually renders.
   mediumImageId: string;

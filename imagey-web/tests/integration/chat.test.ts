@@ -367,6 +367,28 @@ test("share a document in chat", async ({ page }) => {
     )
     .willRespondWith(200);
 
+  // Interaction to load the small image content once the message renders in
+  // the chat stream - chat shows the small image, not the medium one; its
+  // smallImageId is the document's own id (see
+  // scripts/encryptMarysDocuments.ts).
+  provider
+    .addInteraction()
+    .uponReceiving("a request to get the small image content after sharing")
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/${documentId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${documentId}/files/${documentId}`,
+      ),
+    );
+
   // Interaction to post the message
   const builder = provider
     .addInteraction()
@@ -530,20 +552,22 @@ test("view shared document from another user", async ({ page }) => {
       ),
     );
 
-  // Interaction to load the file
+  // Interaction to load the file. Chat renders the small image, not the
+  // medium one - bb66aba3's smallImageId is its own documentId (see
+  // scripts/encryptMarysDocuments.ts).
   await builder
     .addInteraction()
     .given("Mary has shared a document with alice")
     .uponReceiving("a request to get the shared document file as recipient")
     .withRequest(
       "GET",
-      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/${documentId}`,
       (r) => r.headers({ Accept: "application/octet-stream" }),
     )
     .willRespondWith(200, (r) =>
       r.binaryFile(
         "application/octet-stream",
-        `tests/images/encrypted/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+        `tests/images/encrypted/${documentId}/files/${documentId}`,
       ),
     )
     .executeTest(async (mockServer) => {
