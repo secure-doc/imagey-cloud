@@ -121,21 +121,26 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     user,
   ]);
 
+  // The chat's shared key is the chat Document's own Document key - look up
+  // the matching Contact in the "chats" document, then let ContactService
+  // figure out whether it's ours (self-issued) or the other party's (ECDH-
+  // wrapped for us). Depending only on the contact's owner/chatId (rather
+  // than the whole chatsDocumentInfo object) keeps a profile-snapshot sync
+  // (which replaces chatsDocumentInfo purely to patch one contact's cached
+  // name/avatar) from re-running this effect and reloading the open chat.
+  const contact = chatsDocumentInfo?.contacts.find(
+    (c) => c.userId === contactUserId,
+  );
+  const chatsDocumentKey = chatsDocumentInfo?.chatsDocumentKey;
+
   useEffect(() => {
-    if (!contactUserId || !privateKey || !chatsDocumentInfo) {
+    if (!contactUserId || !privateKey || !chatsDocumentKey) {
       return;
     }
     setSharedKey(undefined);
     setPublicProfiles(undefined);
     setChat(undefined);
     setKeyError(false);
-    // The chat's shared key is the chat Document's own Document key - look
-    // up the matching Contact in the "chats" document, then let
-    // ContactService figure out whether it's ours (self-issued) or the
-    // other party's (ECDH-wrapped for us).
-    const contact = chatsDocumentInfo.contacts.find(
-      (c) => c.userId === contactUserId,
-    );
     if (!contact) {
       console.error(`No chat found for contact ${contactUserId}`);
       setKeyError(true);
@@ -143,7 +148,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     }
     setChat({ ownerId: contact.owner, chatId: contact.chatId });
     contactService
-      .loadChatKey(user, contact, chatsId, chatsDocumentInfo.chatsDocumentKey)
+      .loadChatKey(user, contact, chatsId, chatsDocumentKey)
       .then(({ key, publicProfiles }) => {
         setSharedKey(key);
         setPublicProfiles(publicProfiles);
@@ -152,7 +157,16 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         console.error(e);
         setKeyError(true);
       });
-  }, [user, contactUserId, chatsId, chatsDocumentInfo, privateKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    user,
+    contactUserId,
+    chatsId,
+    chatsDocumentKey,
+    contact?.owner,
+    contact?.chatId,
+    privateKey,
+  ]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -200,19 +200,29 @@ test("navigate from devices to profile via settings list", async ({ page }) => {
     const deviceEntry = page.getByRole("heading", { name: "This device" });
     await expect(deviceEntry).toBeVisible();
 
-    // Navigate to Profile via Settings list
+    // Navigate to Profile via Settings list. ProfilePage's own <h5> "Profile"
+    // title (asserted below) renders unconditionally on mount, before Mary's
+    // (empty) profile document/key fetch even starts - so waiting for that
+    // heading doesn't guarantee the fetch has finished, or even started. Wait
+    // for the profile document key response explicitly (the second, and
+    // last, of the two requests that fetch fires) so the runningPactRequests
+    // poll below can't observe a dip to 0 while that fetch is still pending -
+    // which is what let Pact's mock server tear down mid-request, causing the
+    // "route.fetch: connect ECONNREFUSED" seen on the second profile GET.
+    const profileKeyResponse = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(`/documents/${TestData.mary.settings!.profile}/keys/`),
+    );
     const profileLink = page.getByRole("heading", { name: "Profile" }).first();
     await expect(profileLink).toBeVisible();
     await profileLink.click();
+    await profileKeyResponse;
 
     // Then. Must scope to level 5 (ProfilePage's own <h5> title) - without
     // it, this locator is already satisfied by SettingsList's <h6>"Profile"
     // sidebar item, which is on screen on the Devices page even before this
-    // click navigates anywhere. That false positive was making this
-    // assertion (and the whole executeTest callback) resolve instantly,
-    // before the real navigation/fetch even started - Pact's mock server
-    // then got torn down while that fetch was still in flight, which is the
-    // "route.fetch: connect ECONNREFUSED" seen on the second profile GET.
+    // click navigates anywhere.
     const profileHeading2 = page.getByRole("heading", {
       name: "Profile",
       exact: true,
