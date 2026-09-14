@@ -797,6 +797,60 @@ test.describe("publicProfileService error/race paths", () => {
     });
   });
 
+  test("ensurePublicProfile rethrows the original error when the concurrent winner hasn't linked a public profile yet", async ({
+    page,
+  }) => {
+    // Same race as "adopts a concurrently created public profile after a
+    // 412" above, but this time the winning device's write only got as far
+    // as saving the private profile - it hasn't set publicProfileId yet
+    // (e.g. it crashed, or is still mid-flight elsewhere). There's then
+    // nothing to adopt: adoptConcurrentlyCreatedPublicProfile gives up and
+    // rethrows the original 412 failure rather than creating a second,
+    // orphaned public profile. The reloaded payload also omits `emails`,
+    // exercising its `?? []` fallback.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const profileId = TestData.mary.settings!.profile;
+    const profileKey = TestData.mary.documents[5].key!;
+
+    const reloadedProfileContent = await aesGcmEncrypt(
+      profileKey,
+      new TextEncoder().encode(JSON.stringify({ name: "Mary Doe" })),
+    );
+    const builder = provider
+      .addInteraction()
+      .uponReceiving(
+        "a request of mary to reload her profile after losing the public-profile creation race without a winner yet",
+      )
+      .withRequest("GET", `/users/${userId}/documents/${profileId}`, (r) =>
+        r.headers({ Accept: "application/octet-stream" }),
+      )
+      .willRespondWith(200, (r) =>
+        r.body("application/octet-stream", reloadedProfileContent),
+      );
+
+    await builder.executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      await page.route(`**/users/${userId}/documents`, (route) =>
+        route.fulfill({ status: 412 }),
+      );
+      await page.goto("/");
+
+      const message = await messageFromBrowser(
+        page,
+        async ({ userId, profileId, profileKey }) =>
+          window.publicProfileService.ensurePublicProfile(userId, profileId, {
+            name: "",
+            emails: [],
+            key: profileKey,
+          }),
+        { userId, profileId, profileKey },
+      );
+
+      expect(message).toBe("Folder changed during upload");
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+  });
+
   test("loadContactProfile falls back to undefined when the contact's public profile isn't reachable", async ({
     page,
   }) => {
@@ -965,6 +1019,202 @@ test.describe("publicProfileService error/race paths", () => {
       );
       await expect.poll(() => runningPactRequests).toBe(0);
     });
+  });
+
+  test("loadContactProfile falls back to undefined when the contact's public profile document has an unexpected type", async ({
+    page,
+  }) => {
+    // Distinct from "isn't reachable" above (a 404, caught by the outer
+    // try/catch): here the document loads and decrypts just fine, but isn't
+    // actually a publicProfile - e.g. the chat metadata's publicProfileId
+    // got corrupted or points at the wrong document. loadContactProfile's
+    // own type check (not its catch block) is what returns undefined here.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const contactUserId = "a358c2ed-07d4-4a25-a7db-d860d5c0b895";
+    const publicProfileId = "77777777-7777-7777-7777-777777777776";
+    const chatKey = await generateAesGcmKeyJwk();
+    const documentKey = await generateAesGcmKeyJwk();
+
+    const content = await aesGcmEncrypt(
+      documentKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "folder",
+          name: "Not A Public Profile",
+          documents: [],
+        }),
+      ),
+    );
+    const wrappedKey = await encryptKeyEnvelope(documentKey, chatKey);
+
+    await page.route(
+      `**/users/${contactUserId}/documents/${publicProfileId}`,
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          body: content,
+        }),
+    );
+    await page.route(
+      `**/users/${contactUserId}/documents/${publicProfileId}/keys/${userId}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+    );
+    await page.goto("/");
+
+    const result = await page.evaluate(
+      async ({ userId, contactUserId, publicProfileId, chatKey }) =>
+        window.publicProfileService.loadContactProfile(
+          userId,
+          contactUserId,
+          publicProfileId,
+          chatKey,
+        ),
+      { userId, contactUserId, publicProfileId, chatKey },
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test("ensurePublicProfile rejects when the linked public profile document has an unexpected type", async ({
+    page,
+  }) => {
+    // Distinct from "...can no longer be loaded" above (a 404): here the
+    // linked document loads and decrypts fine but isn't a publicProfile -
+    // loadOwnPublicProfile's type check (not its catch block) is what
+    // returns undefined here, which ensurePublicProfile then rejects on.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const profileId = TestData.mary.settings!.profile;
+    const profileKey = TestData.mary.documents[5].key!;
+    const existingPublicProfileId = "88888888-8888-8888-8888-888888888889";
+    const documentKey = await generateAesGcmKeyJwk();
+
+    const content = await aesGcmEncrypt(
+      documentKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "folder",
+          name: "Not A Public Profile",
+          documents: [],
+        }),
+      ),
+    );
+    const wrappedKey = await encryptKeyEnvelope(documentKey, profileKey);
+
+    await page.route(
+      `**/users/${userId}/documents/${existingPublicProfileId}`,
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/octet-stream",
+          body: content,
+        }),
+    );
+    await page.route(
+      `**/users/${userId}/documents/${existingPublicProfileId}/keys/${profileId}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      async ({ userId, profileId, profileKey, existingPublicProfileId }) =>
+        window.publicProfileService.ensurePublicProfile(userId, profileId, {
+          name: "",
+          emails: [],
+          key: profileKey,
+          publicProfileId: existingPublicProfileId,
+        }),
+      { userId, profileId, profileKey, existingPublicProfileId },
+    );
+
+    expect(message).toBe(
+      "Failed to load existing public profile " + existingPublicProfileId,
+    );
+  });
+
+  test("setName falls back to the previous revision when the update response carries no ETag", async ({
+    page,
+  }) => {
+    // documentService.updateDocumentMetadata resolves to null when the
+    // server's response carries no ETag header - setName then keeps the
+    // publicProfile's previous revision rather than overwriting it with
+    // null (which would send no If-Match on the next save).
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const documentId = "public-profile-no-etag";
+    const key = await generateAesGcmKeyJwk();
+
+    await page.route(`**/users/${userId}/documents/${documentId}`, (route) =>
+      route.fulfill({ status: 200 }),
+    );
+    await page.goto("/");
+
+    const result = await page.evaluate(
+      async ({ userId, documentId, key }) =>
+        window.publicProfileService.setName(
+          userId,
+          {
+            documentId,
+            name: "Old Name",
+            owner: userId,
+            revision: '"old-revision"',
+            key: key as JsonWebKey,
+            type: "publicProfile",
+          },
+          "New Name",
+        ),
+      { userId, documentId, key },
+    );
+
+    expect(result.revision).toBe('"old-revision"');
+  });
+
+  test("setAvatar falls back to the previous revision when the update response carries no ETag", async ({
+    page,
+  }) => {
+    // Same fallback as setName above, exercised on setAvatar's own
+    // `newRevision ?? publicProfile.revision`.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const documentId = "public-profile-no-etag-avatar";
+    const key = await generateAesGcmKeyJwk();
+
+    await page.route(
+      `**/users/${userId}/documents/${documentId}/files/*`,
+      (route) => route.fulfill({ status: 200 }),
+    );
+    await page.route(`**/users/${userId}/documents/${documentId}`, (route) =>
+      route.fulfill({ status: 200 }),
+    );
+    await page.goto("/");
+
+    const result = await page.evaluate(
+      async ({ userId, documentId, key }) => {
+        // A minimal 1x1 transparent PNG - just needs to be decodable;
+        // renderAvatar re-encodes it to the fixed avatar size regardless of
+        // the source's own dimensions.
+        const base64Png =
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        const bytes = Uint8Array.from(atob(base64Png), (c) => c.charCodeAt(0));
+        const picture = new File([bytes], "avatar.png", { type: "image/png" });
+        return window.publicProfileService.setAvatar(
+          userId,
+          {
+            documentId,
+            name: "Mary",
+            owner: userId,
+            revision: '"old-revision"',
+            key: key as JsonWebKey,
+            type: "publicProfile",
+          },
+          picture,
+        );
+      },
+      { userId, documentId, key },
+    );
+
+    expect(result.revision).toBe('"old-revision"');
   });
 });
 
