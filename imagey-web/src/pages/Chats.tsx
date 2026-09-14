@@ -58,10 +58,12 @@ export function ChatsList({
   const settings = authentication.settings;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>();
-  const [contacts, setContacts] = useState<ContactEntry[]>();
-  const [chatsDocumentKey, setChatsDocumentKey] = useState<JsonWebKey>();
-  const [chatsName, setChatsName] = useState<string>();
-  const [chatsRevision, setChatsRevision] = useState<string>();
+  const [chatsDocument, setChatsDocument] = useState<{
+    contacts: ContactEntry[];
+    key: JsonWebKey;
+    name: string;
+    revision: string;
+  }>();
   const settingsKey = useSettingsKey();
   const { requestContact, namePrompt, confirmDisplayName, cancelDisplayName } =
     useSendContactRequest(
@@ -97,22 +99,24 @@ export function ChatsList({
       .catch((e) => console.error("Failed to fetch contact requests", e));
 
     try {
-      const chatsDocument = await documentService.loadDocument(
+      const loaded = await documentService.loadDocument(
         user,
         id,
         user,
         settingsKey,
       );
-      if (chatsDocument.type !== "chatList") {
+      if (loaded.type !== "chatList") {
         throw new Error(
-          `Expected the chats document to be a chatList, got ${chatsDocument.type}`,
+          `Expected the chats document to be a chatList, got ${loaded.type}`,
         );
       }
       onLoadError?.(false);
-      setContacts(chatsDocument.contacts);
-      setChatsDocumentKey(chatsDocument.key);
-      setChatsName(chatsDocument.name);
-      setChatsRevision(chatsDocument.revision);
+      setChatsDocument({
+        contacts: loaded.contacts,
+        key: loaded.key,
+        name: loaded.name,
+        revision: loaded.revision,
+      });
       return true;
     } catch (e) {
       console.error("Failed to load chats document", e);
@@ -121,25 +125,15 @@ export function ChatsList({
     }
   }, [user, id, settingsKey]);
 
-  // Re-publish to onLoaded whenever the contacts list changes - not just on the
-  // first load - so a contact added afterwards (an accepted invitation, or the
-  // inviter picking up an ACCEPTED request via receiveContactRequest) is
+  // Re-publish to onLoaded whenever the chats document changes - not just on
+  // the first load - so a contact added afterwards (an accepted invitation, or
+  // the inviter picking up an ACCEPTED request via receiveContactRequest) is
   // immediately reachable in Chat.tsx instead of only after a full reload.
   useEffect(() => {
-    if (
-      chatsDocumentKey &&
-      contacts &&
-      chatsName !== undefined &&
-      chatsRevision !== undefined
-    ) {
-      onLoaded?.({
-        contacts,
-        key: chatsDocumentKey,
-        name: chatsName,
-        revision: chatsRevision,
-      });
+    if (chatsDocument) {
+      onLoaded?.(chatsDocument);
     }
-  }, [contacts, chatsDocumentKey, chatsName, chatsRevision, onLoaded]);
+  }, [chatsDocument, onLoaded]);
 
   // The inviter's side of the handshake: once the invitee has ACCEPTED the
   // request, pick up our ECDH-wrapped copy of the chat key, record the
@@ -186,7 +180,11 @@ export function ChatsList({
                 ),
             ),
           );
-          setContacts((prev) => (prev ?? []).concat(newContact));
+          setChatsDocument((prev) =>
+            prev
+              ? { ...prev, contacts: prev.contacts.concat(newContact) }
+              : prev,
+          );
         })
         .catch((e) => {
           // Let a genuine retry happen after a transient failure.
@@ -217,7 +215,8 @@ export function ChatsList({
           {i18n.t("Could not load your chats. Retrying...")}
         </div>
       )}
-      {(contacts && contacts.length > 0) || openInvitations.length > 0 ? (
+      {(chatsDocument?.contacts && chatsDocument.contacts.length > 0) ||
+      openInvitations.length > 0 ? (
         <ul className="list border">
           {openInvitations.map((contactRequest, index) => (
             <li key={index}>
@@ -240,8 +239,13 @@ export function ChatsList({
                         (request) => request.inviter !== contactRequest.inviter,
                       ),
                     );
-                    setContacts((contacts) =>
-                      (contacts ?? []).concat(newContact),
+                    setChatsDocument((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            contacts: prev.contacts.concat(newContact),
+                          }
+                        : prev,
                     );
                   }}
                 />
@@ -259,8 +263,8 @@ export function ChatsList({
               </div>
             </li>
           ))}
-          {contacts &&
-            contacts.map((contact, index) => (
+          {chatsDocument?.contacts &&
+            chatsDocument.contacts.map((contact, index) => (
               <li key={index + openInvitations.length}>
                 <NavLink
                   to={`/chats/${contact.userId}`}

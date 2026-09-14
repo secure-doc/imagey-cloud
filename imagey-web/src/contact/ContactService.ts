@@ -5,8 +5,39 @@ import { PublicProfile } from "../profile/PublicProfile";
 import { ContactEntry } from "../document/DocumentMetadata";
 import { ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
-import { documentRepository } from "../document/DocumentRepository";
+import {
+  documentRepository,
+  PreconditionFailedError,
+} from "../document/DocumentRepository";
 import { documentService } from "../document/DocumentService";
+
+// How often updateContactProfileSnapshot re-reads the "chats" document and
+// retries after the server rejected the write because it changed concurrently
+// (e.g. the same chat open in two tabs, or a contact-request accept/receive
+// racing this update) - same reasoning as DocumentService.storeDocument's own
+// retry loop.
+const MAX_CHATS_UPDATE_RETRIES = 3;
+
+// Re-fetches and decrypts the "chats" document with a key we already hold,
+// returning just what updateContactProfileSnapshot needs to re-apply its
+// change after a concurrent-modification 412: the current contacts list and
+// the current revision.
+async function reloadChatsContacts(
+  userId: UserId,
+  chatsDocumentId: string,
+  chatsDocumentKey: JsonWebKey,
+): Promise<{ contacts: ContactEntry[]; revision: string | null }> {
+  const { content, etag } = await documentRepository.loadDocument(
+    userId,
+    chatsDocumentId,
+  );
+  const decrypted = await cryptoService.decryptDocument(
+    chatsDocumentKey,
+    content,
+  );
+  const payload = JSON.parse(new TextDecoder().decode(decrypted));
+  return { contacts: payload.contacts ?? [], revision: etag };
+}
 
 // Appends a contact to the "chats" document's list, replacing any existing
 // entry for the same chat (chatId is a freshly generated uuid, unique per
@@ -22,6 +53,19 @@ function appendContact(
 ): ContactEntry[] {
   const others = existing.filter((c) => c.chatId !== contact.chatId);
   return [...others, contact];
+}
+
+// The other party's name/avatar aren't known yet at accept/receive time, only
+// their userId - name falls back to the userId for now, and profileRevision
+// starts as "" so the first time this chat is opened, the mismatch against
+// the real loaded PublicProfileMetadata.revision triggers a snapshot refresh
+// (see Chat.tsx / updateContactProfileSnapshot).
+function makePlaceholderContactEntry(
+  userId: string,
+  chatId: string,
+  owner: string,
+): ContactEntry {
+  return { userId, chatId, owner, name: userId, profileRevision: "" };
 }
 
 export const contactService = {
@@ -85,19 +129,7 @@ export const contactService = {
         chatsDocument.key,
       );
 
-      // The contact's own name/avatar aren't known yet at accept time (only
-      // their userId, and maybe their public-profile id) - name falls back
-      // to the userId for now, and profileRevision starts as "" so the first
-      // time this chat is opened, the mismatch against the real loaded
-      // PublicProfileMetadata.revision triggers a snapshot refresh (see
-      // Chat.tsx / updateContactProfileSnapshot).
-      const contact: ContactEntry = {
-        userId: contactId,
-        chatId,
-        owner: userId,
-        name: contactId,
-        profileRevision: "",
-      };
+      const contact = makePlaceholderContactEntry(contactId, chatId, userId);
       const updatedContacts = appendContact(chatsDocument.contacts, contact);
       const [encryptedChatsContent] = await cryptoService.encryptDocument(
         chatsDocument.key,
@@ -223,15 +255,11 @@ export const contactService = {
       chatDocumentKey,
     );
 
-    // Same reasoning as acceptContactRequest's ContactEntry above: the
-    // invitee's own name/avatar aren't known yet here, only their userId.
-    const contact: ContactEntry = {
-      userId: request.invitee,
-      chatId: request.chatId,
-      owner: request.invitee,
-      name: request.invitee,
-      profileRevision: "",
-    };
+    const contact = makePlaceholderContactEntry(
+      request.invitee,
+      request.chatId,
+      request.invitee,
+    );
     const updatedContacts = appendContact(chatsDocument.contacts, contact);
     await documentService.updateDocumentMetadata(
       userId,
@@ -308,27 +336,51 @@ export const contactService = {
     contactUserId: string,
     snapshot: { name: string; avatarId?: string; revision: string },
   ): Promise<{ contacts: ContactEntry[]; revision: string | null }> => {
-    const updatedContacts = chatsDocument.contacts.map((contact) =>
-      contact.userId === contactUserId
-        ? {
-            ...contact,
-            name: snapshot.name,
-            avatarId: snapshot.avatarId,
-            profileRevision: snapshot.revision,
-          }
-        : contact,
+    let currentContacts = chatsDocument.contacts;
+    let currentRevision = chatsDocument.revision;
+    for (let attempt = 1; attempt <= MAX_CHATS_UPDATE_RETRIES; attempt++) {
+      const updatedContacts = currentContacts.map((contact) =>
+        contact.userId === contactUserId
+          ? {
+              ...contact,
+              name: snapshot.name,
+              avatarId: snapshot.avatarId,
+              profileRevision: snapshot.revision,
+            }
+          : contact,
+      );
+      try {
+        const newRevision = await documentService.updateDocumentMetadata(
+          userId,
+          chatsDocument.documentId,
+          chatsDocument.key,
+          {
+            name: chatsDocument.name,
+            type: "chatList",
+            contacts: updatedContacts,
+          },
+          currentRevision,
+        );
+        return { contacts: updatedContacts, revision: newRevision };
+      } catch (e) {
+        if (
+          !(e instanceof PreconditionFailedError) ||
+          attempt >= MAX_CHATS_UPDATE_RETRIES
+        ) {
+          throw e;
+        }
+        const reloaded = await reloadChatsContacts(
+          userId,
+          chatsDocument.documentId,
+          chatsDocument.key,
+        );
+        currentContacts = reloaded.contacts;
+        currentRevision = reloaded.revision;
+      }
+    }
+    // Unreachable: the final iteration either returns or rethrows.
+    throw new PreconditionFailedError(
+      "Chats document update retries exhausted",
     );
-    const newRevision = await documentService.updateDocumentMetadata(
-      userId,
-      chatsDocument.documentId,
-      chatsDocument.key,
-      {
-        name: chatsDocument.name,
-        type: "chatList",
-        contacts: updatedContacts,
-      },
-      chatsDocument.revision,
-    );
-    return { contacts: updatedContacts, revision: newRevision };
   },
 };

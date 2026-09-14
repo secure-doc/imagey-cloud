@@ -543,6 +543,138 @@ test.describe("ContactService error paths", () => {
 
     expect(message).toBe("Expected a chat document, got folder");
   });
+
+  test("updateContactProfileSnapshot re-reads the chats document and retries when the write hits a concurrent-change 412", async ({
+    page,
+  }) => {
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const chatsDocumentId = "chats-retry";
+    const chatsKey = await generateAesGcmKeyJwk();
+    const alice = {
+      userId: "alice",
+      chatId: "chat-alice",
+      owner: user,
+      name: "alice",
+      profileRevision: "",
+    };
+    // A contact added to the "chats" document by another write since the
+    // client loaded it - the retry's re-read must pick this sibling up
+    // alongside alice's own refreshed snapshot.
+    const concurrentlyAddedSibling = {
+      userId: "bob",
+      chatId: "chat-bob",
+      owner: user,
+      name: "bob",
+      profileRevision: "",
+    };
+    const reloadedChats = await aesGcmEncrypt(
+      chatsKey,
+      new TextEncoder().encode(
+        JSON.stringify({
+          name: "chats",
+          type: "chatList",
+          contacts: [alice, concurrentlyAddedSibling],
+        }),
+      ),
+    );
+
+    let putAttempts = 0;
+    await page.route(
+      `**/users/${user}/documents/${chatsDocumentId}`,
+      (route) => {
+        if (route.request().method() === "GET") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/octet-stream",
+            headers: { ETag: '"chats-v2"' },
+            body: Buffer.from(reloadedChats),
+          });
+        }
+        putAttempts += 1;
+        return putAttempts === 1
+          ? route.fulfill({ status: 412 })
+          : route.fulfill({
+              status: 204,
+              headers: { ETag: '"chats-v3"' },
+            });
+      },
+    );
+    await page.goto("/");
+
+    const result = await page.evaluate(
+      async ({ user, chatsDocumentId, chatsKey, alice }) => {
+        return window.contactService.updateContactProfileSnapshot(
+          user,
+          {
+            documentId: chatsDocumentId,
+            name: "chats",
+            key: chatsKey as JsonWebKey,
+            revision: '"chats-v1"',
+            contacts: [alice],
+          },
+          alice.userId,
+          { name: "Alice A.", avatarId: "avatar-1", revision: "pp-rev-2" },
+        );
+      },
+      { user, chatsDocumentId, chatsKey, alice },
+    );
+
+    expect(putAttempts).toBe(2);
+    // Bob (added concurrently) survived the retry, and alice's snapshot got
+    // the refreshed name/revision rather than being dropped by the 412.
+    expect(result.contacts).toHaveLength(2);
+    const updatedAlice = result.contacts.find((c) => c.userId === "alice");
+    expect(updatedAlice?.name).toBe("Alice A.");
+    expect(updatedAlice?.profileRevision).toBe("pp-rev-2");
+    expect(result.contacts.some((c) => c.userId === "bob")).toBe(true);
+    expect(result.revision).toBe('"chats-v3"');
+  });
+
+  test("updateContactProfileSnapshot propagates a genuine (non-412) write failure without retrying", async ({
+    page,
+  }) => {
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const chatsDocumentId = "chats-fails";
+    const chatsKey = await generateAesGcmKeyJwk();
+    const alice = {
+      userId: "alice",
+      chatId: "chat-alice",
+      owner: user,
+      name: "alice",
+      profileRevision: "",
+    };
+
+    let putAttempts = 0;
+    await page.route(
+      `**/users/${user}/documents/${chatsDocumentId}`,
+      (route) => {
+        putAttempts += 1;
+        return route.fulfill({ status: 500 });
+      },
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      ({ user, chatsDocumentId, chatsKey, alice }) =>
+        window.contactService.updateContactProfileSnapshot(
+          user,
+          {
+            documentId: chatsDocumentId,
+            name: "chats",
+            key: chatsKey as JsonWebKey,
+            revision: '"chats-v1"',
+            contacts: [alice],
+          },
+          alice.userId,
+          { name: "Alice A.", avatarId: "avatar-1", revision: "pp-rev-2" },
+        ),
+      { user, chatsDocumentId, chatsKey, alice },
+    );
+
+    expect(message).toBe("Http Error 500");
+    expect(putAttempts).toBe(1);
+  });
 });
 
 // -------------------------------------------------------------------------
@@ -842,6 +974,23 @@ test.describe("publicProfileService error/race paths", () => {
 // -------------------------------------------------------------------------
 
 test.describe("DocumentService error paths", () => {
+  test("shareDocument rejects a document that carries no key", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const message = await messageFromBrowser(page, () =>
+      window.documentService.shareDocument(
+        "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        { documentId: "doc-1" } as { documentId: string; key: JsonWebKey },
+        "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+        {} as JsonWebKey,
+      ),
+    );
+
+    expect(message).toBe("Document key not found");
+  });
+
   test("shareDocument tolerates a 409 - the document is already shared into this chat", async ({
     page,
   }) => {
@@ -952,6 +1101,17 @@ test.describe("DocumentService error paths", () => {
     const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
     const folderId = "retry-folder";
     const siblingId = "sibling-added-meanwhile";
+    // A real FolderEntry, as a folder listing actually stores its children -
+    // not a bare id - so the retry-merge path is exercised the way it would
+    // be reached by FolderEntryImageComponent's thumbnail lookup.
+    const siblingEntry = {
+      documentId: siblingId,
+      name: "sibling.jpg",
+      type: "image",
+      mimeType: "image/jpeg",
+      mediumImageId: "sibling-medium",
+      sharedKey: { sharedKey: "sibling-wrapped-key" },
+    };
 
     const folderKey = await generateAesGcmKeyJwk();
     // The folder as the server has it *after* a sibling was added since the
@@ -962,8 +1122,8 @@ test.describe("DocumentService error paths", () => {
         JSON.stringify({
           documentId: folderId,
           name: "Vacation",
-          type: "Folder",
-          documents: [siblingId],
+          type: "folder",
+          documents: [siblingEntry],
         }),
       ),
     );
@@ -1015,10 +1175,13 @@ test.describe("DocumentService error paths", () => {
     );
 
     expect(uploadAttempts).toBe(2);
-    // The concurrently-added sibling survived, and the new document sits after it.
+    // The concurrently-added sibling survived - full FolderEntry intact,
+    // sharedKey/type included - and the new document sits after it.
     expect(result.documents).toHaveLength(2);
-    expect(result.documents[0]).toBe(siblingId);
-    expect(result.documents[1]).not.toBe(siblingId);
+    expect(result.documents[0].documentId).toBe(siblingId);
+    expect(result.documents[0].sharedKey).toEqual(siblingEntry.sharedKey);
+    expect(result.documents[0].type).toBe(siblingEntry.type);
+    expect(result.documents[1].documentId).not.toBe(siblingId);
     expect(result.etag).toBe('"folder-v3"');
   });
 

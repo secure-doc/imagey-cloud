@@ -469,13 +469,13 @@ export const documentService = {
     if (!fileId) {
       throw new Error("Document has no preview image and no contentId given");
     }
-    const { content } = await documentRepository.loadContent(
+    return fetchAndDecryptContent(
       document.owner,
       document.documentId,
       fileId,
+      document.key,
       accessPath,
     );
-    return cryptoService.decryptDocument(document.key, content);
   },
   // Fetches and decrypts one FolderEntry's own content (its medium/preview
   // image) directly off the entry embedded in the parent folder - unwraps
@@ -494,13 +494,13 @@ export const documentService = {
       entry.sharedKey.sharedKey,
       folderKey,
     );
-    const { content } = await documentRepository.loadContent(
+    return fetchAndDecryptContent(
       folderOwner,
       entry.documentId,
       entry.mediumImageId,
+      documentKey,
       accessPath,
     );
-    return cryptoService.decryptDocument(documentKey, content);
   },
   // Sharing a document with a contact is structurally the same operation
   // as adding it to any other folder: the document's own symmetric key gets
@@ -516,6 +516,14 @@ export const documentService = {
     contactUserId: string,
     chatKey: JsonWebKey,
   ): Promise<void> => {
+    // `key` is required at the type level, but this can still be reached
+    // with a missing key across a boundary TypeScript doesn't check (e.g.
+    // the test harness's window.documentService, or a future dynamically-
+    // typed call site) - fail with a clear message rather than an opaque
+    // WebCrypto error inside encryptKey.
+    if (!document.key) {
+      throw new Error("Document key not found");
+    }
     const encryptedKey = await cryptoService.encryptKey(document.key, chatKey);
     await documentRepository.storeSharedKey(user, document.documentId, {
       issuer: contactUserId,
@@ -524,6 +532,25 @@ export const documentService = {
     });
   },
 };
+
+// Fetches one file's encrypted content and decrypts it with the given
+// document key - the common tail of loadContent (an already-loaded Document)
+// and loadFolderEntryContent (a FolderEntry's key unwrapped locally).
+async function fetchAndDecryptContent(
+  owner: string,
+  documentId: string,
+  fileId: string,
+  documentKey: JsonWebKey,
+  accessPath?: string,
+): Promise<ArrayBuffer> {
+  const { content } = await documentRepository.loadContent(
+    owner,
+    documentId,
+    fileId,
+    accessPath,
+  );
+  return cryptoService.decryptDocument(documentKey, content);
+}
 
 // Re-fetches and decrypts a folder document whose symmetric key we already
 // hold, returning just what storeDocument needs to re-apply its change after a
