@@ -107,21 +107,34 @@ public class DocumentResource {
         EncryptedContent metadata,
         @Context Request request) throws IOException {
 
-        return documentRepository.getETag(user, documentId)
-            .map(EntityTag::new)
-            .map(request::evaluatePreconditions)
-            .map(Optional::ofNullable)
-            .filter(Optional::isPresent)
-            .map(Optional::get)
-            .map(ResponseBuilder::build).orElseGet(() -> {
+        Optional<EncryptedMetadata> current = documentRepository.loadEncryptedMetadataWithETag(user, documentId);
+        Optional<Response> preconditionFailure = current.flatMap(existing ->
+            ofNullable(request.evaluatePreconditions(new EntityTag(existing.etag()))).map(ResponseBuilder::build));
+        if (preconditionFailure.isPresent()) {
+            return preconditionFailure.get();
+        }
+
+        // A document is not distinguished from a folder (a folder's content IS its metadata.enc, see
+        // DocumentService#uploadDocument) - writing here unconditionally once evaluatePreconditions()
+        // above passed would leave the exact "document vanishes" race ADR 0011 closed for uploads
+        // open on this endpoint. Guard with the same version read above instead of a fresh one, so
+        // the precondition check and the write agree on one snapshot.
+        boolean written = current
+            .map(existing -> documentRepository.persistIfCurrent(user, documentId, metadata, existing.version()))
+            .orElseGet(() -> {
                 documentRepository.persist(user, documentId, metadata);
-                // Hand back the new ETag so the client can chain another save without a re-read -
-                // the PUT response is otherwise the only place it can learn the post-write tag
-                // (a 204 with no tag leaves the client on a stale ETag and its next save 412s).
-                ResponseBuilder response = noContent();
-                documentRepository.getETag(user, documentId).ifPresent(etag -> response.tag(new EntityTag(etag)));
-                return response.build();
+                return true;
             });
+        if (!written) {
+            return Response.status(Response.Status.PRECONDITION_FAILED).build();
+        }
+
+        // Hand back the new ETag so the client can chain another save without a re-read - the PUT
+        // response is otherwise the only place it can learn the post-write tag (a 204 with no tag
+        // leaves the client on a stale ETag and its next save 412s).
+        ResponseBuilder response = noContent();
+        documentRepository.getETag(user, documentId).ifPresent(etag -> response.tag(new EntityTag(etag)));
+        return response.build();
     }
 
     @GET

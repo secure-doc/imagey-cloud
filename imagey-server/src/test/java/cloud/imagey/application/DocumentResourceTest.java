@@ -101,6 +101,19 @@ public class DocumentResourceTest {
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.PRECONDITION_FAILED);
     }
 
+    @Test
+    @DisplayName("PUT on a documentId that does not exist yet creates it")
+    void updateMetadataCreatesMissingDocument() {
+        DocumentId documentId = new DocumentId(randomUUID().toString());
+
+        Response response = document(documentId)
+            .put(entity(new byte[]{1, 2, 3}, APPLICATION_OCTET_STREAM));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(Response.Status.NO_CONTENT);
+        assertThat(documentRepository.loadEncryptedMetadata(user, documentId).orElseThrow().content())
+            .isEqualTo(new byte[]{1, 2, 3});
+    }
+
     private DocumentId givenDocument() {
         DocumentId documentId = new DocumentId(randomUUID().toString());
         documentRepository.persist(user, documentId, new EncryptedContent("metadata".getBytes()));

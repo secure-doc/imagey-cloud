@@ -18,10 +18,7 @@ package cloud.imagey.domain.contact;
 
 import static jakarta.json.bind.JsonbBuilder.create;
 
-import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,12 +36,7 @@ public class MessageRepository extends AbstractUserFileRepository {
         Message message = new Message(sender, encryptedContent);
         String jsonContent = create().toJson(message);
 
-        File messagesFolder = messagesFolder(owner, chatId);
-        if (!messagesFolder.exists()) {
-            mkdir(messagesFolder);
-        }
-        File messageFile = new File(messagesFolder, id.value() + ".json");
-        writeStringToFile(messageFile, jsonContent);
+        put(join(messagesPrefix(owner, chatId), id.value() + ".json"), jsonContent);
 
         return new Message(sender, encryptedContent)
             .withId(id)
@@ -52,29 +44,21 @@ public class MessageRepository extends AbstractUserFileRepository {
     }
 
     public List<Message> fetchMessages(User owner, DocumentId chatId, Optional<MessageId> sinceId) {
-        File messagesFolder = messagesFolder(owner, chatId);
+        String prefix = messagesPrefix(owner, chatId);
+        List<String> keys = list(prefix).keys().stream().filter(key -> key.endsWith(".json")).sorted().toList();
 
         List<Message> messages = new ArrayList<>();
-        // isDirectory() (rather than exists()) guards against a name collision with a regular file,
-        // which would make listFiles() return null and Arrays.sort() NPE.
-        if (messagesFolder.isDirectory()) {
-            File[] files = messagesFolder.listFiles((dir, name) -> name.endsWith(".json"));
-            Arrays.sort(files, Comparator.comparing(File::getName));
-            for (File file : files) {
-                String id = file.getName().replace(".json", "");
-                if (sinceId.isEmpty() || new MessageId(id).compareTo(sinceId.get()) > 0) {
-                    Message message = create().fromJson(readFileToString(file), Message.class);
-                    messages.add(message.withId(new MessageId(id)));
-                }
+        for (String key : keys) {
+            String id = key.substring(prefix.length() + 1).replace(".json", "");
+            if (sinceId.isEmpty() || new MessageId(id).compareTo(sinceId.get()) > 0) {
+                Message message = create().fromJson(readString(key), Message.class);
+                messages.add(message.withId(new MessageId(id)));
             }
         }
         return messages;
     }
 
-    private File messagesFolder(User owner, DocumentId chatId) {
-        File userHome = getUserHome(owner);
-        File documentsHome = new File(userHome, "documents");
-        File documentFolder = new File(documentsHome, chatId.id());
-        return new File(documentFolder, "messages");
+    private String messagesPrefix(User owner, DocumentId chatId) {
+        return join(getUserPrefix(owner), "documents", chatId.id(), "messages");
     }
 }

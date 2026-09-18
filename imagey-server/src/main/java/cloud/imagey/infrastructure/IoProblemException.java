@@ -27,4 +27,8 @@ public class IoProblemException extends RuntimeException {
     public IoProblemException(IOException cause) {
         super(cause);
     }
+
+    public IoProblemException(String reason, Throwable cause) {
+        super(reason, cause);
+    }
 }

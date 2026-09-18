@@ -16,11 +16,6 @@
  */
 package cloud.imagey.domain.user;
 
-import static java.util.Optional.empty;
-import static java.util.Optional.of;
-
-import java.io.File;
-import java.nio.charset.Charset;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -31,50 +26,57 @@ import org.apache.logging.log4j.Logger;
 import cloud.imagey.domain.common.AbstractUserFileRepository;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
+import cloud.imagey.infrastructure.ResourceConflictException;
 
 @ApplicationScoped
 public class UserRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(UserRepository.class);
-    private static final Charset UTF_8 = Charset.forName("UTF-8");
+
+    // Not empty: an object store cannot represent "a home directory with nothing in it" the way a
+    // bare `mkdir` could, so registration needs a real key to create-only against. Content is a
+    // placeholder today, but the key stays room for future per-account metadata without a migration.
+    private static final String ACCOUNT_MARKER_CONTENT = "{}";
 
     public void persist(User user) {
-        File userHome = createNewFile(rootPath(), user.id().id());
-        mkdir(userHome);
+        if (!putIfAbsent(accountMarker(user), ACCOUNT_MARKER_CONTENT.getBytes(UTF_8))) {
+            throw new ResourceConflictException(user.id().id() + " already exists");
+        }
     }
 
     public boolean exists(User user) {
-        return getUserHome(user).exists();
+        return exists(accountMarker(user));
     }
 
     /**
-     * Whether {@code user} has actually completed registration, as opposed to merely having a home
-     * directory - which {@link cloud.imagey.domain.contact.ContactRepository#persist} creates for a
-     * not-yet-registered invitee. Registration always stores the main public key under kid {@code 0}
-     * (see {@link cloud.imagey.domain.user.UserService#register}), so its presence is the marker.
-     * Used for register-vs-login routing and the invite flow, where a bare directory must still
-     * count as "no account yet".
+     * Whether {@code user} has actually completed registration, as opposed to merely having a
+     * pending invitation on file - which {@link cloud.imagey.domain.contact.ContactRepository#persist}
+     * creates for a not-yet-registered invitee, without ever touching the account marker.
+     * Registration always stores the main public key under kid {@code 0} (see
+     * {@link cloud.imagey.domain.user.UserService#register}), so its presence is the marker. Used
+     * for register-vs-login routing and the invite flow, where a pending invitation must still count
+     * as "no account yet".
      */
     public boolean isRegistered(User user) {
-        return new File(new File(getUserHome(user), "public-keys"), "0.json").exists();
+        return exists(join(getUserPrefix(user), "public-keys", "0.json"));
     }
 
     public Optional<String> loadPublicKey(User user, Kid kid) {
         LOG.info("Loading public key with kid {}", kid);
-        File publicKeysFolder = new File(getUserHome(user), "public-keys");
-        File keyFile = new File(publicKeysFolder, kid.id() + ".json");
-        if (!keyFile.exists()) {
+        Optional<String> publicKey = findString(join(getUserPrefix(user), "public-keys", kid.id() + ".json"));
+        if (publicKey.isEmpty()) {
             LOG.info("Public key does not exist.");
-            return empty();
         } else {
-            Optional<String> publicKey = of(readFileToString(keyFile));
             LOG.info("Public key loaded");
-            return publicKey;
         }
+        return publicKey;
     }
 
     public void storePublicKey(User user, Kid kid, PublicKey publicKey) {
-        File publicKeysFolder = new File(getUserHome(user), "public-keys");
-        createNewFileWithContent(publicKeysFolder, kid.id() + ".json", publicKey.key());
+        createIfAbsent(join(getUserPrefix(user), "public-keys", kid.id() + ".json"), publicKey.key());
+    }
+
+    private String accountMarker(User user) {
+        return join(getUserPrefix(user), "account.json");
     }
 }

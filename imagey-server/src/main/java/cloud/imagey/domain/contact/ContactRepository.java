@@ -16,14 +16,11 @@
  */
 package cloud.imagey.domain.contact;
 
-import static java.util.Collections.emptyList;
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
-import java.io.File;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -39,33 +36,23 @@ import cloud.imagey.domain.user.User;
 public class ContactRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(ContactRepository.class);
+    private static final String CONTACT_REQUESTS = "contact-requests";
 
     @Inject
     private Jsonb jsonb;
 
     public void persist(ContactExchange contactExchange) {
-        File inviterRequests = new File(
-            getUserHome(contactExchange.inviter()), "contact-requests");
-        File inviteeRequests = new File(
-            getUserHome(contactExchange.invitee()), "contact-requests");
         String content = jsonb.toJson(contactExchange);
-        writeStringToFile(new File(inviterRequests, contactExchange.invitee().id().id() + ".json"), content);
-        writeStringToFile(new File(inviteeRequests, contactExchange.inviter().id().id() + ".json"), content);
+        put(join(getUserPrefix(contactExchange.inviter()), CONTACT_REQUESTS, contactExchange.invitee().id().id() + ".json"),
+            content);
+        put(join(getUserPrefix(contactExchange.invitee()), CONTACT_REQUESTS, contactExchange.inviter().id().id() + ".json"),
+            content);
     }
 
     public List<ContactExchange> findContactRequests(User user) {
-        File userHome = getUserHome(user);
-        File contactRequests = new File(userHome, "contact-requests");
-        if (!contactRequests.exists()) {
-            return emptyList();
-        }
-        File[] contacts = contactRequests.listFiles();
-        if (contacts == null) {
-            return emptyList();
-        }
-        return Stream.of(contacts)
-                .filter(File::isFile)
-                .filter(file -> file.getName().endsWith(".json"))
+        String prefix = join(getUserPrefix(user), CONTACT_REQUESTS);
+        return list(prefix).keys().stream()
+                .filter(key -> key.endsWith(".json"))
                 .sorted()
                 .map(this::parseExchange)
                 .filter(exchange -> exchange != null)
@@ -75,11 +62,11 @@ public class ContactRepository extends AbstractUserFileRepository {
 
     // A leftover directory, an old-format status file or a half-written entry must not turn the
     // whole listing into a 500 and block the contacts UI - skip and log the offending entry.
-    private ContactExchange parseExchange(File file) {
+    private ContactExchange parseExchange(String key) {
         try {
-            return jsonb.fromJson(readFileToString(file), ContactExchange.class);
+            return jsonb.fromJson(readString(key), ContactExchange.class);
         } catch (RuntimeException e) {
-            LOG.warn("Ignoring unparseable contact-request entry {}", file.getName(), e);
+            LOG.warn("Ignoring unparseable contact-request entry {}", key, e);
             return null;
         }
     }
@@ -98,21 +85,19 @@ public class ContactRepository extends AbstractUserFileRepository {
     }
 
     public Optional<ContactExchange> getContactExchange(User user, User contact) {
-        File userHome = getUserHome(user);
-        File contactRequests = new File(userHome, "contact-requests");
-        File exchangeFile = new File(contactRequests, contact.id().id() + ".json");
-        if (!exchangeFile.exists()) {
+        String key = join(getUserPrefix(user), CONTACT_REQUESTS, contact.id().id() + ".json");
+        Optional<String> content = findString(key);
+        if (content.isEmpty()) {
             return empty();
         }
         try {
-            return of(jsonb.fromJson(readFileToString(exchangeFile), ContactExchange.class));
+            return of(jsonb.fromJson(content.get(), ContactExchange.class));
         } catch (RuntimeException e) {
             // A half-written or legacy-format exchange file must not 500 invite / acceptInvitation /
             // declineInvitation / confirmReceipt - treat it as "no exchange" (same hardening as
             // parseExchange applies to the listing).
-            LOG.warn("Ignoring unparseable contact-request entry {}", exchangeFile.getName(), e);
+            LOG.warn("Ignoring unparseable contact-request entry {}", key, e);
             return empty();
         }
     }
 }
-

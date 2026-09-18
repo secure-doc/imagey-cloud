@@ -149,6 +149,34 @@ public class DocumentRepositoryTest {
     }
 
     @Test
+    @DisplayName("persistIfCurrent writes and reports success when the version still matches")
+    void persistIfCurrentWritesOnMatch() {
+        documentRepository.persist(user, documentId, new EncryptedContent(new byte[]{1}));
+        String version = documentRepository.loadEncryptedMetadataWithETag(user, documentId).orElseThrow().version();
+        EncryptedContent newContent = new EncryptedContent(new byte[]{2});
+
+        boolean written = documentRepository.persistIfCurrent(user, documentId, newContent, version);
+
+        assertThat(written).isTrue();
+        assertThat(documentRepository.loadEncryptedMetadata(user, documentId).orElseThrow().content()).isEqualTo(new byte[]{2});
+    }
+
+    @Test
+    @DisplayName("persistIfCurrent leaves content untouched and reports failure on a stale version")
+    void persistIfCurrentRejectsStaleVersion() {
+        documentRepository.persist(user, documentId, new EncryptedContent(new byte[]{1}));
+        String staleVersion = documentRepository.loadEncryptedMetadataWithETag(user, documentId).orElseThrow().version();
+        // A concurrent writer lands in between - the read above is now stale.
+        documentRepository.persist(user, documentId, new EncryptedContent(new byte[]{2}));
+
+        boolean written = documentRepository.persistIfCurrent(
+            user, documentId, new EncryptedContent(new byte[]{3}), staleVersion);
+
+        assertThat(written).isFalse();
+        assertThat(documentRepository.loadEncryptedMetadata(user, documentId).orElseThrow().content()).isEqualTo(new byte[]{2});
+    }
+
+    @Test
     @DisplayName("etagOf matches the etag the content has once stored")
     void etagOfMatchesStored() {
         EncryptedContent content = new EncryptedContent(new byte[]{3, 1, 4, 1, 5});

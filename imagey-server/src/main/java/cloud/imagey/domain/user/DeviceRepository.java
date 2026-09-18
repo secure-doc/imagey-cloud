@@ -17,12 +17,7 @@
 package cloud.imagey.domain.user;
 
 import static jakarta.json.bind.JsonbBuilder.create;
-import static java.util.Arrays.stream;
-import static java.util.Optional.empty;
-import static java.util.Optional.of;
 
-import java.io.File;
-import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,37 +36,33 @@ import cloud.imagey.domain.token.Kid;
 public class DeviceRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DeviceRepository.class);
-    private static final Charset UTF_8 = Charset.forName("UTF-8");
 
     public List<DeviceId> loadDevices(User user) {
-        File devicesDirectory = new File(getUserHome(user), "devices");
-        return stream(devicesDirectory.list()).sorted().map(DeviceId::new).toList();
+        String devicesPrefix = join(getUserPrefix(user), "devices");
+        return list(devicesPrefix).commonPrefixes().stream()
+            .map(commonPrefix -> commonPrefix.substring(devicesPrefix.length() + 1, commonPrefix.length() - 1))
+            .sorted()
+            .map(DeviceId::new)
+            .toList();
     }
 
     public Optional<PrivateKeyMetadata> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
-        return of(new File(keyDirectory, kid.id() + ".json"))
-            .filter(File::exists)
-            .map(keyFile -> readFileToString(keyFile))
-            .map(this::parse);
+        return findString(join(devicesFolder(user, deviceId), "private-keys", kid.id() + ".json")).map(this::parse);
     }
 
     public void storeDevicePublicKey(User user, DeviceId deviceId, PublicKey key) {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
-        createNewFileWithContent(keyDirectory, "0.json", key.key());
+        createIfAbsent(join(devicesFolder(user, deviceId), "public-keys", "0.json"), key.key());
     }
 
     public Optional<PublicKey> loadDevicePublicKey(User user, DeviceId deviceId, Kid kid) {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "public-keys");
-        File keyFile = new File(keyDirectory, kid.id() + ".json");
-        if (!keyFile.exists()) {
+        Optional<PublicKey> publicKey =
+            findString(join(devicesFolder(user, deviceId), "public-keys", kid.id() + ".json")).map(PublicKey::new);
+        if (publicKey.isEmpty()) {
             LOG.info("Public key does not exist.");
-            return empty();
         } else {
-            Optional<PublicKey> publicKey = of(readFileToString(keyFile)).map(PublicKey::new);
             LOG.info("Public key loaded");
-            return publicKey;
         }
+        return publicKey;
     }
 
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, PrivateKeyMetadata metadata) {
@@ -79,33 +70,30 @@ public class DeviceRepository extends AbstractUserFileRepository {
     }
 
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) {
-        File keyDirectory = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "private-keys");
-        createNewFileWithContent(keyDirectory, "0.json", metadata);
+        createIfAbsent(join(devicesFolder(user, deviceId), "private-keys", "0.json"), metadata);
     }
 
     public void storeDeviceRecoveryKey(User user, DeviceId deviceId, String recoveryKey) {
-        File deviceDirectory = new File(new File(getUserHome(user), "devices"), deviceId.id());
-        if (!deviceDirectory.exists()) {
-            deviceDirectory.mkdirs();
-        }
         // Overwrite, do not create-only: the client mints a fresh random recovery key on every
         // "keep me logged in" sign-in and re-encrypts its local device-key blob with it. A
         // create-only write left the server holding the previous key, which then could not
         // decrypt that new local blob - auto-login failed and the user was thrown back to the
         // "unlock device" dialog on every single reload.
-        writeStringToFile(new File(deviceDirectory, "recovery-key.txt"), recoveryKey);
+        put(join(devicesFolder(user, deviceId), "recovery-key.txt"), recoveryKey);
     }
 
     public Optional<String> loadDeviceRecoveryKey(User user, DeviceId deviceId) {
-        File recoveryKeyFile = new File(new File(new File(getUserHome(user), "devices"), deviceId.id()), "recovery-key.txt");
-        if (!recoveryKeyFile.exists()) {
+        Optional<String> recoveryKey = findString(join(devicesFolder(user, deviceId), "recovery-key.txt"));
+        if (recoveryKey.isEmpty()) {
             LOG.info("Recovery key does not exist.");
-            return empty();
         } else {
-            Optional<String> recoveryKey = of(readFileToString(recoveryKeyFile));
             LOG.info("Recovery key loaded");
-            return recoveryKey;
         }
+        return recoveryKey;
+    }
+
+    private String devicesFolder(User user, DeviceId deviceId) {
+        return join(getUserPrefix(user), "devices", deviceId.id());
     }
 
     private PrivateKeyMetadata parse(String json) {

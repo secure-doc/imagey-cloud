@@ -1,4 +1,4 @@
-# Architecture Decision Record: Root-Folder Encryption Hierarchy
+# 1. Root-Folder Encryption Hierarchy
 
 ## Context
 Our application needs a structured way to manage document uploads and secure their symmetric encryption keys. Previously, documents might not have enforced a strict folder hierarchy for encryption. To enhance security, organization, and hierarchical access, we need to introduce a default Root-Folder.

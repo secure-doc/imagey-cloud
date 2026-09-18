@@ -43,6 +43,7 @@ import cloud.imagey.domain.mail.MailService;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.infrastructure.ResourceConflictException;
 
 @ApplicationScoped
 public class UserService {
@@ -113,11 +114,18 @@ public class UserService {
     }
 
     public void create(User user) {
-        // The user's home directory may already exist when an inviter sent them a contact request
-        // before they registered (ContactRepository.persist writes into the invitee's home), so
-        // creating an account on top of that pending invitation must not fail.
-        if (!userRepository.exists(user)) {
+        // Was an exists()-then-persist() check: non-atomic, and a real problem now that
+        // registration can run concurrently across instances (ADR 0011) - two callers racing
+        // RegistrationFilter for the same address both resolve the identical winning userId from
+        // UserMappingService#registerUser and can both reach create() for it at once. Rely on
+        // persist()'s own atomic create-only write instead and treat the conflict it reports as
+        // success: the desired end state (the account marker exists) already holds, whether that is
+        // because a concurrent racer just won, or because ContactRepository#persist already touched
+        // this account's tree for a pending invitation.
+        try {
             userRepository.persist(user);
+        } catch (ResourceConflictException e) {
+            LOG.info("Account {} already exists, nothing to do.", user.id().id());
         }
     }
 

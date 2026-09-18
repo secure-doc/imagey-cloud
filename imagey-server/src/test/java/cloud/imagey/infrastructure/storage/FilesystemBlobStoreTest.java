@@ -14,20 +14,19 @@
  * You should have received a copy of the GNU General Public License
  * along with Imagey.  If not, see <http://www.gnu.org/licenses/>.
  */
-package cloud.imagey.domain.common;
+package cloud.imagey.infrastructure.storage;
 
-import cloud.imagey.domain.user.User;
-import cloud.imagey.infrastructure.common.AbstractFileRepository;
+import java.io.File;
 
-/**
- * A {@link AbstractFileRepository} for the repositories that are keyed by account: it adds the
- * {@link User}-typed {@code getUserPrefix} the infrastructure base cannot carry (the infrastructure
- * layer must not depend on domain types - see {@code ArchitectureTest#noCycles}).
- */
-public abstract class AbstractUserFileRepository extends AbstractFileRepository {
+import org.junit.jupiter.api.io.TempDir;
 
-    /** The storage prefix of {@code user}, {@code <userId>}. */
-    protected String getUserPrefix(User user) {
-        return getUserPrefix(user.id().id());
+class FilesystemBlobStoreTest extends BlobStoreContractTest {
+
+    @TempDir
+    private File root;
+
+    @Override
+    protected BlobStore createStore() {
+        return new FilesystemBlobStore(root.getAbsolutePath());
     }
 }

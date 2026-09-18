@@ -31,7 +31,9 @@ import cloud.imagey.domain.user.User;
  * @param folderId        the id of the (existing) folder document the new document is added to
  * @param folderContent   the folder document's new encrypted content, now referencing the new document
  * @param folderETag      the ETag the client last saw for the folder ({@code DocumentRepository#getETag});
- *                        a stale value is rejected with 412. {@code null} skips the check.
+ *                        a stale value is rejected with 412. {@code null} skips this explicit check, but
+ *                        the write is still applied only if the folder is unchanged since it was read for
+ *                        this request (ADR 0011) - a concurrent modification can still 412 even then.
  * @param documentId      the id of the new document
  * @param documentContent the new document's encrypted metadata
  * @param sharedKey       the new document's shared key, filed under {@code folderId}, issued by {@code folderOwner}
