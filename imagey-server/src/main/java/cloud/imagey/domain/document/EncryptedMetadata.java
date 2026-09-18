@@ -20,8 +20,11 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 
 /**
  * A document's encrypted {@code metadata.enc} together with its ETag (hex SHA-256 of the same
- * bytes), so a caller that needs both reads and hashes the file only once. See
- * {@link DocumentRepository#loadEncryptedMetadataWithETag}.
+ * bytes) and its backend-native {@code version} (see {@code StoredObject}), so a caller that needs
+ * some or all of these reads the file only once. See
+ * {@link DocumentRepository#loadEncryptedMetadataWithETag}. {@code version} is not the same value as
+ * {@code etag} - it is an opaque token meant only for
+ * {@link DocumentRepository#persistIfCurrent}, not for exposing over HTTP.
  */
-public record EncryptedMetadata(EncryptedContent content, String etag) {
+public record EncryptedMetadata(EncryptedContent content, String etag, String version) {
 }

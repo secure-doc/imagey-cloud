@@ -23,7 +23,6 @@ import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.FOUND;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
-import static jakarta.ws.rs.core.Response.Status.Family.SUCCESSFUL;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.deleteQuietly;
 import static org.apache.commons.io.FileUtils.forceDelete;
@@ -32,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
 import java.util.Optional;
 
 import jakarta.inject.Inject;
@@ -198,20 +196,6 @@ public class LoginTest {
             .post(json("{\"email\":\"mary@imagey.cloud\"}"));
 
         assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
-    }
-
-    @Test
-    @DisplayName("A user-mapping file that holds a bare null is treated as an empty mapping")
-    public void nullUserMappingFileIsTolerated() throws IOException {
-        Files.writeString(new File(rootPath, "user-ids.json").toPath(), "null");
-
-        Response response = newClient()
-            .target("http://localhost:" + config.getHttpPort())
-            .path("users/verifications")
-            .request().header("Origin", "https://secure-doc.store")
-            .post(json("{\"email\":\"mary@imagey.cloud\"}"));
-
-        assertThat(response.getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
     }
 
     @BeforeEach

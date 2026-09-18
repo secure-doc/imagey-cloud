@@ -16,131 +16,105 @@
  */
 package cloud.imagey.infrastructure.common;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 import jakarta.inject.Inject;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 import cloud.imagey.infrastructure.IoProblemException;
 import cloud.imagey.infrastructure.ResourceConflictException;
+import cloud.imagey.infrastructure.storage.BlobStore;
+import cloud.imagey.infrastructure.storage.ListResult;
+import cloud.imagey.infrastructure.storage.StoredObject;
 
+/**
+ * Base for the repositories in {@code cloud.imagey.domain} that persist through a {@link BlobStore}:
+ * turns byte-level store operations into the string/key-composition helpers those repositories use.
+ * A "folder" in the sense the domain code speaks of it (e.g. {@code documents/<id>/files/}) is just a
+ * key prefix here - the store creates any parent keys it needs on its own, there is nothing to create
+ * up front the way {@code java.io.File} used to require.
+ */
 public class AbstractFileRepository {
 
-    public static final Charset UTF_8 = Charset.forName("UTF-8");
-    private static final Logger LOG = LogManager.getLogger(AbstractFileRepository.class);
+    protected static final Charset UTF_8 = StandardCharsets.UTF_8;
+
+    private static final String DELIMITER = "/";
 
     @Inject
-    @ConfigProperty(name = "root.path")
-    private String rootPath;
+    private BlobStore blobStore;
 
-    /** The configured storage root ({@code root.path}). */
-    protected File rootPath() {
-        return new File(rootPath);
+    /** Joins path segments into a single {@code /}-separated key. */
+    protected static String join(String... segments) {
+        return String.join(DELIMITER, segments);
     }
 
     /**
-     * The storage tree of a single account, {@code <root.path>/<userId>}. Takes the raw id string
-     * rather than a {@code cloud.imagey.domain.user.User} on purpose: the infrastructure layer
-     * must not depend on domain types (see {@code ArchitectureTest#noCycles}).
+     * The storage prefix of a single account, {@code <userId>}. Takes the raw id string rather than
+     * a {@code cloud.imagey.domain.user.User} on purpose: the infrastructure layer must not depend
+     * on domain types (see {@code ArchitectureTest#noCycles}).
      */
-    protected File getUserHome(String userId) {
-        return new File(rootPath, userId);
+    protected String getUserPrefix(String userId) {
+        return userId;
     }
 
-    protected File createNewFile(File folder, String filename) {
-        File file = new File(folder, filename);
-        if (file.exists()) {
-            throw new ResourceConflictException(filename + " already exists");
-        }
-        return file;
+    protected boolean exists(String key) {
+        return blobStore.exists(key);
     }
 
-    protected void createNewFileWithContent(File folder, String filename, String content) {
-        if (!folder.exists()) {
-            folder.mkdirs();
-        }
-        File file = new File(folder, filename);
-        if (file.exists()) {
-            if (content.equals(readFileToString(file))) {
-                return;
-            }
-            throw new ResourceConflictException(filename + " already exists");
-        }
-        try {
-            FileUtils.write(file, content, UTF_8, false);
-        } catch (IOException e) {
-            throw new IoProblemException(e.getMessage());
-        }
+    protected Optional<byte[]> find(String key) {
+        return blobStore.get(key).map(StoredObject::content);
     }
 
-    protected void mkdir(File folder) {
-        if (folder.exists()) {
-            throw new ResourceConflictException(folder + " already exists");
-        }
-        if (!folder.mkdirs()) {
-            LOG.info("Could not create folder " + folder.getName());
-            throw new ResourceConflictException(folder + " could not be created");
-        }
+    /** The content together with its backend-native version, for a caller that needs both from one read. */
+    protected Optional<StoredObject> get(String key) {
+        return blobStore.get(key);
     }
 
-    protected String readFileToString(File file) {
-        try {
-            return FileUtils.readFileToString(file, UTF_8);
-        } catch (IOException e) {
-            throw new IoProblemException(e.getMessage());
-        }
+    protected Optional<String> findString(String key) {
+        return find(key).map(bytes -> new String(bytes, UTF_8));
     }
 
-    protected void deleteDirectory(File f) {
-        if (f.isDirectory()) {
-            for (File c : f.listFiles()) {
-                deleteDirectory(c);
-            }
-        }
-        if (!f.delete()) {
-            throw new IoProblemException("Failed to delete file: " + f);
+    protected String readString(String key) {
+        return findString(key).orElseThrow(() -> new IoProblemException("Missing key: " + key));
+    }
+
+    protected void put(String key, byte[] content) {
+        blobStore.put(key, content);
+    }
+
+    protected void put(String key, String content) {
+        put(key, content.getBytes(UTF_8));
+    }
+
+    /** Raw create-only write; the caller decides how to react to {@code false} (the key already existed). */
+    protected boolean putIfAbsent(String key, byte[] content) {
+        return blobStore.putIfAbsent(key, content);
+    }
+
+    /**
+     * Creates {@code key} with {@code content} if it does not exist yet. A repeat call with the same
+     * content is a no-op; a repeat call with different content is a 409 - write-once with idempotent
+     * retries.
+     */
+    protected void createIfAbsent(String key, String content) {
+        if (!putIfAbsent(key, content.getBytes(UTF_8)) && !readString(key).equals(content)) {
+            throw new ResourceConflictException(key + " already exists");
         }
     }
 
-    protected void writeByteArrayToFile(File file, byte[] data) {
-        try {
-            FileUtils.writeByteArrayToFile(file, data);
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
+    /**
+     * Overwrites {@code key} with {@code content}, but only if it is still at {@code expectedVersion}
+     * (from a prior {@link #get}) - optimistic locking on a mutable key, safe across JVM instances.
+     *
+     * @return {@code true} if the write happened, {@code false} on a version mismatch (nothing written)
+     */
+    protected boolean putIfVersionMatches(String key, byte[] content, String expectedVersion) {
+        return blobStore.putIfVersionMatches(key, content, expectedVersion);
     }
 
-    protected byte[] readFileToByteArray(File file) {
-        try {
-            return FileUtils.readFileToByteArray(file);
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
-    }
-
-    protected void writeStringToFile(File file, String data) {
-        writeStringToFile(file, data, UTF_8);
-    }
-
-    protected void writeStringToFile(File file, String data, Charset charset) {
-        try {
-            FileUtils.writeStringToFile(file, data, charset);
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
-    }
-
-    protected void writeStringToFile(File file, String data, Charset charset, boolean append) {
-        try {
-            FileUtils.writeStringToFile(file, data, charset, append);
-        } catch (IOException e) {
-            throw new IoProblemException(e);
-        }
+    /** Lists the keys and one-level-deeper prefixes directly under {@code prefix}. */
+    protected ListResult list(String prefix) {
+        return blobStore.list(prefix.isEmpty() ? "" : prefix + DELIMITER, DELIMITER);
     }
 }

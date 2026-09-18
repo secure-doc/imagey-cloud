@@ -17,13 +17,8 @@
 package cloud.imagey.domain.document;
 
 import static java.util.Optional.empty;
-import static java.util.Optional.of;
 
-import java.io.File;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,6 +38,7 @@ import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.infrastructure.ResourceConflictException;
 import cloud.imagey.infrastructure.common.KeyFileCrypto;
+import cloud.imagey.infrastructure.common.Sha256;
 
 @ApplicationScoped
 public class DocumentRepository extends AbstractUserFileRepository {
@@ -57,42 +53,19 @@ public class DocumentRepository extends AbstractUserFileRepository {
     private KeyFileCrypto keyFileCrypto;
 
     public void persist(User user, DocumentId documentId, EncryptedContent metadata) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        if (!documentFolder.exists()) {
-            mkdir(documentFolder);
-        }
-        File documentMetadataFile = new File(documentFolder, "metadata.enc");
-        writeByteArrayToFile(documentMetadataFile, metadata.content());
+        put(metadataFile(user, documentId), metadata.content());
     }
 
     public void persist(User user, DocumentId documentId, FileName fileName, EncryptedContent content) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File contentsFolder = new File(documentFolder, "files");
-        if (!contentsFolder.exists()) {
-            mkdir(contentsFolder);
-        }
-        File contentFile = new File(contentsFolder, fileName.name());
-        writeByteArrayToFile(contentFile, content.content());
+        put(join(documentFolder(user, documentId), "files", fileName.name()), content.content());
     }
 
     public Optional<EncryptedContent> loadContent(User user, DocumentId documentId, DocumentId contentId) {
-        File userHome = getUserHome(user);
-        File documentHome = new File(userHome, "documents");
-        File documentFolder = new File(documentHome, documentId.id());
-        File contentsFolder = new File(documentFolder, "files");
-        File contentFile = new File(contentsFolder, contentId.id());
-        if (!contentFile.exists()) {
-            return empty();
-        }
-        return of(new EncryptedContent(readFileToByteArray(contentFile)));
+        return find(join(documentFolder(user, documentId), "files", contentId.id())).map(EncryptedContent::new);
     }
 
     public boolean documentExists(User user, DocumentId documentId) {
-        return metadataFile(user, documentId).exists();
+        return exists(metadataFile(user, documentId));
     }
 
     /**
@@ -110,30 +83,35 @@ public class DocumentRepository extends AbstractUserFileRepository {
     }
 
     /**
-     * The document's encrypted metadata together with its {@link #getETag ETag}, reading and hashing
-     * {@code metadata.enc} <em>once</em>. Prefer this on paths that need both (the document GET, the
-     * upload response) over separate {@link #loadEncryptedMetadata} + {@link #getETag} calls.
+     * The document's encrypted metadata together with its {@link #getETag ETag} and backend version,
+     * reading {@code metadata.enc} <em>once</em>. Prefer this on paths that need more than one of
+     * these (the document GET, the upload response, the folder-update CAS in
+     * {@link DocumentService#uploadDocument}) over separate {@link #loadEncryptedMetadata} +
+     * {@link #getETag} calls.
      */
     public Optional<EncryptedMetadata> loadEncryptedMetadataWithETag(User user, DocumentId documentId) {
-        File metadataFile = metadataFile(user, documentId);
-        if (!metadataFile.exists()) {
-            return empty();
-        }
-        byte[] bytes = readFileToByteArray(metadataFile);
-        return of(new EncryptedMetadata(new EncryptedContent(bytes), sha256Hex(bytes)));
+        return get(metadataFile(user, documentId))
+            .map(stored -> new EncryptedMetadata(
+                new EncryptedContent(stored.content()), Sha256.hex(stored.content()), stored.version()));
     }
 
     /** The ETag {@code content} would have once stored (see {@link #getETag}) - no I/O. */
     public String etagOf(EncryptedContent content) {
-        return sha256Hex(content.content());
+        return Sha256.hex(content.content());
     }
 
-    private static String sha256Hex(byte[] data) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not available", e);
-        }
+    /**
+     * Replaces a document's {@code metadata.enc}, but only if it is still at {@code expectedVersion} -
+     * from a prior {@link #loadEncryptedMetadataWithETag}. The guard against two concurrent writers to
+     * the same {@code metadata.enc} clobbering each other, safe across JVM instances (ADR 0011) - a
+     * folder document is not distinguished from any other, so this is used both for the folder-content
+     * write in {@link DocumentService#uploadDocument} and for a direct metadata update
+     * ({@code DocumentResource#updateDocument}), which can target the very same key.
+     *
+     * @return {@code true} if the write happened, {@code false} if the document changed since it was read
+     */
+    public boolean persistIfCurrent(User owner, DocumentId documentId, EncryptedContent content, String expectedVersion) {
+        return putIfVersionMatches(metadataFile(owner, documentId), content.content(), expectedVersion);
     }
 
     /**
@@ -142,8 +120,8 @@ public class DocumentRepository extends AbstractUserFileRepository {
      * not stored.
      */
     public Optional<WrappedKey> findDocumentKey(User user, DocumentId documentId, Kid kid) {
-        File keyFile = new File(keysFolder(user, documentId), keyFileCrypto.fileName(documentId.id(), kid.id()));
-        return readStoredKeyFile(keyFile).map(stored -> new WrappedKey(stored.sharedKey()));
+        String key = join(keysFolder(user, documentId), keyFileCrypto.fileName(documentId.id(), kid.id()));
+        return readStoredKeyFile(key).map(stored -> new WrappedKey(stored.sharedKey()));
     }
 
     /**
@@ -164,19 +142,14 @@ public class DocumentRepository extends AbstractUserFileRepository {
         writeKeyFile(keysFolder(user, documentId), fileName, stored);
     }
 
-    private void writeKeyFile(File folder, String fileName, StoredKeyFile stored) {
-        if (!folder.exists()) {
-            folder.mkdirs();
-        }
-        File file = new File(folder, fileName);
-        if (file.exists()) {
-            StoredKeyFile existing = readStoredKeyFile(file).orElse(null);
-            if (existing != null && existing.sharedKey().equals(stored.sharedKey())) {
-                return;
+    private void writeKeyFile(String folder, String fileName, StoredKeyFile stored) {
+        String key = join(folder, fileName);
+        if (!putIfAbsent(key, jsonb.toJson(stored).getBytes(UTF_8))) {
+            StoredKeyFile existing = readStoredKeyFile(key).orElse(null);
+            if (existing == null || !existing.sharedKey().equals(stored.sharedKey())) {
+                throw new ResourceConflictException(fileName + " already exists");
             }
-            throw new ResourceConflictException(fileName + " already exists");
         }
-        writeStringToFile(file, jsonb.toJson(stored));
     }
 
     /**
@@ -258,12 +231,11 @@ public class DocumentRepository extends AbstractUserFileRepository {
     }
 
     private boolean anyWitnessMatches(User owner, DocumentId doc, String issuerId, String kidId) {
-        File[] keyFiles = keysFolder(owner, doc).listFiles(file -> file.getName().endsWith(KEY_FILE_SUFFIX));
-        if (keyFiles == null) {
-            return false;
-        }
-        for (File keyFile : keyFiles) {
-            StoredKeyFile stored = readStoredKeyFile(keyFile).orElse(null);
+        for (String key : list(keysFolder(owner, doc)).keys()) {
+            if (!key.endsWith(KEY_FILE_SUFFIX)) {
+                continue;
+            }
+            StoredKeyFile stored = readStoredKeyFile(key).orElse(null);
             if (stored == null) {
                 continue;
             }
@@ -271,7 +243,7 @@ public class DocumentRepository extends AbstractUserFileRepository {
             try {
                 salt = Base64.getDecoder().decode(stored.salt());
             } catch (IllegalArgumentException e) {
-                LOG.warn("Ignoring key file with a non-base64 salt {}", keyFile);
+                LOG.warn("Ignoring key file with a non-base64 salt {}", key);
                 continue;
             }
             if (keyFileCrypto.witnessMatches(stored.witness(), salt, issuerId, kidId)) {
@@ -281,30 +253,27 @@ public class DocumentRepository extends AbstractUserFileRepository {
         return false;
     }
 
-    private Optional<StoredKeyFile> readStoredKeyFile(File keyFile) {
-        if (!keyFile.exists()) {
-            return empty();
-        }
+    private Optional<StoredKeyFile> readStoredKeyFile(String key) {
         try {
-            return of(jsonb.fromJson(readFileToString(keyFile), StoredKeyFile.class));
+            return find(key).map(bytes -> jsonb.fromJson(new String(bytes, UTF_8), StoredKeyFile.class));
         } catch (RuntimeException e) {
             // A single half-written or legacy-format sibling key file must not turn the whole
             // witness folder scan into a 500 and lock every member out (see StoredKeyFile's
             // requireNonNull'd fields).
-            LOG.warn("Ignoring unreadable shared key file {}", keyFile, e);
+            LOG.warn("Ignoring unreadable shared key file {}", key, e);
             return empty();
         }
     }
 
-    private File keysFolder(User user, DocumentId documentId) {
-        return new File(documentFolder(user, documentId), "keys");
+    private String keysFolder(User user, DocumentId documentId) {
+        return join(documentFolder(user, documentId), "keys");
     }
 
-    private File metadataFile(User user, DocumentId documentId) {
-        return new File(documentFolder(user, documentId), "metadata.enc");
+    private String metadataFile(User user, DocumentId documentId) {
+        return join(documentFolder(user, documentId), "metadata.enc");
     }
 
-    private File documentFolder(User user, DocumentId documentId) {
-        return new File(new File(getUserHome(user), "documents"), documentId.id());
+    private String documentFolder(User user, DocumentId documentId) {
+        return join(getUserPrefix(user), "documents", documentId.id());
     }
 }

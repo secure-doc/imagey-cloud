@@ -105,6 +105,9 @@ public class ChallengeResourceTest {
         if (!marysData.exists()) {
             marysData.mkdirs();
         }
+        // The account marker UserRepository.persist would have written on registration - exists()
+        // now keys off it rather than off the home directory merely being present.
+        Files.writeString(new File(marysData, "account.json").toPath(), "{}");
         File marysDevices = new File(marysData, "devices");
         if (!marysDevices.exists()) {
             marysDevices.mkdirs();

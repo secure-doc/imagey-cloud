@@ -30,6 +30,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Cookie;
@@ -350,6 +358,53 @@ public class DocumentUploadTest {
             binaryPart("document", DOCUMENT_CONTENT)));
 
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("Concurrent uploads into the same folder carrying the same folderETag - exactly one succeeds, the rest get 412")
+    void concurrentUploadsIntoSameFolder() throws InterruptedException, ExecutionException {
+        // Every racer must race the *same* known-stale value, not its own live read: two requests
+        // that never truly overlap (one completes before the other's internal read) would otherwise
+        // both legitimately succeed in sequence - that is not a race, just two ordinary successive
+        // uploads, and asserting "exactly one 201" against that is flaky, not a real property. Fixing
+        // the folderETag every racer carries to one value captured before any of them run makes the
+        // outcome deterministic regardless of actual thread interleaving: whichever request is first
+        // to actually land changes the stored ETag, so every other racer's explicit folderETag check
+        // fails immediately - and if several requests are genuinely reading before anyone has written,
+        // that is exactly the CAS race DocumentRepository#persistIfCurrent (ADR 0012) resolves down to
+        // one winner. Either way, precisely one winner is guaranteed by construction, not by timing.
+        int racers = 8;
+        String currentETag = documentRepository.getETag(user, new DocumentId(FOLDER_ID)).orElseThrow();
+        ExecutorService executor = Executors.newFixedThreadPool(racers);
+        try {
+            List<Callable<Response>> attempts = IntStream.range(0, racers)
+                .<Callable<Response>>mapToObj(i -> () -> {
+                    String documentId = UUID.randomUUID().toString();
+                    return upload(fullBody(
+                        jsonPart("metadata",
+                            metadataJson(user, FOLDER_ID, documentId, user.id().id(), FOLDER_ID, currentETag)),
+                        binaryPart("folder", ("folder-content-" + documentId).getBytes(UTF_8)),
+                        binaryPart("document", DOCUMENT_CONTENT)));
+                })
+                .toList();
+            List<Future<Response>> results = executor.invokeAll(attempts);
+
+            long created = 0;
+            long preconditionFailed = 0;
+            for (Future<Response> result : results) {
+                Response.Status status = result.get().getStatusInfo().toEnum();
+                if (status == CREATED) {
+                    created++;
+                } else if (status == PRECONDITION_FAILED) {
+                    preconditionFailed++;
+                }
+            }
+
+            assertThat(created).isEqualTo(1);
+            assertThat(preconditionFailed).isEqualTo(racers - 1);
+        } finally {
+            executor.shutdown();
+        }
     }
 
     @Test

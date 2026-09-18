@@ -26,7 +26,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
@@ -106,6 +116,40 @@ public class RegistrationFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(FOUND.getStatusCode());
         assertThat(response.getLocation().toString()).contains("email=mary");
+    }
+
+    @Test
+    @DisplayName("Concurrent registrations for a brand-new address all agree on one account")
+    void concurrentRegistrationsAgreeOnOneAccount() throws InterruptedException, ExecutionException {
+        int racers = 8;
+        Email email = new Email("race-" + UUID.randomUUID() + "@imagey.cloud");
+        ExecutorService executor = Executors.newFixedThreadPool(racers);
+        try {
+            List<Callable<String>> attempts = IntStream.range(0, racers)
+                .<Callable<String>>mapToObj(i -> {
+                    Token registrationToken = tokenService.generateRegistrationToken(email, MAX_VALUE);
+                    return () -> {
+                        Response response = newClient()
+                            .target("http://localhost:" + config.getHttpPort() + "/registrations/" + registrationToken.token())
+                            .request().header("Origin", "https://secure-doc.store")
+                            .get();
+                        assertThat(response.getStatus()).isEqualTo(FOUND.getStatusCode());
+                        return response.getLocation().toString();
+                    };
+                })
+                .toList();
+            List<Future<String>> results = executor.invokeAll(attempts);
+
+            Set<String> userIds = new HashSet<>();
+            for (Future<String> result : results) {
+                String location = result.get();
+                userIds.add(location.substring(location.indexOf("userId=") + "userId=".length()));
+            }
+
+            assertThat(userIds).hasSize(1);
+        } finally {
+            executor.shutdown();
+        }
     }
 
     @Test

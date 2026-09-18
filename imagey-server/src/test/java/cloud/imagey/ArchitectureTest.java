@@ -54,4 +54,11 @@ public class ArchitectureTest {
     private static ArchRule noJakartaRsInDomain = com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses()
         .that().resideInAPackage("cloud.imagey.domain..")
         .should().dependOnClassesThat().resideInAPackage("jakarta.ws.rs..");
+    // Repositories reach storage only through BlobStore (cloud.imagey.infrastructure.storage) - never
+    // by talking to a concrete backend SDK directly, the way AbstractFileRepository already keeps
+    // domain code off java.io.File.
+    @ArchTest
+    private static ArchRule noAwsSdkInDomain = com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses()
+        .that().resideInAPackage("cloud.imagey.domain..")
+        .should().dependOnClassesThat().resideInAPackage("software.amazon.awssdk..");
 }
