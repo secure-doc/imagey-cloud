@@ -32,6 +32,8 @@ export default function InvitationPanel({
           user={user}
           contact={activity.userId}
           contactPublicKey={activity.publicKey}
+          contactPublicProfileId={activity.publicProfileId}
+          chatId={activity.chatId}
           onAccepted={() => onActivityHandled()}
         />,
         <DeclineInvitationButton

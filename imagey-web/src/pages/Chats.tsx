@@ -135,10 +135,10 @@ export function ChatsList({
     }
   }, [chatsDocument, onLoaded]);
 
-  // The inviter's side of the handshake: once the invitee has ACCEPTED the
-  // request, pick up our ECDH-wrapped copy of the chat key, record the
-  // contact locally, and confirm receipt so the server can delete the
-  // now-redundant request.
+  // The inviter's side of the handshake (leg 3, ADR 0015): once the invitee
+  // has ACCEPTED the request, derive the chat key, create the chat Document
+  // together with the contact entry, and confirm receipt so the server files
+  // the invitee's key entry under the chat.
   //
   // receiveContactRequest is a read-modify-write of the chats document plus a
   // receipt confirmation - running it twice for the same request (StrictMode's
@@ -182,7 +182,13 @@ export function ChatsList({
           );
           setChatsDocument((prev) =>
             prev
-              ? { ...prev, contacts: prev.contacts.concat(newContact) }
+              ? {
+                  ...prev,
+                  // A retried pick-up returns the already recorded contact.
+                  contacts: prev.contacts
+                    .filter((c) => c.chatId !== newContact.chatId)
+                    .concat(newContact),
+                }
               : prev,
           );
         })
@@ -233,6 +239,7 @@ export function ChatsList({
                   contact={contactRequest.inviter}
                   contactPublicKey={contactRequest.publicKey}
                   contactPublicProfileId={contactRequest.publicProfileId}
+                  chatId={contactRequest.chatId}
                   onAccepted={(newContact) => {
                     setContactRequests((contactRequests) =>
                       contactRequests?.filter(

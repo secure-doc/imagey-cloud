@@ -4,7 +4,7 @@ import {
   clearLocalStorage,
   generateAesGcmKeyJwk,
   loginAsMary,
-  prepareMarysChatCreation,
+  prepareMarysChatsDocumentUpdate,
   prepareMarysChatsDocument,
   prepareMarysLogin,
   setupMockServer,
@@ -55,14 +55,13 @@ test("accept open invitations", async ({ page }) => {
         r.headers({
           "Content-Type": "application/json",
         });
-        // We don't exact-match the encrypted key/chatId because they're
-        // generated dynamically (see ContactService.acceptContactRequest).
+        // We don't exact-match the wrapped chat key because it's generated
+        // dynamically (see ContactService.acceptContactRequest).
         r.jsonBody({
           inviter: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
           invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-          chatId: MatchersV3.string("new-chat-id"),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId,
         });
@@ -70,17 +69,19 @@ test("accept open invitations", async ({ page }) => {
     )
     .willRespondWith(204);
 
-  // Accepting now also creates the chat's own Document: it re-reads the
-  // "chats" document (a second GET, distinct from the one the initial
-  // page load already consumed via prepareMarysContactRequests() above)
-  // and then uploads the new chat Document, same shape as creating a folder.
+  // Accepting re-reads the "chats" document (a second GET, distinct from the
+  // one the initial page load already consumed via
+  // prepareMarysContactRequests() above) and records bill there - the chat
+  // Document itself is created by bill, the inviter, later on (ADR 0015).
   await prepareMarysChatsDocument(
     [],
     "mary has no contacts and a contact request from bill",
     chatsDocumentKey,
   );
-  await prepareMarysChatCreation();
-  // ... and shares mary's public profile into the new chat with bill (§3.2).
+  prepareMarysChatsDocumentUpdate(
+    "mary has no contacts and a contact request from bill",
+  );
+  // ... and shares mary's public profile into the chat with bill (§3.2).
   prepareMarysPublicProfileShare(
     publicProfileId,
     "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
@@ -108,16 +109,16 @@ test("accept open invitations", async ({ page }) => {
       name: "check",
     });
     // The panel is removed only once the whole acceptContactRequest chain
-    // (PUT contact-request -> POST chat document -> POST public-profile share)
-    // has resolved. Pin the terminal share request so the assertion doesn't
+    // (PUT chats document -> POST public-profile share -> PUT contact-request)
+    // has resolved. Pin the terminal accept request so the assertion doesn't
     // race a slow multi-hop round-trip under load / coverage instrumentation.
-    const profileShared = page.waitForResponse(
+    const accepted = page.waitForResponse(
       (r) =>
-        r.request().method() === "POST" &&
-        /\/documents\/[^/]+\/keys$/.test(new URL(r.url()).pathname),
+        r.request().method() === "PUT" &&
+        r.url().includes("/contact-requests/"),
     );
     await acceptAliceBtn.click();
-    await profileShared;
+    await accepted;
     await expect(invitationPanel).not.toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -181,17 +182,23 @@ test("accept open invitations fails", async ({ page }) => {
   const builder = await prepareMarysContactRequests(chatsDocumentKey);
   // Accepting first ensures mary's own named public profile before it ever
   // reaches the (overridden-to-fail) PUT below.
-  await prepareMarysNamedPublicProfile();
+  const { publicProfileId } = await prepareMarysNamedPublicProfile();
 
-  // Accepting re-reads the "chats" document and creates the chat's own
-  // Document before it ever reaches the (overridden-to-fail) PUT below -
-  // both need to be mocked so the flow actually gets there.
+  // Accepting re-reads and updates the "chats" document and shares mary's
+  // public profile before it ever reaches the (overridden-to-fail) PUT
+  // below - all need to be mocked so the flow actually gets there.
   await prepareMarysChatsDocument(
     [],
     "mary has no contacts and a contact request from bill",
     chatsDocumentKey,
   );
-  await prepareMarysChatCreation();
+  prepareMarysChatsDocumentUpdate(
+    "mary has no contacts and a contact request from bill",
+  );
+  prepareMarysPublicProfileShare(
+    publicProfileId,
+    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+  );
 
   await builder.executeTest(async (mockServer) => {
     // When
@@ -230,7 +237,7 @@ test("accept open invitations fails", async ({ page }) => {
     // The failure path leaves the panel visible, so there's no UI change to
     // wait on. Gate the callback's return on the failing PUT actually being
     // reached: it's the last call in the accept flow, so by the time it
-    // fires the preceding chats re-read + chat-document upload have already
+    // fires the preceding chats re-read + update + profile share have already
     // completed against the Pact mock server - without this, executeTest can
     // tear the mock server down while one of those is still in flight
     // ("route.fetch: connect ECONNREFUSED" / "request expected but not
@@ -315,6 +322,8 @@ test("send contact request", async ({ page }) => {
           inviterEmail: "mary@imagey.cloud",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           publicProfileId,
+          // Chosen by mary's client (ADR 0015) - random per run.
+          chatId: MatchersV3.uuid(),
         });
       },
     )
@@ -386,7 +395,6 @@ test("accept invitation prompts for a display name when mary has no public profi
           invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-          chatId: MatchersV3.string("new-chat-id"),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId: MatchersV3.string("new-public-profile-id"),
         });
@@ -399,7 +407,9 @@ test("accept invitation prompts for a display name when mary has no public profi
     "mary has no contacts and a contact request from bill",
     chatsDocumentKey,
   );
-  await prepareMarysChatCreation();
+  prepareMarysChatsDocumentUpdate(
+    "mary has no contacts and a contact request from bill",
+  );
   prepareMarysPublicProfileShareForFreshProfile(
     "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
   );
@@ -421,15 +431,15 @@ test("accept invitation prompts for a display name when mary has no public profi
     });
     await expect(namePromptHeading).toBeVisible();
     await page.getByLabel("Name").fill("Mary Doe");
-    // After naming, accepting runs the full chain; pin its terminal share
+    // After naming, accepting runs the full chain; pin its terminal accept
     // request so the panel-gone assertion doesn't race it under load.
-    const profileShared = page.waitForResponse(
+    const accepted = page.waitForResponse(
       (r) =>
-        r.request().method() === "POST" &&
-        /\/documents\/[^/]+\/keys$/.test(new URL(r.url()).pathname),
+        r.request().method() === "PUT" &&
+        r.url().includes("/contact-requests/"),
     );
     await page.getByRole("button", { name: "Confirm" }).click();
-    await profileShared;
+    await accepted;
 
     await expect(namePromptHeading).not.toBeVisible();
     await expect(invitationPanel).not.toBeVisible();

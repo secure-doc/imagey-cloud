@@ -27,6 +27,10 @@ import cloud.imagey.domain.encryption.PublicKey.Deserializer;
 import cloud.imagey.domain.encryption.PublicKey.Serializer;
 import cloud.imagey.domain.user.User;
 
+// A contact request between two accounts, stored in both trees (see ContactRepository.persist).
+// ADR 0015: the inviter owns the chat; chatId is chosen by the inviter and set from INVITED on,
+// publicKey/publicProfileId are those of the sender of the latest transition, and sharedKey
+// (set on ACCEPTED) is the chat key wrapped by the invitee under their own "chats" document key.
 public record ContactExchange(
     @JsonbTypeAdapter(User.Adapter.class) User inviter,
     @JsonbTypeAdapter(User.Adapter.class) User invitee,

@@ -69,85 +69,105 @@ Contacts and chats are, like everything else the user owns, also
 represented as an encrypted `Document`: each user has a "chats" Document
 (referenced from their Settings document, alongside the root document
 folder and the profile) whose decrypted content is a
-`contacts: { userId, chatId, owner }[]` array instead of a dedicated
-`/users/{id}/contacts` listing endpoint. `owner` is whichever party created
-the chat Document (see step 2 below) and is needed to know how to unwrap
-its key later (step 4).
+`contacts: { userId, chatId, owner, pending? }[]` array instead of a
+dedicated `/users/{id}/contacts` listing endpoint. `owner` is the party that
+owns the chat Document - always the **inviter** (ADR 0015) - and is needed to
+know where to find it and its key later (step 4).
 
-A **chat has no separately generated symmetric key** - the chat's shared
-key *is* the chat Document's own Document key. Access to a chat is granted
-like access to any other Document: each party has a key entry, wrapped
-under their *own* "chats" Document key, filed under the chat Document in
-the owner's tree with themselves as `issuer`. The owner files theirs when
-creating the chat; the other party's is delivered ECDH-wrapped in the
-handshake, re-wrapped by them under their own "chats" key, and **synced by
-the server** into the owner's tree (step 3). Both parties always reach the
-chat - messages and in-chat shared documents - through the owner's
-namespace (`Contact.owner`).
+A **chat's key is derived, never transported** (ADR 0015). Both parties
+compute it independently from their main key pairs:
+
+```
+chatKey = HKDF-SHA-256(
+    ikm  = ECDH(ownPrivateMainKey, otherPublicMainKey),
+    salt = <empty>,
+    info = "imagey-chat-key" 0x00 chatId 0x00 inviterUserId 0x00 inviteeUserId)
+  -> AES-GCM-256 (extractable, stored as JWK)
+```
+
+The chat key *is* the chat Document's own Document key. Each party needs the
+derivation only once: they immediately wrap the result under their *own*
+"chats" Document key, and that key entry, filed under the chat Document in the
+owner's tree with themselves as `issuer`, is what they use from then on. The
+owner files theirs when creating the chat; the invitee's is handed to the
+server with the acceptance and **filed by the server** once the owner has
+created the chat (step 3). Both parties always reach the chat - messages and
+in-chat shared documents - through the owner's namespace (`Contact.owner`).
 
 Contact requests are tracked separately, as a transient handshake record -
-they are not the durable contact list; they are deleted by the server once
-the handshake completes.
+they are not the durable contact list; once the handshake completes
+(`RECEIVED`) they are no longer listed for either side.
 
-1. **Send Request:** User A (the inviter) sends a contact request via
-   `POST /users/{A-userId}/contact-requests` with `{ invitee: B's email,
-   inviterEmail: A's email, publicKey: A's public main key }`. The server
-   resolves (or mints) B's **UserId** so the pending request can be filed
-   in B's tree straight away, and stores it with status `INVITED`.
-   `inviterEmail` is used only to name A in the invitation mail sent to a
-   not-yet-registered B and is not stored. A's public main key is kept on
-   the request itself, so accepting it never needs a separate public-key
-   fetch. If B has no account yet, the server emails B an
-   `/invitations/{token}` link (`token` carries B's email as subject);
-   following it, `InvitationFilter` mints B's UserId and redirects into the
-   SPA with `?email=B&userId=<B's UserId>&inviter=<A's UserId>`, and
-   accepting the request is the last step of B's registration (see
-   `RegistrationDialog` / `AuthenticationService.register`).
+1. **Send Request:** User A (the inviter) generates a fresh `chatId` and
+   sends a contact request via `POST /users/{A-userId}/contact-requests`
+   with `{ invitee: B's email, inviterEmail: A's email, publicKey: A's
+   public main key, publicProfileId, chatId }`. The server rejects a
+   `chatId` that already names a document in A's tree (`409`), resolves
+   (or mints) B's **UserId** so the pending request can be filed in B's
+   tree straight away, and stores it with status `INVITED`. `inviterEmail`
+   is used only to name A in the invitation mail sent to a not-yet-registered
+   B and is not stored. A's public main key is kept on the request itself,
+   so accepting it never needs a separate public-key fetch. If B has no
+   account yet, the server emails B an `/invitations/{token}` link (`token`
+   carries B's email as subject); following it, `InvitationFilter` mints B's
+   UserId and redirects into the SPA with `?email=B&userId=<B's
+   UserId>&inviter=<A's UserId>`, and accepting the request is the last step
+   of B's registration (see `RegistrationDialog` /
+   `AuthenticationService.register`).
 2. **Accept Request:** User B (the invitee) fetches their pending requests
    via `GET /users/{B-userId}/contact-requests` and accepts, or - if B just
    registered via an invite link as described above - accepts as the last
    step of registration instead. Accepting:
-   - Creates a new, empty chat Document as a child of B's own "chats"
-     Document, generating a fresh Document Key for it exactly as for any
-     other document, and self-issuing B's own access to it (wrapped under
-     the "chats" Document's key).
-   - Appends `{ userId: A, chatId, owner: B }` to B's own "chats" Document
-     contacts array, which is then re-encrypted and re-uploaded (the same
-     multipart `POST /users/{id}/documents` call used for creating a
-     folder).
-   - ECDH-wraps the same chat Document key for A, using A's public main
-     key (from the request) and B's own private main key.
-   - Sends `PUT /users/{B}/contact-requests/{A}` with
-     `{ inviter: A, invitee: B, publicKey: B's public main key, chatId,
-     sharedKey: <ECDH-wrapped chat key> }`. The server moves the request to
-     status `ACCEPTED` and overwrites `publicKey` with B's (so A can later
-     derive the same ECDH shared secret B used to wrap `sharedKey`).
-3. **Pick Up the Chat Key:** User A polls `GET /users/{A}/contact-requests`
-   and finds the request now `ACCEPTED`. A decrypts `sharedKey` (ECDH,
-   using B's public key from the request and A's own private key),
-   **re-wraps the chat key symmetrically under A's own "chats" Document
-   key**, appends `{ userId: B, chatId, owner: B }` to A's own "chats"
-   Document contacts array (re-encrypted/re-uploaded the same way), and
-   confirms receipt via `PUT /users/{A}/contact-requests/{B}` with
-   `{ inviter: A, invitee: B, status: "RECEIVED",
-   chatKey: { issuer: A, kid: <A's chats doc id>, sharedKey: <re-wrapped> } }`.
-   The server files `chatKey` under the chat Document in **B's** tree
-   (`documents/{chatId}/keys/{A}`, issuer `A`) - this is what grants A the
-   `member` role on the chat from then on - and deletes the request. Both
-   sides now have their own durable copy of the contact and their own
-   key entry.
+   - Derives `chatKey` from B's private and A's public main key.
+   - Appends `{ userId: A, chatId, owner: A, pending: { chatKey,
+     publicProfiles } }` to B's own "chats" Document (`PUT`, guarded by its
+     ETag). The `pending` part lets B use the chat before A has created it.
+   - Shares B's public profile into the chat (a key entry wrapped with
+     `chatKey`).
+   - Sends `PUT /users/{B}/contact-requests/{A}` with `{ inviter: A,
+     invitee: B, status: "ACCEPTED", publicKey: B's public main key,
+     publicProfileId, sharedKey: <chatKey wrapped under B's "chats" key> }`.
+     The server moves the request to `ACCEPTED` and overwrites `publicKey`
+     with B's, so A can derive the same chat key. `sharedKey` is opaque to A
+     and the server.
+
+   From now on B can already read and post messages at
+   `/users/{A}/documents/{chatId}/messages`: the server grants the invitee of
+   an `ACCEPTED` exchange naming exactly this `(A, chatId)` a **provisional**
+   `member` role for the messages sub-resource only - never for the chat
+   document, its keys or files, and never cached, since a decline can still
+   withdraw it.
+3. **Create the Chat:** User A polls `GET /users/{A}/contact-requests` and
+   finds the request now `ACCEPTED`. A derives `chatKey` from A's private and
+   B's public main key, creates the chat Document (`{ type: "chat",
+   publicProfiles }`) as a child of A's own "chats" Document together with
+   the contact entry `{ userId: B, chatId, owner: A }` (one atomic multipart
+   `POST /users/{A}/documents`, self-issued key entry wrapped under the
+   "chats" Document's key), shares A's public profile into the chat, and
+   confirms via `PUT /users/{A}/contact-requests/{B}` with `{ inviter: A,
+   invitee: B, status: "RECEIVED" }`. The server requires the chat Document
+   to exist (`409` otherwise), files B's `sharedKey` under it
+   (`documents/{chatId}/keys/{B}`, issuer `B`) - this grants B the regular
+   `member` role from then on - and marks the request `RECEIVED`. A retry
+   after a failed confirm finds the contact already in A's "chats" Document
+   and skips the creation.
 4. **Loading the Chat Key (either side, any time after):** To open a chat,
-   a user looks up the matching `Contact` entry (`{ userId, chatId, owner
-   }`) in their own decrypted "chats" Document, then fetches their key
-   entry from the owner's tree - `keys/{chatId's parent}` if they own the
-   chat, `keys/{self}` if not - and unwraps it symmetrically with their own
-   "chats" Document key. No ECDH is involved at open time either way.
-5. **Decline:** `DELETE /users/{B}/contact-requests/{A}` removes an
-   `INVITED` request User B does not want to accept.
+   a user looks up the matching `Contact` entry in their own decrypted
+   "chats" Document, then fetches their key entry from the owner's tree -
+   `keys/{chatId's parent}` if they own the chat, `keys/{self}` if not - and
+   unwraps it symmetrically with their own "chats" Document key. No ECDH is
+   involved at open time. While the chat Document is not accessible yet
+   (`401`/`403`/`404` - any other failure is reported as an error), the
+   invitee falls back to the contact's `pending` part; as soon as the chat
+   Document has loaded, the client removes `pending` from the "chats"
+   Document.
+5. **Decline:** `DELETE /users/{B}/contact-requests/{A}` marks the request
+   `DENIED` (from any status, which also ends a provisional membership).
 
 ## Cryptographic Primitives Summary
 
 - **Asymmetric Cryptography:** ECDH (Elliptic Curve Diffie-Hellman) with curve `P-256`.
 - **Symmetric Cryptography:** AES-GCM with 256-bit keys and 12-byte random IVs.
 - **Key Derivation (Password):** PBKDF2 with HMAC-SHA-256, 250,000 iterations.
+- **Key Derivation (Chat):** ECDH (`P-256`) + HKDF-SHA-256 bound to chat id and both UserIds (ADR 0015).
 - **Key Formatting:** JSON Web Key (JWK).

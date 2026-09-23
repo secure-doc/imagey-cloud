@@ -92,20 +92,25 @@ public class ContactService {
      *                      the pending request can be filed in the invitee's tree even before they
      *                      register
      * @param key           the inviter's public main key, stored on the request for the invitee to
-     *                      wrap the chat key on accept
+     *                      derive the chat key on accept (ADR 0015)
      * @param publicProfileId the inviter's "public-profile" Document id (see
      *                      docs/plans/chat-public-profile.md), nullable - carried along so the
      *                      invitee can share their own public-profile with the inviter once
      *                      accepted, without a separate round-trip
+     * @param chatId        the id of the chat the inviter will own (ADR 0015), chosen by their client;
+     *                      it must not name an existing document in the inviter's tree, because the
+     *                      invitee gets provisional access to its messages once they accept
      * @return the invitee (by minted/resolved {@link UserId}) if a fresh request was filed, or
      *         empty if an exchange between the two already existed and nothing was sent
      */
-    public Optional<User> invite(User sender, Email senderEmail, Email recipient, PublicKey key, DocumentId publicProfileId)
+    public Optional<User> invite(
+        User sender, Email senderEmail, Email recipient, PublicKey key, DocumentId publicProfileId, DocumentId chatId)
             throws IOException {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL");
         }
+        validateNewChatId(sender, chatId);
 
         // Resolve the invitee's userId without touching the global mapping write-lock when they are
         // already known. A miss means the address has never been seen, so it can have neither an
@@ -137,7 +142,7 @@ public class ContactService {
         if (recipientUser == null) {
             recipientUser = new User(userMappingService.registerUser(recipient));
         }
-        contactRepository.persist(new ContactExchange(sender, recipientUser, INVITED, key, null, null, publicProfileId));
+        contactRepository.persist(new ContactExchange(sender, recipientUser, INVITED, key, chatId, null, publicProfileId));
 
         if (!registered) {
             // The invitee accepts this request as the last step of registration; it reads the
@@ -154,52 +159,79 @@ public class ContactService {
         return Optional.of(recipientUser);
     }
 
-    // Called by the invitee (see ContactResource.updateContactRequest): they overwrite the
-    // placeholder public key from the original invite with their own, and hand over the chat
-    // document id plus the chat key ECDH-wrapped for the inviter.
-    public void acceptInvitation(
-        User invitee, User inviter, PublicKey publicKey, DocumentId chatId, EncryptedSymmetricKey sharedKey,
-        DocumentId publicProfileId) throws IOException {
-
+    private void validateNewChatId(User inviter, DocumentId chatId) {
         if (chatId == null) {
-            throw new ValidationException("An accepted contact request must carry a chatId.");
+            throw new ValidationException("A contact request must carry a chatId.");
+        }
+        if (documentRepository.documentExists(inviter, chatId)) {
+            throw new ResourceConflictException("Document " + chatId.id() + " already exists");
+        }
+    }
+
+    // Leg 2 of the handshake (ADR 0015), called by the invitee (see
+    // ContactResource.updateContactRequest): they overwrite the inviter's public key from the
+    // original invite with their own (so the inviter can derive the chat key) and hand over their own
+    // entry for the chat key, wrapped under their "chats" document key - opaque to us, filed verbatim
+    // under the chat document in confirmReceipt. From now on the invitee is a provisional member of
+    // the chat's messages (see isProvisionalChatMember).
+    public void acceptInvitation(
+        User invitee, User inviter, PublicKey publicKey, EncryptedSymmetricKey sharedKey, DocumentId publicProfileId)
+            throws IOException {
+
+        if (sharedKey == null) {
+            throw new ValidationException("An accepted contact request must carry a sharedKey.");
         }
 
         ContactExchange exchange = contactRepository.getContactExchange(invitee, inviter)
             .filter(e -> e.status() == INVITED)
+            .filter(e -> e.invitee().equals(invitee))
             .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
 
         ContactExchange accepted = new ContactExchange(
-            exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, chatId, sharedKey, publicProfileId);
+            exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, exchange.chatId(), sharedKey, publicProfileId);
         contactRepository.persist(accepted);
     }
 
-    // Called by the inviter once they have picked up the invitee's acceptance (decrypted their
-    // ECDH-shared copy of the chat key and recorded the invitee as a contact) - this closes out
-    // the exchange so it stops showing as actionable for either side.
+    // Leg 3 of the handshake (ADR 0015), called by the inviter once they have created the chat
+    // document in their own tree - this closes out the exchange so it stops showing as actionable
+    // for either side.
     //
-    // {@code chatKey} is the chat key re-wrapped by the inviter under their own chats-document key
-    // (issuer = the inviter). We file it under the chat document (in the invitee's tree, its
-    // canonical home) - that key entry is what grants the inviter the "member" role on the chat
-    // from then on, see RolesFilter / DocumentRepository.hasDirectGrant. It is optional only so
-    // an inviter on an older client (see ContactRequestTest) can still close out the handshake; the
-    // exchange always carries a chatId once ACCEPTED (see acceptInvitation).
-    public void confirmReceipt(User inviter, User invitee, EncryptedSharedKey chatKey) throws IOException {
+    // We file the invitee's own key entry (from acceptInvitation) under the chat document - that
+    // key entry is what grants the invitee the regular "member" role on the chat from then on, see
+    // RolesFilter / DocumentRepository.hasDirectGrant. The key write is idempotent for identical
+    // content, so a retried confirm is safe.
+    public void confirmReceipt(User inviter, User invitee) throws IOException {
         ContactExchange exchange = contactRepository.getContactExchange(inviter, invitee)
             .filter(e -> e.status() == ACCEPTED)
+            .filter(e -> e.inviter().equals(inviter))
             .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
 
-        if (chatKey != null) {
-            // exchange.chatId() is non-null here: acceptInvitation rejects an ACCEPTED transition
-            // without one, and this method only proceeds for an ACCEPTED exchange.
-            documentRepository.create(invitee, exchange.chatId(),
-                new EncryptedSharedKey(inviter, new Kid(inviter.id().id()), chatKey.sharedKey()));
+        // Filing a key does not check that the document exists (DocumentRepository.create).
+        if (!documentRepository.documentExists(inviter, exchange.chatId())) {
+            throw new ResourceConflictException("Chat " + exchange.chatId().id() + " does not exist yet");
         }
+        documentRepository.create(inviter, exchange.chatId(),
+            new EncryptedSharedKey(invitee, new Kid(invitee.id().id()), exchange.sharedKey()));
 
         ContactExchange received = new ContactExchange(
             exchange.inviter(), exchange.invitee(), RECEIVED, exchange.publicKey(), exchange.chatId(),
             exchange.sharedKey(), exchange.publicProfileId());
         contactRepository.persist(received);
+    }
+
+    /**
+     * Provisional chat membership (ADR 0015 decision 4): between the invitee accepting and the
+     * inviter creating the chat document, the invitee may already read and post the chat's messages.
+     * Must be evaluated on every request (never cached) - {@link #declineInvitation} can still turn
+     * the exchange into {@code DENIED}.
+     */
+    public boolean isProvisionalChatMember(User owner, DocumentId chatId, User caller) {
+        return contactRepository.getContactExchange(owner, caller)
+            .filter(e -> e.status() == ACCEPTED)
+            .filter(e -> e.inviter().equals(owner))
+            .filter(e -> e.invitee().equals(caller))
+            .filter(e -> chatId.equals(e.chatId()))
+            .isPresent();
     }
 
     public void declineInvitation(User user, User requestor) throws IOException {

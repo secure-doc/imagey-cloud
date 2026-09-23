@@ -12,6 +12,7 @@ export default function AcceptInvitationButton({
   contact,
   contactPublicKey,
   contactPublicProfileId,
+  chatId,
   onAccepted,
 }: {
   className?: string;
@@ -22,6 +23,8 @@ export default function AcceptInvitationButton({
   // request (see docs/plans/chat-public-profile.md §4). May be absent (an
   // older client, or an inviter whose public-profile somehow does not exist).
   contactPublicProfileId?: string;
+  // The chat id the inviter chose when sending the request (ADR 0015).
+  chatId: string;
   onAccepted: (contact: ContactEntry) => void;
 }) {
   const authentication = useAuthentication();
@@ -40,6 +43,7 @@ export default function AcceptInvitationButton({
       const newContact = await contactService.acceptContactRequest(
         user,
         contact,
+        chatId,
         contactPublicKey,
         contactPublicProfileId,
         ownPublicProfile,

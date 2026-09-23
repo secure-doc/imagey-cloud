@@ -5,6 +5,7 @@ import {
   generateAesGcmKeyJwk,
   loginAsMary,
   prepareMarysChatCreation,
+  prepareMarysChatsDocumentUpdate,
   prepareMarysChatsDocument,
   prepareMarysDocuments,
   prepareMarysLogin,
@@ -93,14 +94,13 @@ test("accept open invitations", async ({ page }) => {
         r.headers({
           "Content-Type": "application/json",
         });
-        // We don't exact-match the encrypted key/chatId because they're
-        // generated dynamically (see ContactService.acceptContactRequest).
+        // We don't exact-match the wrapped chat key because it's generated
+        // dynamically (see ContactService.acceptContactRequest).
         r.jsonBody({
           inviter: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
           invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-          chatId: MatchersV3.string("new-chat-id"),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId,
         });
@@ -108,17 +108,19 @@ test("accept open invitations", async ({ page }) => {
     )
     .willRespondWith(204);
 
-  // Accepting now also creates the chat's own Document: it re-reads the
-  // "chats" document (a second GET, distinct from the one the initial
-  // page load already consumed via prepareMarysContactRequests() above)
-  // and then uploads the new chat Document, same shape as creating a folder.
+  // Accepting re-reads the "chats" document (a second GET, distinct from the
+  // one the initial page load already consumed via
+  // prepareMarysContactRequests() above) and records bill there - the chat
+  // Document itself is created by bill, the inviter, later on (ADR 0015).
   await prepareMarysChatsDocument(
     [],
     "mary has no contacts and a contact request from bill",
     chatsDocumentKey,
   );
-  await prepareMarysChatCreation();
-  // ... and shares mary's public profile into the new chat with bill (§3.2).
+  prepareMarysChatsDocumentUpdate(
+    "mary has no contacts and a contact request from bill",
+  );
+  // ... and shares mary's public profile into the chat with bill (§3.2).
   prepareMarysPublicProfileShare(
     publicProfileId,
     "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
@@ -216,31 +218,25 @@ test("decline open invitations", async ({ page }) => {
 });
 
 test("pick up an accepted invitation (inviter side)", async ({ page }) => {
-  // The inviter's side of the handshake (ContactService.
+  // The inviter's side of the handshake (leg 3 of ADR 0015, ContactService.
   // receiveContactRequest, driven by Chats.tsx's second effect): Bill
   // already accepted Mary's invitation, and Mary - without any action on
-  // her part - decrypts her ECDH-shared copy of the chat key, records Bill
-  // as a contact, and confirms receipt so the server can delete the
-  // now-redundant request. Unlike accepting/declining, this needs no
-  // button click; it happens as soon as the contact-requests list loads.
+  // her part - derives the chat key, creates the chat Document together with
+  // Bill's contact entry, and confirms receipt so the server files Bill's key
+  // entry under the chat. Unlike accepting/declining, this needs no button
+  // click; it happens as soon as the contact-requests list loads.
   await prepareMarysLogin(page);
   await prepareMarysDocuments();
 
   const given = "mary has no contacts and bill has accepted marys invitation";
   const chatId = "chat-bill-for-mary";
   const chatsDocumentKey = await generateAesGcmKeyJwk();
-  const chatDocumentKey = await generateAesGcmKeyJwk();
 
-  await prepareMarysAcceptedContactRequest(
-    chatId,
-    chatDocumentKey,
-    given,
-    chatsDocumentKey,
-  );
+  await prepareMarysAcceptedContactRequest(chatId, given, chatsDocumentKey);
 
   // receiveContactRequest re-reads the "chats" document a second time
-  // before appending the new contact and re-uploading it - same shape as
-  // the accept flow's own double-read (see prepareMarysContactRequests).
+  // before appending the new contact - same shape as the accept flow's own
+  // double-read (see prepareMarysContactRequests).
   await prepareMarysChatsDocument([], given, chatsDocumentKey);
 
   // receiveContactRequest also ensures mary's own public profile (already
@@ -254,41 +250,31 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
     "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
     given,
   );
-
-  provider
-    .addInteraction()
-    .given(given)
-    .uponReceiving("a request of mary to store the picked-up contact")
-    .withRequest(
-      "PUT",
-      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}`,
-      (r) => {
-        r.headers({ "Content-Type": "application/octet-stream" });
-      },
-    )
-    .willRespondWith(204);
+  await prepareMarysChatCreation(chatId, given);
 
   const builder = provider
     .addInteraction()
     .given(given)
+    // The chat Document mary created just before (confirmReceipt 409s
+    // without it).
+    .given("a document exists", {
+      ownerId: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      documentId: chatId,
+      kid: TestData.mary.settings!.chats,
+      issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    })
     .uponReceiving("a request of mary to confirm receipt of bills contact")
     .withRequest(
       "PUT",
       "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
       (r) => {
         r.headers({ "Content-Type": "application/json" });
-        // chatKey is the chat Document key re-wrapped under Mary's own
-        // chats-document key (issuer = Mary); the server files it under the
-        // chat Document in Bill's tree so Mary keeps access to the chat.
+        // No key any more: the server files bill's own key entry (from his
+        // ACCEPTED update) under the chat Document mary just created.
         r.jsonBody({
           inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           invitee: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
           status: "RECEIVED",
-          chatKey: {
-            issuer: MatchersV3.string("d20cf443-4f96-418f-a957-c8cbef8677c3"),
-            kid: MatchersV3.string(TestData.mary.settings!.chats),
-            sharedKey: MatchersV3.string("ZHVtbXktY2hhdC1rZXk="),
-          },
         });
       },
     )
@@ -320,6 +306,85 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
   });
 });
 
+test("pick up an accepted invitation again after a failed confirm reuses the chat", async ({
+  page,
+}) => {
+  // A previous pick-up already created the chat Document (together with
+  // bill's contact entry), but confirming receipt failed. The retry must not
+  // create the chat a second time - it only re-shares mary's public profile
+  // and confirms receipt.
+  await prepareMarysLogin(page);
+  await prepareMarysDocuments();
+
+  const given = "mary has created the chat with bill but not confirmed receipt";
+  const chatId = "chat-bill-for-mary-retry";
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const contacts = [
+    {
+      userId: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+      chatId,
+      owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    },
+  ];
+
+  await prepareMarysAcceptedContactRequest(
+    chatId,
+    given,
+    chatsDocumentKey,
+    contacts,
+  );
+  await prepareMarysChatsDocument(contacts, given, chatsDocumentKey);
+  const { publicProfileId } = await prepareMarysNamedPublicProfile(
+    "Mary",
+    given,
+  );
+  prepareMarysPublicProfileShare(
+    publicProfileId,
+    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+    given,
+  );
+
+  const builder = provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving(
+      "a request of mary to confirm receipt of bills contact on retry",
+    )
+    .withRequest(
+      "PUT",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+      (r) => {
+        r.headers({ "Content-Type": "application/json" });
+        r.jsonBody({
+          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          invitee: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+          status: "RECEIVED",
+        });
+      },
+    )
+    .willRespondWith(204);
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+    await expect(page.locator("main img")).toHaveCount(2);
+
+    const confirmed = page.waitForResponse(
+      (r) =>
+        r.request().method() === "PUT" &&
+        r.url().includes("/contact-requests/"),
+    );
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    await confirmed;
+
+    // Still exactly one entry for bill (heading + subtitle).
+    await expect(
+      page.getByText("a358c2ed-07d4-4a25-a7db-d860d5c0b895"),
+    ).toHaveCount(2);
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
 test("pick up an accepted invitation fails when confirming receipt fails", async ({
   page,
 }) => {
@@ -335,14 +400,8 @@ test("pick up an accepted invitation fails when confirming receipt fails", async
     "mary has no contacts and bill has accepted marys invitation for a failing confirm";
   const chatId = "chat-bill-for-mary-failing-confirm";
   const chatsDocumentKey = await generateAesGcmKeyJwk();
-  const chatDocumentKey = await generateAesGcmKeyJwk();
 
-  await prepareMarysAcceptedContactRequest(
-    chatId,
-    chatDocumentKey,
-    given,
-    chatsDocumentKey,
-  );
+  await prepareMarysAcceptedContactRequest(chatId, given, chatsDocumentKey);
   await prepareMarysChatsDocument([], given, chatsDocumentKey);
   const { publicProfileId } = await prepareMarysNamedPublicProfile(
     "Mary",
@@ -354,20 +413,11 @@ test("pick up an accepted invitation fails when confirming receipt fails", async
     given,
   );
 
-  const builder = provider
-    .addInteraction()
-    .given(given)
-    .uponReceiving(
-      "a request of mary to store the picked-up contact before a failing confirm",
-    )
-    .withRequest(
-      "PUT",
-      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}`,
-      (r) => {
-        r.headers({ "Content-Type": "application/octet-stream" });
-      },
-    )
-    .willRespondWith(204);
+  const builder = await prepareMarysChatCreation(
+    chatId,
+    given,
+    "a request of mary to create a chat document before a failing confirm",
+  );
 
   await builder.executeTest(async (mockServer) => {
     await setupMockServer(page, mockServer);

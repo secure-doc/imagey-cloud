@@ -9,6 +9,15 @@ export class PreconditionFailedError extends Error {
   }
 }
 
+// Thrown for any 4xx/5xx response the caller doesn't handle itself, so callers
+// can tell e.g. "not there / not allowed" (401/403/404) from a server failure.
+export class HttpError extends Error {
+  constructor(public readonly status: number) {
+    super("Http Error " + status);
+    this.name = "HttpError";
+  }
+}
+
 // The client-asserted chain that proves a non-owner reaches a document through a
 // shared folder (ADR 0009). base64url(JSON) of { chain: [{doc, owner, wrappedBy}] }.
 // `undefined` for an own-tree or direct-grant access - no header is then sent.
@@ -240,7 +249,7 @@ async function resolve<T>(
   // Any 4xx/5xx is an error here; 2xx/3xx (including the 201 that uploads
   // return) fall through to the caller-supplied result handler.
   if (response.status >= 400) {
-    return Promise.reject(new Error("Http Error " + response.status));
+    return Promise.reject(new HttpError(response.status));
   }
   return result();
 }

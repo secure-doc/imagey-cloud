@@ -110,6 +110,64 @@ export const cryptoService = {
     }
   },
 
+  // Derives a chat's symmetric key from the two parties' main key pairs
+  // (ADR 0015): ECDH of the own private and the other party's public main key,
+  // expanded with HKDF-SHA-256 and bound to this chat via `info`. Inviter and
+  // invitee compute the same key independently, so it never has to be sent.
+  deriveChatKey: async (
+    ownPrivateKey: JsonWebKey,
+    otherPublicKey: JsonWebKey,
+    chatId: string,
+    inviterId: string,
+    inviteeId: string,
+  ): Promise<JsonWebKey> => {
+    // Main private keys are exported with key_ops ["deriveKey"]; drop them so
+    // the key can be imported for deriveBits.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { key_ops, ...privateKey } = ownPrivateKey;
+    const priv = await crypto.subtle.importKey(
+      "jwk",
+      privateKey,
+      { name: "ECDH", namedCurve: "P-256" },
+      false,
+      ["deriveBits"],
+    );
+    const pub = await crypto.subtle.importKey(
+      "jwk",
+      otherPublicKey,
+      { name: "ECDH", namedCurve: "P-256" },
+      false,
+      [],
+    );
+    const sharedSecret = await crypto.subtle.deriveBits(
+      { name: "ECDH", public: pub },
+      priv,
+      256,
+    );
+    const hkdfKey = await crypto.subtle.importKey(
+      "raw",
+      sharedSecret,
+      "HKDF",
+      false,
+      ["deriveKey"],
+    );
+    const chatKey = await crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(0),
+        info: new TextEncoder().encode(
+          ["imagey-chat-key", chatId, inviterId, inviteeId].join("\u0000"),
+        ),
+      },
+      hkdfKey,
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt", "decrypt"],
+    );
+    return crypto.subtle.exportKey("jwk", chatKey);
+  },
+
   encryptDocument: async (
     key: JsonWebKey,
     content: ArrayBuffer[],

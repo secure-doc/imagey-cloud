@@ -40,6 +40,8 @@ export const activityService = {
             type: ActivityType.INVITATION,
             userId: request.inviter,
             publicKey: request.publicKey,
+            chatId: request.chatId,
+            publicProfileId: request.publicProfileId,
           }),
         ),
       ...documents.map(

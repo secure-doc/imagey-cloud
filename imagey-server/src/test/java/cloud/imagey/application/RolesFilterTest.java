@@ -156,6 +156,16 @@ public class RolesFilterTest {
     }
 
     @Test
+    @DisplayName("The fixture chats live in the inviter's tree and grant the invitee the member role (ADR 0015)")
+    // One chat per pair: mary invited laura (chat-laura), alice invited mary (chat-mary).
+    void fixtureChatsGrantTheInviteeMembership() {
+        User alice = UserFactory.alice();
+
+        assertThat(getDocumentAs(mary, new DocumentId("chat-laura"), laura).getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(getDocumentAs(alice, new DocumentId("chat-mary"), mary).getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
     @DisplayName("Another user cannot read the owner's public key")
     void publicKeyIsOwnerOnly() {
         assertThat(marysPublicKeyAs(laura).getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());

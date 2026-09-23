@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
@@ -36,6 +37,9 @@ export function useSendContactRequest(
       inviteeEmail,
       mainKeyPair.publicKey,
       publicProfileId,
+      // The inviter owns the chat and picks its id up front (ADR 0015); the
+      // chat Document itself is only created once the invitee has accepted.
+      cryptoService.generateUuid(),
     );
     setPendingInviteeEmail(undefined);
     setNamePrompt(undefined);

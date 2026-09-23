@@ -23,6 +23,7 @@ import static java.util.Optional.ofNullable;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -38,6 +39,7 @@ import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.Provider;
 
+import cloud.imagey.domain.contact.ContactService;
 import cloud.imagey.domain.document.AccessPath;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
@@ -55,6 +57,8 @@ import cloud.imagey.infrastructure.common.BoundedLruCache;
 public class RolesFilter implements ContainerRequestFilter {
 
     private static final int MEMBERSHIP_CACHE_SIZE = 10_000;
+    // {owner}/documents/{chatId}/messages
+    private static final int MESSAGES_SEGMENT_INDEX = 3;
 
     // Positive member decisions per (owner, document, caller). Negatives are never cached - a
     // well-behaved client only asks for documents it can see, so denials are rare, and not caching
@@ -69,6 +73,8 @@ public class RolesFilter implements ContainerRequestFilter {
     private TokenService tokenService;
     @Inject
     private DocumentRepository documentRepository;
+    @Inject
+    private ContactService contactService;
     @Inject
     private HttpServletRequest request;
 
@@ -134,8 +140,19 @@ public class RolesFilter implements ContainerRequestFilter {
             return false;
         }
         return contextUser != null && extractDocumentId(uriInfo)
-            .map(documentId -> isMember(contextUser, documentId, currentPrincipal))
+            .map(documentId -> isMember(contextUser, documentId, currentPrincipal)
+                || isProvisionalChatMember(contextUser, documentId, currentPrincipal, uriInfo))
             .orElse(false);
+    }
+
+    // ADR 0015 decision 4: the invitee of an ACCEPTED exchange may read and post the chat's messages
+    // before the inviter has created the chat document. Restricted to the messages sub-resource and
+    // deliberately NOT cached - the exchange can still be declined.
+    private boolean isProvisionalChatMember(User owner, DocumentId chatId, User caller, UriInfo uriInfo) {
+        List<PathSegment> segments = uriInfo.getPathSegments();
+        return segments.size() > MESSAGES_SEGMENT_INDEX
+            && segments.get(MESSAGES_SEGMENT_INDEX).getPath().equals("messages")
+            && contactService.isProvisionalChatMember(owner, chatId, caller);
     }
 
     private boolean isMember(User owner, DocumentId documentId, User member) {

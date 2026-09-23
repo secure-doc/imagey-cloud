@@ -102,7 +102,8 @@ public class InvitationTest {
                         "crv": "P-256", "ext": true, "key_ops": [], "kty": "EC",
                         "x": "O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4",
                         "y": "ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU"
-                    }
+                    },
+                    "chatId": "chat-mary-luise"
                 }
             """));
 

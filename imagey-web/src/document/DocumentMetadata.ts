@@ -79,6 +79,15 @@ export interface ContactEntry {
   name: string;
   avatarId?: string;
   profileRevision: string;
+  // Only on the invitee's side, between accepting and the inviter creating the
+  // chat Document (ADR 0015 decision 5): the derived chat key and the chat's
+  // public-profile ids, used by ContactService.loadChatKey while the chat
+  // Document is not accessible yet. Removed (ContactService.dropPendingChatKey)
+  // as soon as the chat view has loaded the chat Document itself.
+  pending?: {
+    chatKey: JsonWebKey;
+    publicProfiles: Record<string, string>;
+  };
 }
 
 type DocumentMetadata =
