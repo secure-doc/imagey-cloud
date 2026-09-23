@@ -9,6 +9,7 @@ export const contactRepository = {
     invitee: Email,
     publicKey: JsonWebKey,
     publicProfileId: string,
+    chatId: string,
   ): Promise<void> => {
     const response = await fetch(`/users/${inviter}/contact-requests`, {
       method: "POST",
@@ -23,6 +24,7 @@ export const contactRepository = {
         inviterEmail,
         publicKey,
         publicProfileId,
+        chatId,
       }),
     });
     if (!response.ok) {
@@ -45,15 +47,14 @@ export const contactRepository = {
     }
     return response.json();
   },
-  // Called by the invitee to accept: generates and uploads the chat
-  // Document (see ContactService.acceptContactRequest), then hands the
-  // inviter their ECDH-wrapped copy of its key via this PUT. Moves the
-  // request to status ACCEPTED.
+  // Called by the invitee to accept (see ContactService.acceptContactRequest):
+  // hands over their own public main key (so the inviter can derive the chat
+  // key) and their own entry for the chat key, wrapped under their "chats"
+  // document key. Moves the request to status ACCEPTED.
   acceptContactRequest: async (
     invitee: UserId,
     inviter: UserId,
     publicKey: JsonWebKey,
-    chatId: string,
     sharedKey: string,
     publicProfileId: string,
   ): Promise<void> => {
@@ -70,7 +71,6 @@ export const contactRepository = {
           invitee,
           status: "ACCEPTED",
           publicKey,
-          chatId,
           sharedKey,
           publicProfileId,
         }),
@@ -80,17 +80,14 @@ export const contactRepository = {
       throw new Error("Failed to accept contact request");
     }
   },
-  // Called by the inviter once they've decrypted the shared key and
-  // recorded the contact locally: moves the request to status RECEIVED,
-  // which the server treats as "done" and deletes. `chatKey` is the chat
-  // Document key re-wrapped under the inviter's own chats-document key
-  // (issuer = the inviter); the server files it under the chat Document in
-  // the invitee's tree, which is what later grants the inviter access to
-  // the chat (see ContactService.confirmReceipt on the server).
+  // Called by the inviter once they've created the chat Document: moves the
+  // request to status RECEIVED. The server then files the invitee's key entry
+  // (from the ACCEPTED update) under the chat Document, which grants the
+  // invitee the regular "member" role on the chat (see
+  // ContactService.confirmReceipt on the server).
   confirmContactRequestReceived: async (
     inviter: UserId,
     invitee: UserId,
-    chatKey: { issuer: string; kid: string; sharedKey: string },
   ): Promise<void> => {
     const response = await fetch(
       `/users/${inviter}/contact-requests/${invitee}`,
@@ -104,7 +101,6 @@ export const contactRepository = {
           inviter,
           invitee,
           status: "RECEIVED",
-          chatKey,
         }),
       },
     );

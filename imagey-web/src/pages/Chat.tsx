@@ -20,6 +20,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const [publicProfiles, setPublicProfiles] =
     useState<Record<string, string>>();
   const [chat, setChat] = useState<{ ownerId: string; chatId: string }>();
+  // Whether the chat key came from the contact's `pending` part because the
+  // inviter has not created the chat Document yet (ADR 0015); undefined while
+  // the key is still loading.
+  const [chatPending, setChatPending] = useState<boolean>();
   const [keyError, setKeyError] = useState(false);
   const [chatsLoadFailed, setChatsLoadFailed] = useState(false);
   // Populated once the sidebar ChatsList has loaded the "chats" document -
@@ -121,6 +125,41 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     user,
   ]);
 
+  // Once the chat Document itself has loaded (the inviter created it and the
+  // server filed our key entry, ADR 0015), the contact's `pending` chat key is
+  // no longer needed - remove it from the "chats" document.
+  const hasPendingChatKey = !!chatsDocumentInfo?.contacts.find(
+    (c) => c.userId === contactUserId,
+  )?.pending;
+  useEffect(() => {
+    if (!chatsDocumentInfo || chatPending !== false || !hasPendingChatKey) {
+      return;
+    }
+    contactService
+      .dropPendingChatKey(
+        user,
+        {
+          documentId: chatsId,
+          name: chatsDocumentInfo.name,
+          key: chatsDocumentInfo.chatsDocumentKey,
+          revision: chatsDocumentInfo.revision,
+          contacts: chatsDocumentInfo.contacts,
+        },
+        contactUserId,
+      )
+      .then(({ contacts, revision }) => {
+        if (revision) {
+          setChatsDocumentInfo((prev) =>
+            prev ? { ...prev, contacts, revision } : prev,
+          );
+        }
+      })
+      .catch((e) => console.error("Failed to drop pending chat key", e));
+    // Only re-run when the pending state changes, not on every write of the
+    // "chats" document (e.g. a profile-snapshot sync).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatPending, hasPendingChatKey, contactUserId, chatsId, user]);
+
   // The chat's shared key is the chat Document's own Document key - look up
   // the matching Contact in the "chats" document, then let ContactService
   // figure out whether it's ours (self-issued) or the other party's (ECDH-
@@ -140,6 +179,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     setSharedKey(undefined);
     setPublicProfiles(undefined);
     setChat(undefined);
+    setChatPending(undefined);
     setKeyError(false);
     if (!contact) {
       console.error(`No chat found for contact ${contactUserId}`);
@@ -149,9 +189,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     setChat({ ownerId: contact.owner, chatId: contact.chatId });
     contactService
       .loadChatKey(user, contact, chatsId, chatsDocumentKey)
-      .then(({ key, publicProfiles }) => {
+      .then(({ key, publicProfiles, pending }) => {
         setSharedKey(key);
         setPublicProfiles(publicProfiles);
+        setChatPending(pending);
       })
       .catch((e) => {
         console.error(e);

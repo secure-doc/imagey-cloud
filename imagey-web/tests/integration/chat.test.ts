@@ -14,12 +14,14 @@ import {
   prepareMarysChat,
   prepareMarysChatWithContactProfile,
   prepareMarysChatsDocument,
+  prepareMarysChatsDocumentUpdate,
   prepareMarysChatOwnedByAlice,
   prepareAlicesLogin,
   prepareAlicesEmptyDocumentsFolder,
   prepareAlicesChat,
   loginAsAlice,
   encryptKnownChatMessage,
+  generateAesGcmKeyJwk,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -153,10 +155,11 @@ test("send empty message does not submit", async ({ page }) => {
 
   const builder = provider
     .addInteraction()
+    .given("Mary has a chat with alice")
     .uponReceiving("a request to receive messages for empty chat")
     .withRequest(
       "GET",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-alice/messages",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages",
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -202,10 +205,11 @@ test("send message fails and restores input", async ({ page }) => {
 
   const builder = provider
     .addInteraction()
+    .given("Mary has a chat with alice")
     .uponReceiving("a request to receive messages for failing chat")
     .withRequest(
       "GET",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-alice/messages",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages",
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -213,7 +217,7 @@ test("send message fails and restores input", async ({ page }) => {
     await setupMockServer(page, mockServer);
 
     await page.route(
-      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-alice/messages*",
+      "**/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages*",
       async (route, request) => {
         if (request.method() === "POST") {
           await route.fulfill({ status: 500 });
@@ -264,7 +268,7 @@ test("polling fails gracefully", async ({ page }) => {
     await setupMockServer(page, mockServer);
 
     await page.route(
-      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-alice/messages*",
+      "**/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages*",
       async (route, request) => {
         if (request.method() === "GET") {
           await route.fulfill({ status: 500 });
@@ -598,17 +602,16 @@ test("view shared document from another user", async ({ page }) => {
 });
 
 test("view chat owned by another user (synced chat key)", async ({ page }) => {
-  // Mary has a contact whose chat SHE didn't create - Alice accepted an
-  // invitation from Mary (or vice versa) and is the chat Document's real
-  // owner, so opening it exercises the non-owner branch of
-  // ContactService.loadChatKey, unlike every other chat test in this file
-  // (which - via prepareMarysChat/prepareAlicesChat - always model the
-  // chat as self-owned). Mary's key entry there was synced by the server
-  // and is wrapped under her own chats-document key.
+  // Mary has a contact whose chat SHE didn't create - Alice invited Mary and
+  // owns the chat Document (ADR 0015), so opening it exercises the non-owner
+  // branch of ContactService.loadChatKey (so do prepareMarysChat's alice
+  // tests; its laura tests and prepareAlicesChat model the owner's side).
+  // Mary's invitee key entry there was filed by the server on receipt and is
+  // wrapped under her own chats-document key.
   await prepareMarysLogin(page);
   await prepareMarysEmptyDocumentsFolder();
 
-  const chatId = "chat-alice-owned";
+  const chatId = "chat-mary";
   const chatsDocumentKey = await prepareMarysChatsDocument([
     {
       userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
@@ -620,11 +623,11 @@ test("view chat owned by another user (synced chat key)", async ({ page }) => {
 
   provider
     .addInteraction()
-    .given("Alice owns a chat shared with mary")
+    .given("Mary has a chat with alice")
     .uponReceiving("a request to receive messages for the alice-owned chat")
     .withRequest(
       "GET",
-      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-alice-owned/messages",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages",
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -686,10 +689,10 @@ test("send a message in a chat owned by another user (posts to the owner's tree)
   await prepareMarysLogin(page);
   await prepareMarysEmptyDocumentsFolder();
 
-  // Same chat id as "view chat owned by another user" so this reuses the
-  // "Alice owns a chat shared with mary" provider state (the chat Document
+  // Same chat as "view chat owned by another user" - the one mary<->alice
+  // chat, reused via the "Mary has a chat with alice" provider state (the chat Document
   // + Mary's synced key entry in Alice's tree).
-  const chatId = "chat-alice-owned";
+  const chatId = "chat-mary";
   const chatsDocumentKey = await prepareMarysChatsDocument([
     {
       userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
@@ -701,7 +704,7 @@ test("send a message in a chat owned by another user (posts to the owner's tree)
 
   provider
     .addInteraction()
-    .given("Alice owns a chat shared with mary")
+    .given("Mary has a chat with alice")
     .uponReceiving(
       "a request to receive messages for the alice-owned chat (send test)",
     )
@@ -727,7 +730,7 @@ test("send a message in a chat owned by another user (posts to the owner's tree)
 
   const builder = provider
     .addInteraction()
-    .given("Alice owns a chat shared with mary")
+    .given("Mary has a chat with alice")
     .uponReceiving(
       "a request of mary to send a message into the alice-owned chat",
     )
@@ -871,6 +874,194 @@ test("view chat shows the contact's display name and avatar", async ({
     await snapshotRefreshResponse;
 
     await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("write and read messages right after accepting, before the inviter created the chat", async ({
+  page,
+}) => {
+  // ADR 0015: mary accepted alice's invitation, but alice's client has not
+  // picked up the acceptance yet, so the chat Document does not exist in
+  // alice's tree. Mary's contact entry carries the derived chat key in its
+  // `pending` part, and the server lets her read and post messages under
+  // alice's chat id via the provisional (messages-only) membership.
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+
+  const given = "mary accepted an invitation from alice, chat not created yet";
+  const alice = "10ad1cce-816b-4e12-b94d-7ef824c0d162";
+  const chatId = "chat-alice-pending";
+  const chatKey = await generateAesGcmKeyJwk();
+  await prepareMarysChatsDocument(
+    [
+      {
+        userId: alice,
+        chatId,
+        owner: alice,
+        pending: { chatKey, publicProfiles: {} },
+      },
+    ],
+    given,
+  );
+
+  provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving("a request of mary to get the not yet created chat document")
+    .withRequest("GET", `/users/${alice}/documents/${chatId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    // mary has no key entry yet - the provisional membership covers the
+    // messages sub-resource only.
+    .willRespondWith(401);
+
+  provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving("a request of mary to receive messages of the pending chat")
+    .withRequest("GET", `/users/${alice}/documents/${chatId}/messages`)
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving(
+      "a request of mary to get contact requests after accepting alice",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => {
+        r.headers({ Accept: "application/json" });
+      },
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  const builder = provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving("a request of mary to send a message into the pending chat")
+    .withRequest(
+      "POST",
+      `/users/${alice}/documents/${chatId}/messages`,
+      (r) => {
+        r.headers({ "Content-Type": "text/plain" });
+      },
+    )
+    .willRespondWith(201, (r) => {
+      r.headers({
+        Location: MatchersV3.string(
+          `/users/${alice}/documents/${chatId}/messages/msg-pending`,
+        ),
+      });
+    });
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    const aliceContact = page.getByText(alice).first();
+    await expect(aliceContact).toBeVisible();
+    await aliceContact.click();
+
+    const input = page.getByLabel("Type a message");
+    await expect(input).toBeVisible();
+    await input.fill("Hi Alice, thanks for the invitation");
+
+    const postResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/users/${alice}/documents/${chatId}/messages`) &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "send" }).click();
+    await postResponse;
+
+    await expect(
+      page.getByText("Hi Alice, thanks for the invitation"),
+    ).toBeVisible();
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("opening a chat that the inviter has created removes the pending chat key", async ({
+  page,
+}) => {
+  // ADR 0015: mary accepted alice's invitation while alice had not created
+  // the chat yet, so mary's contact entry still carries the derived chat key
+  // in `pending`. Alice has since created chat-mary and the server filed
+  // mary's key entry - once the chat Document itself loads, the chat view
+  // drops the now redundant `pending` part from mary's "chats" document.
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+
+  const given = "Mary has a chat with alice";
+  const alice = "10ad1cce-816b-4e12-b94d-7ef824c0d162";
+  const chatId = "chat-mary";
+  const chatKey = await generateAesGcmKeyJwk();
+  const chatsDocumentKey = await prepareMarysChatsDocument(
+    [
+      {
+        userId: alice,
+        chatId,
+        owner: alice,
+        pending: { chatKey, publicProfiles: {} },
+      },
+    ],
+    given,
+  );
+  await prepareMarysChatOwnedByAlice(chatId, chatsDocumentKey, given, chatKey);
+  prepareMarysChatsDocumentUpdate(
+    given,
+    "a request of mary to drop the pending chat key",
+  );
+
+  provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving(
+      "a request to receive messages for the formerly pending chat",
+    )
+    .withRequest("GET", `/users/${alice}/documents/${chatId}/messages`)
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  const builder = provider
+    .addInteraction()
+    .given(given)
+    .uponReceiving(
+      "a request of mary to get contact requests for the formerly pending chat",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => {
+        r.headers({ Accept: "application/json" });
+      },
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    const aliceContact = page.getByText(alice).first();
+    await expect(aliceContact).toBeVisible();
+
+    const pendingDropped = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        response.url().endsWith(`/documents/${TestData.mary.settings!.chats}`),
+    );
+    await aliceContact.click();
+    await expect(page.getByLabel("Type a message")).toBeVisible();
+    await pendingDropped;
+
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

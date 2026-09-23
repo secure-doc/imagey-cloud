@@ -80,3 +80,14 @@ account's opaque **UserId**, not its email address. The recursion rule is
 unchanged - the special case that stops the walk when `kid == issuer's
 settings-document id` still holds, because that id is the issuer's UserId.
 The `{email}` path segment is now `{userId}`.
+
+## Amendment (2026-09-23, ADR 0015)
+
+Decision 4 now has the roles reversed: the chat is owned by the **inviter**, and
+the key entry synced by the server during receipt confirmation is the
+**invitee's** (wrapped under their own "chats" key, delivered with the
+acceptance). The chat key itself is derived by both parties via ECDH + HKDF
+instead of being transported. In addition, `member` has one narrowly scoped,
+uncached fallback for the messages sub-resource only: the invitee of an
+`ACCEPTED` exchange naming `(owner, chatId)` may post and read messages before
+the chat document exists (ADR 0015 decision 4). There are still only two roles.

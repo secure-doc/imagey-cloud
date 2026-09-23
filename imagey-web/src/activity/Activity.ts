@@ -18,6 +18,9 @@ export interface InvitationActivity {
   // needed to accept without a separate public-key fetch (see
   // ContactService.acceptContactRequest).
   publicKey: JsonWebKey;
+  // The id the inviter chose for the chat (ADR 0015).
+  chatId: string;
+  publicProfileId?: string;
   message?: MessageContent;
 }
 

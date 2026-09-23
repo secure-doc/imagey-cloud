@@ -1,12 +1,14 @@
 import { UserId } from "../authentication/UserId";
 
-// INVITED: the inviter sent a request, awaiting the invitee's decision.
-// ACCEPTED: the invitee accepted, generated the chat Document + its key,
-//   and encrypted that key for the inviter (chatId/sharedKey/publicKey
-//   below are populated). The inviter still needs to pick this up.
-// RECEIVED: the inviter decrypted the shared key and recorded the contact
-//   locally - purely transient, the server deletes the request once both
-//   sides have reached this point (see ContactService.receiveContactRequest).
+// The three-leg handshake of ADR 0015 - the inviter owns the chat, and both
+// parties derive its key via ECDH + HKDF (cryptoService.deriveChatKey):
+// INVITED: the inviter sent a request (with the chat's id), awaiting the
+//   invitee's decision.
+// ACCEPTED: the invitee accepted, derived the chat key and handed over their
+//   own entry for it (sharedKey/publicKey below). From now on the invitee can
+//   already write messages. The inviter still needs to pick this up.
+// RECEIVED: the inviter created the chat Document and the server filed the
+//   invitee's key entry under it (see ContactService.receiveContactRequest).
 // DENIED: the invitee declined.
 export type ContactRequestStatus =
   | "INVITED"
@@ -17,17 +19,18 @@ export type ContactRequestStatus =
 export type ContactRequest = {
   inviter: UserId;
   invitee: UserId;
-  // While INVITED: the inviter's public main key (so the invitee can wrap
-  // the chat key for them on accept).
+  // While INVITED: the inviter's public main key (so the invitee can derive
+  // the chat key on accept).
   // Once ACCEPTED: overwritten by the invitee with the invitee's OWN
-  // public main key instead (so the inviter can derive the same ECDH
-  // shared secret the invitee used to wrap `sharedKey`).
+  // public main key instead (so the inviter can derive the same chat key).
   publicKey: JsonWebKey;
   status: ContactRequestStatus;
-  // Only present once status is ACCEPTED: the chat Document's id and its
-  // Document key, ECDH-encrypted (with the invitee's private key and the
-  // inviter's public key) and base64-encoded.
-  chatId?: string;
+  // The id of the chat Document, chosen by the inviter at invite time. The
+  // chat Document itself is only created by the inviter in leg 3.
+  chatId: string;
+  // Only present once status is ACCEPTED: the chat key wrapped by the invitee
+  // under their own "chats" document key - opaque to the inviter, the server
+  // files it verbatim under the chat Document on RECEIVED.
   sharedKey?: string;
   // The sender's "public-profile" Document id (see
   // docs/plans/chat-public-profile.md §4): the inviter's while INVITED,

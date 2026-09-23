@@ -20,6 +20,7 @@ import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.text;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static jakarta.ws.rs.core.Response.Status.OK;
+import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.apache.commons.io.FileUtils.writeStringToFile;
@@ -45,6 +46,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.domain.contact.ContactExchange;
+import cloud.imagey.domain.contact.ContactRepository;
+import cloud.imagey.domain.contact.ContactStatus;
 import cloud.imagey.domain.contact.Message;
 import cloud.imagey.domain.contact.MessageId;
 import cloud.imagey.domain.document.DocumentId;
@@ -78,6 +82,8 @@ public class MessageResourceTest {
     private TokenService tokenService;
     @Inject
     private DocumentRepository documentRepository;
+    @Inject
+    private ContactRepository contactRepository;
 
     private Cookie ownerCookie;
     private Cookie contactCookie;
@@ -228,6 +234,81 @@ public class MessageResourceTest {
             .get();
 
         assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("The invitee of an accepted exchange can send and read messages before the chat exists")
+    void provisionalMemberSendsAndReceivesBeforeChatExists() {
+        String pendingChat = "pending-chat";
+        acceptedExchange(pendingChat, ContactStatus.ACCEPTED);
+
+        Response response = messagesOf(pendingChat, contactCookie).post(text("early-content"));
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+
+        List<Message> messages = messagesOf(pendingChat, contactCookie).get(new GenericType<List<Message>>() { });
+        assertThat(messages).hasSize(1);
+        assertThat(messages.get(0).sender().id().id()).isEqualTo("contact");
+    }
+
+    @Test
+    @DisplayName("Provisional membership is re-checked on every request, so a decline withdraws it")
+    void provisionalMembershipIsNotCached() {
+        String pendingChat = "pending-chat-declined";
+        acceptedExchange(pendingChat, ContactStatus.ACCEPTED);
+        assertThat(messagesOf(pendingChat, contactCookie).post(text("early-content")).getStatus())
+            .isEqualTo(CREATED.getStatusCode());
+
+        acceptedExchange(pendingChat, ContactStatus.DENIED);
+
+        assertThat(messagesOf(pendingChat, contactCookie).post(text("late-content")).getStatus())
+            .isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Provisional membership covers only the chat id named in the exchange")
+    void provisionalMembershipIsBoundToChatId() {
+        acceptedExchange("pending-chat", ContactStatus.ACCEPTED);
+
+        assertThat(messagesOf("other-chat", contactCookie).post(text("content")).getStatus())
+            .isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Provisional membership covers only the messages, not the chat document itself")
+    void provisionalMembershipDoesNotCoverTheDocument() {
+        acceptedExchange("pending-chat", ContactStatus.ACCEPTED);
+        writeChatMetadata("pending-chat");
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/pending-chat")
+            .request()
+            .cookie(contactCookie)
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    private void acceptedExchange(String chatId, ContactStatus status) {
+        contactRepository.persist(new ContactExchange(
+            owner, contact, status, null, new DocumentId(chatId), new EncryptedSymmetricKey("d3JhcHBlZA=="), null));
+    }
+
+    private void writeChatMetadata(String chatId) {
+        try {
+            writeStringToFile(new File(rootPath, "owner/documents/" + chatId + "/metadata.enc"), "chat", UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private Builder messagesOf(String chatId, Cookie cookie) {
+        return newClient()
+            .register(RecordMessageBodyReader.class)
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + chatId + "/messages")
+            .request()
+            .cookie(cookie);
     }
 
     public interface TestClient {

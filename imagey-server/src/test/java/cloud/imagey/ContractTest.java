@@ -235,8 +235,6 @@ public class ContractTest {
     void joeExists() throws IOException {
         File joesData = new File(rootPath, "35c34cb3-559d-4001-a67b-23259e45e69e");
         joesData.mkdirs();
-        File contacts = new File(joesData, "contacts");
-        contacts.mkdirs();
 
         File documents = new File(joesData, "documents");
         File settingsDoc = new File(documents, "35c34cb3-559d-4001-a67b-23259e45e69e");
@@ -349,17 +347,16 @@ public class ContractTest {
 
     @State("mary has no contacts and a contact request from bill")
     void maryHasNoContactsAndBillRequest() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
         File marysContactRequests = getMarysContactRequests();
         deleteQuietly(marysContactRequests);
         marysContactRequests.mkdirs();
         // A ContactExchange as ContactRepository.persist actually writes it (JSON, one file per
-        // counterpart) - bill invited mary, still INVITED, so chatId/sharedKey are unset.
+        // counterpart) - bill invited mary, still INVITED: the chatId bill chose is set (ADR 0015),
+        // the sharedKey only comes with mary's acceptance.
         writeStringToFile(new File(marysContactRequests, "a358c2ed-07d4-4a25-a7db-d860d5c0b895.json"),
             "{\"inviter\":\"a358c2ed-07d4-4a25-a7db-d860d5c0b895\",\"invitee\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\","
             + "\"status\":\"INVITED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":null,\"sharedKey\":null,\"publicProfileId\":\"bills-public-profile-id\"}",
+            + "\"chatId\":\"chat-bill-invited-mary\",\"sharedKey\":null,\"publicProfileId\":\"bills-public-profile-id\"}",
             UTF_8);
     }
 
@@ -387,7 +384,7 @@ public class ContractTest {
             + "\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\","
             + "\"x\":\"OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY\","
             + "\"y\":\"D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM\"},"
-            + "\"chatId\":null,\"sharedKey\":null,\"publicProfileId\":null}",
+            + "\"chatId\":\"chat-mary-invited-joe\",\"sharedKey\":null,\"publicProfileId\":null}",
             UTF_8);
     }
 
@@ -406,16 +403,49 @@ public class ContractTest {
         maryHasNoContactsAndBillAcceptedInvitation("chat-bill-for-mary-failing-confirm");
     }
 
+    @State("mary has created the chat with bill but not confirmed receipt")
+    void maryHasCreatedTheChatWithBill() throws IOException {
+        // A previous pick-up created the chat document in mary's tree (ADR 0015 leg 3), but its
+        // confirm-receipt failed - the exchange is still ACCEPTED.
+        maryHasNoContactsAndBillAcceptedInvitation("chat-bill-for-mary-retry");
+        copyFile(new File(getMarysDocuments(), "9c59a4f3-ae55-4c4b-9e4a-2079a2446738/metadata.enc"),
+            new File(getMarysDocuments(), "chat-bill-for-mary-retry/metadata.enc"));
+    }
+
+    @State("mary accepted an invitation from alice, chat not created yet")
+    void maryAcceptedAlicesInvitation() throws IOException {
+        // ADR 0015 leg 2 done, leg 3 not yet: the exchange is ACCEPTED, but alice has not created the
+        // chat document - mary is a provisional member of its messages only. Every request of this
+        // state is made by mary, also those addressing alice's tree.
+        user = getMary();
+        String exchange = "{\"inviter\":\"" + ALICE + "\",\"invitee\":\"" + MARY + "\","
+            + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
+            + "\"chatId\":\"chat-alice-pending\",\"sharedKey\":\"bWFyeXMtd3JhcHBlZC1jaGF0LWtleQ==\","
+            + "\"publicProfileId\":null}";
+        writeStringToFile(new File(getMarysContactRequests(), ALICE + ".json"), exchange, UTF_8);
+        writeStringToFile(new File(getAlicesData(), "contact-requests/" + MARY + ".json"), exchange, UTF_8);
+    }
+
+    // A completed handshake (ADR 0015 leg 3 done), stored in both trees like ContactRepository.persist
+    // does; sharedKey is the invitee's key entry the server filed under the chat document.
+    private void writeReceivedExchange(String inviter, String invitee, String chatId, String sharedKey)
+            throws IOException {
+        String exchange = "{\"inviter\":\"" + inviter + "\",\"invitee\":\"" + invitee + "\","
+            + "\"status\":\"RECEIVED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
+            + "\"chatId\":\"" + chatId + "\",\"sharedKey\":\"" + sharedKey + "\",\"publicProfileId\":null}";
+        writeStringToFile(new File(rootPath, inviter + "/contact-requests/" + invitee + ".json"), exchange, UTF_8);
+        writeStringToFile(new File(rootPath, invitee + "/contact-requests/" + inviter + ".json"), exchange, UTF_8);
+    }
+
     private void maryHasNoContactsAndBillAcceptedInvitation(String chatId) throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
         File marysContactRequests = getMarysContactRequests();
         deleteQuietly(marysContactRequests);
         marysContactRequests.mkdirs();
         // Mary invited bill (see ContactService.acceptInvitation) and he already accepted -
-        // chatId/sharedKey are set, but mary hasn't confirmed receipt yet (see
-        // "a request of mary to confirm receipt of bills contact"). Once she does, this
-        // transitions to RECEIVED and stops showing up (see ContactRepository.isActionableFor).
+        // chatId/sharedKey (bill's own wrapped chat key entry) are set, but mary hasn't created the
+        // chat nor confirmed receipt yet (see "a request of mary to confirm receipt of bills
+        // contact"). Once she does, this transitions to RECEIVED and stops showing up (see
+        // ContactRepository.isActionableFor).
         writeStringToFile(new File(marysContactRequests, "a358c2ed-07d4-4a25-a7db-d860d5c0b895.json"),
             "{\"inviter\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\",\"invitee\":\"a358c2ed-07d4-4a25-a7db-d860d5c0b895\","
             + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
@@ -428,21 +458,7 @@ public class ContractTest {
 
     @State("mary has no contacts")
     void maryHasNoContacts() throws IOException {
-        deleteQuietly(new File(getMarysData(), "contacts"));
         deleteQuietly(new File(getMarysData(), "contact-requests"));
-    }
-
-    @State("Alice owns a chat shared with mary")
-    void aliceOwnsAChatSharedWithMary() throws IOException {
-        // The chat Document lives in the owner's (alice's) namespace; mary reaches it via the
-        // "member" role, which needs a shared key filed under keys/{mary's email}.json whose issuer
-        // is mary herself (she re-wrapped it under her own chats-document key on receipt
-        // confirmation, and the server synced it here). Reuse a real encrypted fixture for the
-        // metadata so Pact's octet-stream sniffing sees genuine binary rather than ASCII text.
-        File aliceChatMary = new File(getAlicesData(), "documents/chat-mary");
-        File chatDocument = new File(getAlicesData(), "documents/chat-alice-owned");
-        copyFile(new File(aliceChatMary, "metadata.enc"), new File(chatDocument, "metadata.enc"));
-        writeKey(getAlicesData().getName(), "chat-alice-owned", MARY, MARY, "c3luY2VkLWNoYXQta2V5");
     }
 
     @State("Mary has a profile picture")
@@ -506,30 +522,12 @@ public class ContractTest {
 
     @State("Mary has a chat with alice")
     void maryHasChatWithAlice() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
-        File aliceChat = new File(marysContacts, "10ad1cce-816b-4e12-b94d-7ef824c0d162");
-        aliceChat.mkdirs();
-        writeStringToFile(new File(aliceChat, "key.json"),
-            "{\"issuerType\":\"USER\",\"issuer\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\",\"kid\":\"0\",\"sharedKey\":\""
-            + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
-            + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
-            + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
-            UTF_8);
-    }
-
-    @State("Mary has a chat with bill")
-    void maryHasChatWithBill() throws IOException {
-        File marysContacts = new File(getMarysData(), "contacts");
-        deleteQuietly(marysContacts);
-        File billChat = new File(marysContacts, "a358c2ed-07d4-4a25-a7db-d860d5c0b895");
-        billChat.mkdirs();
-        writeStringToFile(new File(billChat, "key.json"),
-            "{\"issuerType\":\"USER\",\"issuer\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\",\"kid\":\"0\",\"sharedKey\":\""
-            + "hZZTKnJUUFgFcBt8L44ROlHT8HiCC5KLAH6BgRI33xY3x0za/9mDOyX5xWlvY3jFCO8/"
-            + "6oYIWMXJg1XB/iOlZ5UUSqNj40rbIQGgjkqxw/DXnRXxa0lN5AapXuBb/"
-            + "ZRDTL9D37YNTCSgVY9LmuJBNruh73SsdYfX7I2H48ld27w6QPqM7wDU1cwWmnAMIgIzPfWJYYQc\"}",
-            UTF_8);
+        // Mary's side of the one chat between mary and alice (see "Alice has a chat with mary"):
+        // alice invited mary and owns chat-mary, mary reaches it as a member through her own
+        // invitee key entry in alice's tree. Every request of this state is made by mary, also
+        // those addressing alice's tree.
+        user = getMary();
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=");
     }
 
     @State("marys second device unlocked")
@@ -617,28 +615,9 @@ public class ContractTest {
 
     @State("Alice has a chat with mary")
     void aliceHasChatWithMary() throws IOException {
-        File aliceContacts = new File(getAlicesData(), "contacts");
-        File maryChat = new File(aliceContacts, "d20cf443-4f96-418f-a957-c8cbef8677c3");
-        maryChat.mkdirs();
-        writeStringToFile(new File(maryChat, "key.json"),
-            "{\"issuer\":\"10ad1cce-816b-4e12-b94d-7ef824c0d162\",\"kid\":\"0\",\"sharedKey\":\""
-            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
-            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\"}",
-            UTF_8);
-
-        // ContactExchange so MessageResource.resolveChatId(alice, mary) can find chatId "chat-mary" -
-        // the actual chat document alice owns with mary (see src/test/resources/data/10ad1cce-816b-4e12-b94d-7ef824c0d162/
-        // documents/chat-mary). Without this, sending/receiving on this chat 404s instead of working.
-        File aliceContactRequests = new File(getAlicesData(), "contact-requests");
-        aliceContactRequests.mkdirs();
-        writeStringToFile(new File(aliceContactRequests, "d20cf443-4f96-418f-a957-c8cbef8677c3.json"),
-            "{\"inviter\":\"10ad1cce-816b-4e12-b94d-7ef824c0d162\",\"invitee\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\","
-            + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":\"chat-mary\",\"sharedKey\":\""
-            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
-            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\","
-            + "\"publicProfileId\":null}",
-            UTF_8);
+        // Alice invited mary and owns the chat (ADR 0015): src/test/resources/data/<alice>/documents/
+        // chat-mary holds alice's self-issued key entry and mary's invitee entry.
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=");
 
         // Message storage lives under the chat document itself (see MessageRepository.persist/
         // fetchMessages), not under a flat "messages/{contact}" folder.
@@ -655,16 +634,7 @@ public class ContractTest {
     void aRequestToReceiveMessagesWithSharedDoc() throws IOException {
         // Same ContactExchange as "Alice has a chat with mary" - written independently here since
         // pact interactions using this state don't necessarily also declare that one.
-        File aliceContactRequests = new File(getAlicesData(), "contact-requests");
-        aliceContactRequests.mkdirs();
-        writeStringToFile(new File(aliceContactRequests, "d20cf443-4f96-418f-a957-c8cbef8677c3.json"),
-            "{\"inviter\":\"10ad1cce-816b-4e12-b94d-7ef824c0d162\",\"invitee\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\","
-            + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":\"chat-mary\",\"sharedKey\":\""
-            + "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0"
-            + "mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf\","
-            + "\"publicProfileId\":null}",
-            UTF_8);
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=");
 
         File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         messagesDir.mkdirs();

@@ -6,7 +6,7 @@ import {
 } from "@pact-foundation/pact";
 import { webcrypto } from "node:crypto";
 import * as fs from "fs";
-import { TestData, shortName, LAURA_ID } from "./testdata";
+import { TestData, shortName, ALICE_ID, LAURA_ID } from "./testdata";
 
 // --- Chats/contact-requests test helpers -----------------------------------
 // Contacts/chats are (like documents, folders and the profile) their own
@@ -246,6 +246,7 @@ async function mockChatsDocument(
     name?: string;
     avatarId?: string;
     profileRevision?: string;
+    pending?: { chatKey: JsonWebKey; publicProfiles: Record<string, string> };
   }[],
   given?: string | string[],
   chatsDocumentKey?: JsonWebKey,
@@ -299,7 +300,12 @@ async function mockChatsDocument(
 }
 
 export async function prepareMarysChatsDocument(
-  contacts: { userId: string; chatId: string; owner: string }[] = [],
+  contacts: {
+    userId: string;
+    chatId: string;
+    owner: string;
+    pending?: { chatKey: JsonWebKey; publicProfiles: Record<string, string> };
+  }[] = [],
   given?: string | string[],
   chatsDocumentKey?: JsonWebKey,
 ): Promise<JsonWebKey> {
@@ -433,6 +439,7 @@ async function mockChatDocumentSharedViaSync({
   given,
   suffix = "",
   chatDocumentKey,
+  validKey = true,
 }: {
   ownerEmail: string;
   viewerEmail: string;
@@ -441,6 +448,7 @@ async function mockChatDocumentSharedViaSync({
   given?: string | string[];
   suffix?: string;
   chatDocumentKey: JsonWebKey;
+  validKey?: boolean;
 }): Promise<ConfiguredInteraction> {
   const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
 
@@ -467,10 +475,9 @@ async function mockChatDocumentSharedViaSync({
     )
     .willRespondWith(200, (r) => r.body("application/octet-stream", content));
 
-  const wrappedKey = await encryptKeyEnvelope(
-    chatDocumentKey,
-    viewerChatsDocumentKey,
-  );
+  const wrappedKey = validKey
+    ? await encryptKeyEnvelope(chatDocumentKey, viewerChatsDocumentKey)
+    : "AAAA";
 
   let keyBuilder = provider.addInteraction();
   for (const state of givenStates) keyBuilder = keyBuilder.given(state);
@@ -488,15 +495,16 @@ async function mockChatDocumentSharedViaSync({
     );
 }
 
-// Mary opens a chat Alice created and shared with her (contact.owner ===
-// "alice@imagey.cloud" in Mary's own "chats" document) - the non-owner
-// branch of ContactService.loadChatKey, from Mary's side. `chatsDocumentKey`
+// Mary opens the chat Alice created after inviting her (contact.owner ===
+// alice in Mary's own "chats" document; the one mary<->alice chat
+// "chat-mary" in the provider fixtures, see ADR 0015) - the non-owner branch
+// of ContactService.loadChatKey, from Mary's side. `chatsDocumentKey`
 // must be the same key prepareMarysChatsDocument was given, since Mary's
 // synced copy of the chat key is wrapped under it.
 export async function prepareMarysChatOwnedByAlice(
   chatId: string,
   chatsDocumentKey: JsonWebKey,
-  given: string | string[] = "Alice owns a chat shared with mary",
+  given: string | string[] = "Mary has a chat with alice",
   chatDocumentKey?: JsonWebKey,
 ): Promise<JsonWebKey> {
   const key = chatDocumentKey ?? (await generateAesGcmKeyJwk());
@@ -511,14 +519,44 @@ export async function prepareMarysChatOwnedByAlice(
   return key;
 }
 
-// Accepting a contact request now also creates the chat's own Document (see
-// ContactService.acceptContactRequest) via the same generic multipart
-// upload every other document/folder creation uses - mirrors
-// prepareMarysFolderCreation() below.
-export async function prepareMarysChatCreation() {
+// Accepting a contact request records the new contact (with its `pending`
+// chat key) in the invitee's "chats" document (see
+// ContactService.acceptContactRequest).
+export function prepareMarysChatsDocumentUpdate(
+  given: string | string[],
+  description = "a request of mary to store the accepted contact",
+) {
+  const givenStates = ([] as string[]).concat(given);
+  let builder = provider.addInteraction();
+  for (const state of givenStates) builder = builder.given(state);
+  return builder
+    .uponReceiving(description)
+    .withRequest(
+      "PUT",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}`,
+      (r) => {
+        r.headers({ "Content-Type": "application/octet-stream" });
+      },
+    )
+    .willRespondWith(204, (r) =>
+      // The server hands back the new ETag of the "chats" document.
+      r.headers({ ETag: MatchersV3.string('"chats-etag"') }),
+    );
+}
+
+// Picking up an accepted contact request creates the chat's own Document in
+// the inviter's tree (see ContactService.receiveContactRequest) via the same
+// generic multipart upload every other document/folder creation uses -
+// mirrors prepareMarysFolderCreation() below.
+export async function prepareMarysChatCreation(
+  chatId: string,
+  given: string,
+  description = "a request of mary to create a chat document",
+) {
   return provider
     .addInteraction()
-    .uponReceiving("a request of mary to create a chat document")
+    .given(given)
+    .uponReceiving(description)
     .withRequest(
       "POST",
       "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
@@ -534,7 +572,7 @@ export async function prepareMarysChatCreation() {
     .willRespondWith(201, (r) =>
       r.headers({
         Location: MatchersV3.string(
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-chat-id",
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}`,
         ),
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
@@ -1556,7 +1594,9 @@ export function prepareMarysPublicProfileMetadataPut(
       "PUT",
       Matchers.regex({
         matcher:
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!9b71fa98)[^/]+$",
+          // Excludes mary's profile (9b71fa98) and "chats" (see
+          // prepareMarysChatsDocumentUpdate) documents.
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!9b71fa98|${TestData.mary.settings!.chats})[^/]+$`,
         generate:
           "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/22222222-2222-2222-2222-222222222222",
       }),
@@ -1851,6 +1891,9 @@ export async function inputMarysPassword(page: Page) {
   await expect(confirmButton).not.toBeVisible();
 }
 
+// The chat id bill chose when inviting mary (see prepareMarysContactRequests).
+export const BILLS_INVITATION_CHAT_ID = "chat-bill-invited-mary";
+
 export async function prepareMarysContactRequests(
   chatsDocumentKey?: JsonWebKey,
 ) {
@@ -1886,6 +1929,8 @@ export async function prepareMarysContactRequests(
           invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           publicKey: TestData.bill.publicMainKey,
           status: "INVITED",
+          // The id bill chose for the chat when inviting mary (ADR 0015).
+          chatId: BILLS_INVITATION_CHAT_ID,
           // Bill's own public-profile id, carried on the request (§4) -
           // becomes ContactService.acceptContactRequest's
           // inviterPublicProfileId when mary accepts.
@@ -1898,22 +1943,15 @@ export async function prepareMarysContactRequests(
 // The inviter's side of the handshake (ContactService.receiveContactRequest,
 // via Chats.tsx's second effect): Mary is the inviter, Bill (the invitee)
 // already ACCEPTED, and the request now carries Bill's own public key
-// (overwritten on accept - see ContactRequest.ts) plus the chat key,
-// ECDH-wrapped by Bill for Mary exactly as ContactService.
-// acceptContactRequest wraps `sharedKeyForInviter`.
+// (overwritten on accept - see ContactRequest.ts) plus Bill's own entry for
+// the chat key, wrapped under his "chats" document key - opaque to Mary.
 export async function prepareMarysAcceptedContactRequest(
   chatId: string,
-  chatDocumentKey: JsonWebKey,
   given: string = "mary has no contacts and bill has accepted marys invitation",
   chatsDocumentKey?: JsonWebKey,
+  contacts: { userId: string; chatId: string; owner: string }[] = [],
 ) {
-  await prepareMarysChatsDocument([], given, chatsDocumentKey);
-
-  const sharedKey = await encryptKeyEnvelopeEcdh(
-    chatDocumentKey,
-    TestData.bill.privateMainKey!,
-    TestData.mary.publicMainKey,
-  );
+  await prepareMarysChatsDocument(contacts, given, chatsDocumentKey);
 
   return provider
     .addInteraction()
@@ -1937,9 +1975,9 @@ export async function prepareMarysAcceptedContactRequest(
           publicKey: TestData.bill.publicMainKey,
           status: "ACCEPTED",
           chatId,
-          // ECDH-wrapped, so the concrete bytes differ every run - the provider
-          // fixture carries its own; only the shape matters for the contract.
-          sharedKey: MatchersV3.string(sharedKey),
+          // Opaque to mary - the provider fixture carries its own; only the
+          // shape matters for the contract.
+          sharedKey: MatchersV3.string("YmlsbHMtd3JhcHBlZC1jaGF0LWtleQ=="),
         },
       ]),
     );
@@ -2027,41 +2065,55 @@ export async function prepareMarysChat(
   suffix: string = "",
   validKey: boolean = true,
 ) {
-  const chatId = "chat-" + shortName(contactEmail);
   const given =
     contactEmail !== LAURA_ID
       ? `Mary has a chat with ${shortName(contactEmail)}`
       : undefined;
 
-  // Mary already has both laura and alice as contacts (see the fixed
-  // chatId's below); the actually-visited `contactEmail` is always one of
-  // them, so returning both regardless of which one is under test matches
-  // what a real "chats" document would contain.
+  // Mary has both laura and alice as contacts; the actually-visited
+  // `contactEmail` is always one of them, so returning both regardless of
+  // which one is under test matches what a real "chats" document would
+  // contain. Each chat is owned by its inviter (ADR 0015): mary invited
+  // laura (chat-laura in mary's tree), alice invited mary (chat-mary in
+  // alice's tree).
   const chatsDocumentKey = await prepareMarysChatsDocument(
     [
       {
-        userId: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+        userId: LAURA_ID,
         chatId: "chat-laura",
         owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
       },
       {
-        userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
-        chatId: "chat-alice",
-        owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        userId: ALICE_ID,
+        chatId: "chat-mary",
+        owner: ALICE_ID,
       },
     ],
     given,
   );
 
-  await mockChatDocument({
-    ownerEmail: "d20cf443-4f96-418f-a957-c8cbef8677c3",
-    chatId,
-    chatsId: TestData.mary.settings!.chats,
-    chatsDocumentKey,
-    given,
-    suffix,
-    validKey,
-  });
+  if (contactEmail === ALICE_ID) {
+    await mockChatDocumentSharedViaSync({
+      ownerEmail: ALICE_ID,
+      viewerEmail: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      viewerChatsDocumentKey: chatsDocumentKey,
+      chatId: "chat-mary",
+      given,
+      suffix,
+      chatDocumentKey: KNOWN_CHAT_KEY,
+      validKey,
+    });
+  } else {
+    await mockChatDocument({
+      ownerEmail: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      chatId: "chat-laura",
+      chatsId: TestData.mary.settings!.chats,
+      chatsDocumentKey,
+      given,
+      suffix,
+      validKey,
+    });
+  }
 
   let builder = provider.addInteraction();
   if (given) {

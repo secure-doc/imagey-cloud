@@ -250,39 +250,6 @@ test.describe("DeviceService error paths", () => {
 // -------------------------------------------------------------------------
 
 test.describe("ContactService error paths", () => {
-  test("receiveContactRequest rejects an ACCEPTED request with no chatId/sharedKey", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const message = await messageFromBrowser(page, () =>
-      window.contactService.receiveContactRequest(
-        "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        {
-          inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
-          invitee: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
-          publicKey: {} as JsonWebKey,
-          status: "ACCEPTED",
-        },
-        { documentId: "pp", key: {} as JsonWebKey },
-        {
-          documents: "d",
-          chats: "c",
-          profile: "p",
-          settingsKey: {} as JsonWebKey,
-        },
-        {
-          publicKey: {} as JsonWebKey,
-          privateKey: {} as JsonWebKey,
-        },
-      ),
-    );
-
-    expect(message).toBe(
-      "Accepted contact request is missing chatId/sharedKey",
-    );
-  });
-
   test("acceptContactRequest rejects when the chats document can't be loaded", async ({
     page,
   }) => {
@@ -298,6 +265,7 @@ test.describe("ContactService error paths", () => {
       window.contactService.acceptContactRequest(
         "d20cf443-4f96-418f-a957-c8cbef8677c3",
         "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+        "chat-1",
         {} as JsonWebKey,
         undefined,
         { documentId: "pp", key: {} as JsonWebKey },
@@ -350,6 +318,7 @@ test.describe("ContactService error paths", () => {
           await window.contactService.acceptContactRequest(
             userId,
             "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+            "chat-1",
             {} as JsonWebKey,
             undefined,
             { documentId: "pp", key: {} as JsonWebKey },
@@ -377,8 +346,7 @@ test.describe("ContactService error paths", () => {
   test("receiveContactRequest rejects when the chats document can't be loaded", async ({
     page,
   }) => {
-    // A self-ECDH-wrapped key so the "can we actually decrypt the chat
-    // key?" check passes and we reach the chats-document guard afterwards.
+    // The invitee's wrapped key is opaque to the inviter - any value will do.
     const chatKey = await generateAesGcmKeyJwk();
     const wrappedChatKey = await encryptKeyEnvelopeEcdh(
       chatKey,
@@ -542,6 +510,169 @@ test.describe("ContactService error paths", () => {
     );
 
     expect(message).toBe("Expected a chat document, got folder");
+  });
+
+  test("loadChatKey rejects when a contact's chat document can't be loaded and nothing is pending", async ({
+    page,
+  }) => {
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const owner = "10ad1cce-816b-4e12-b94d-7ef824c0d162";
+    await page.route(`**/users/${owner}/documents/not-created`, (route) =>
+      route.fulfill({ status: 403 }),
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      ({ userId, owner }) =>
+        window.contactService.loadChatKey(
+          userId,
+          {
+            userId: owner,
+            chatId: "not-created",
+            owner,
+            name: owner,
+            profileRevision: "",
+          },
+          "chats",
+          {} as JsonWebKey,
+        ),
+      { userId, owner },
+    );
+
+    expect(message).toBe("Failed to load document not-created");
+  });
+
+  test("loadChatKey falls back to the pending chat key while the inviter has not created the chat", async ({
+    page,
+  }) => {
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const owner = "10ad1cce-816b-4e12-b94d-7ef824c0d162";
+    const chatKey = await generateAesGcmKeyJwk();
+    await page.route(`**/users/${owner}/documents/not-created-yet`, (route) =>
+      route.fulfill({ status: 403 }),
+    );
+    await page.goto("/");
+
+    const result = await page.evaluate(
+      ({ userId, owner, chatKey }) =>
+        window.contactService.loadChatKey(
+          userId,
+          {
+            userId: owner,
+            chatId: "not-created-yet",
+            owner,
+            name: owner,
+            profileRevision: "",
+            pending: {
+              chatKey: chatKey as JsonWebKey,
+              publicProfiles: { [owner]: "alices-public-profile" },
+            },
+          },
+          "chats",
+          {} as JsonWebKey,
+        ),
+      { userId, owner, chatKey },
+    );
+
+    expect(result.pending).toBe(true);
+    expect(result.key).toEqual(chatKey);
+    expect(result.publicProfiles).toEqual({
+      [owner]: "alices-public-profile",
+    });
+  });
+
+  test("loadChatKey does not mask a server error with the pending chat key", async ({
+    page,
+  }) => {
+    // Only "not there / not allowed yet" (401/403/404) means the inviter has
+    // not created the chat - a 500 must surface as an error.
+    const userId = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const owner = "10ad1cce-816b-4e12-b94d-7ef824c0d162";
+    const chatKey = await generateAesGcmKeyJwk();
+    await page.route(`**/users/${owner}/documents/chat-broken`, (route) =>
+      route.fulfill({ status: 500 }),
+    );
+    await page.goto("/");
+
+    const message = await messageFromBrowser(
+      page,
+      ({ userId, owner, chatKey }) =>
+        window.contactService.loadChatKey(
+          userId,
+          {
+            userId: owner,
+            chatId: "chat-broken",
+            owner,
+            name: owner,
+            profileRevision: "",
+            pending: { chatKey: chatKey as JsonWebKey, publicProfiles: {} },
+          },
+          "chats",
+          {} as JsonWebKey,
+        ),
+      { userId, owner, chatKey },
+    );
+
+    expect(message).toBe("Failed to load document chat-broken");
+  });
+
+  test("updateContactProfileSnapshot keeps the pending chat key, dropPendingChatKey removes only it", async ({
+    page,
+  }) => {
+    const user = "d20cf443-4f96-418f-a957-c8cbef8677c3";
+    const chatsDocumentId = "chats-pending";
+    const chatsKey = await generateAesGcmKeyJwk();
+    const alice = {
+      userId: "alice",
+      chatId: "chat-alice",
+      owner: "alice",
+      name: "alice",
+      profileRevision: "pp-rev-1",
+      pending: { chatKey: chatsKey, publicProfiles: {} },
+    };
+    await page.route(`**/users/${user}/documents/${chatsDocumentId}`, (route) =>
+      route.fulfill({ status: 204, headers: { ETag: '"v2"' } }),
+    );
+    await page.goto("/");
+
+    const [snapshot, dropped] = await page.evaluate(
+      async ({ user, chatsDocumentId, chatsKey, alice }) => {
+        const chatsDocument = {
+          documentId: chatsDocumentId,
+          name: "chats",
+          key: chatsKey as JsonWebKey,
+          revision: '"v1"',
+          contacts: [alice],
+        };
+        return [
+          await window.contactService.updateContactProfileSnapshot(
+            user,
+            chatsDocument,
+            alice.userId,
+            { name: "Alice A.", revision: "pp-rev-2" },
+          ),
+          await window.contactService.dropPendingChatKey(
+            user,
+            chatsDocument,
+            alice.userId,
+          ),
+        ];
+      },
+      { user, chatsDocumentId, chatsKey, alice },
+    );
+
+    expect(snapshot.contacts[0].pending).toBeDefined();
+    expect(snapshot.contacts[0].name).toBe("Alice A.");
+    expect(dropped.contacts[0].pending).toBeUndefined();
+    expect(dropped.contacts[0]).toEqual({
+      userId: "alice",
+      chatId: "chat-alice",
+      owner: "alice",
+      name: "alice",
+      profileRevision: "pp-rev-1",
+    });
+    expect(dropped.revision).toBe('"v2"');
   });
 
   test("updateContactProfileSnapshot re-reads the chats document and retries when the write hits a concurrent-change 412", async ({
@@ -1738,7 +1869,7 @@ test.describe("Component error handlers", () => {
     const chatsId = TestData.mary.settings!.chats;
     await loginMary(page, async (p) => {
       // An ACCEPTED request from Mary herself triggers the inviter-side
-      // receive effect - but it carries no chatId/sharedKey, so
+      // receive effect - but her "chats" document can't be loaded, so
       // contactService.receiveContactRequest() rejects.
       await p.route(`**/users/${MARY}/contact-requests`, (route) =>
         route.fulfill({
@@ -1989,9 +2120,10 @@ async function prepareMarysBrokenChatAndOpenIt(
   const deviceId = TestData.mary.devices[0].deviceId;
   const documentsId = TestData.mary.settings!.documents;
   const chatsId = TestData.mary.settings!.chats;
-  const chatId = "chat-alice";
+  const chatId = "chat-laura";
 
-  // A real "chats" document listing alice as a contact, encrypted for real
+  // A real "chats" document listing laura as a contact (mary invited laura,
+  // so mary owns the chat - ADR 0015), encrypted for real
   // so the app gets past that step - only the chat Document's own key
   // entry (registered by the caller) is deliberately broken.
   const chatsDocumentKey = await generateAesGcmKeyJwk();
@@ -2003,7 +2135,7 @@ async function prepareMarysBrokenChatAndOpenIt(
         type: "chatList",
         contacts: [
           {
-            userId: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+            userId: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
             chatId,
             owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           },
@@ -2122,11 +2254,11 @@ async function prepareMarysBrokenChatAndOpenIt(
   await inputMarysPassword(page);
 
   await page.getByRole("link", { name: "Chats" }).first().click();
-  const aliceContact = page
-    .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
+  const lauraContact = page
+    .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
     .first();
-  await expect(aliceContact).toBeVisible();
-  await aliceContact.click();
+  await expect(lauraContact).toBeVisible();
+  await lauraContact.click();
 }
 
 async function expectDecryptionErrorShown(page: Page) {

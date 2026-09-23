@@ -555,3 +555,20 @@ work per partner.
    entry and a rebind-orphaned placeholder tree (decision 3) are the same
    shape of leftover state, not a new one. A future general reaper, if ever
    justified, should cover both uniformly (decision 3).
+
+## Amendment (2026-09-23, ADR 0015)
+
+Decision 7 is superseded in its core premise: the chat is now owned by the
+**inviter**, so it always lives on the same server as the `ContactExchange`
+(the inviter's home server). Consequences for this ADR:
+
+- There is only one home per chat. The two-step "RECEIVED on A, key filed on
+  B as a guest" split of `confirmReceipt` is no longer needed.
+- `ContactExchange.chatId` needs no domain component. Domain qualification is
+  still needed for the client-side `ContactEntry.owner` and for the
+  public-profile ids in the chat metadata.
+- A federated invitee accepts, confirms and chats as a guest on the inviter's
+  server, using only `member`-scoped calls plus the provisional messages-only
+  membership of ADR 0015 decision 4, which compares `UserId`s and therefore
+  works for `ForeignUserMapping` principals unchanged.
+- The "Sharing an image in the chat" paragraph of decision 7 is unaffected.

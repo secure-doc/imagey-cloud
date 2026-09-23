@@ -444,7 +444,8 @@ test("new user registers via invite link and accepts the invitation", async ({
     .withRequest(
       "PUT",
       Matchers.regex({
-        matcher: `/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/(?!${profileId}).+$`,
+        // Excludes joe's profile and "chats" (33333333-...) documents.
+        matcher: `/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/(?!${profileId}|33333333-3333-3333-3333-333333333333).+$`,
         generate:
           "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/joes-public-profile",
       }),
@@ -454,32 +455,19 @@ test("new user registers via invite link and accepts the invitation", async ({
       r.headers({ ETag: MatchersV3.string('"joes-public-profile-etag"') }),
     );
 
-  // Accepting mary's invitation as the last step of registration also
-  // creates the chat's own Document - same shape as
-  // prepareMarysChatCreation() elsewhere in this suite.
+  // Accepting mary's invitation as the last step of registration records
+  // mary as a contact in joe's fresh "chats" document - the chat Document
+  // itself is created by mary, the inviter, later on (ADR 0015).
   provider
     .addInteraction()
-    .uponReceiving("a request to create joes chat with mary on registration")
+    .given("Joe is registered")
+    .uponReceiving("a request of joe to store mary as contact on registration")
     .withRequest(
-      "POST",
-      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents",
-      (r) => {
-        r.headers({
-          "Content-Type": MatchersV3.regex(
-            "multipart/form-data.*",
-            "multipart/form-data; boundary=.*",
-          ),
-        });
-      },
+      "PUT",
+      "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/33333333-3333-3333-3333-333333333333",
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
     )
-    .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/new-chat-id",
-        ),
-        "Access-Control-Expose-Headers": "Location, ETag",
-      }),
-    );
+    .willRespondWith(204);
 
   // No dedicated fetch of mary's public key - it comes back on joe's own
   // contact-request entry (see the "get contact requests" interaction below,
@@ -500,14 +488,13 @@ test("new user registers via invite link and accepts the invitation", async ({
         r.headers({
           "Content-Type": "application/json",
         });
-        // The encrypted key/chatId are generated dynamically (see
+        // The wrapped chat key is generated dynamically (see
         // ContactService.acceptContactRequest) - only assert the shape.
         r.jsonBody({
           inviter: "d20cf443-4f96-418f-a957-c8cbef8677c3",
           invitee: "35c34cb3-559d-4001-a67b-23259e45e69e",
           status: "ACCEPTED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-          chatId: MatchersV3.string("new-chat-id"),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId: MatchersV3.string("joes-public-profile"),
         });
@@ -515,7 +502,7 @@ test("new user registers via invite link and accepts the invitation", async ({
     )
     .willRespondWith(204);
 
-  // Joe also shares his freshly-named public profile into the new chat with
+  // Joe also shares his freshly-named public profile into the chat with
   // mary (§3.2).
   provider
     .addInteraction()
@@ -558,6 +545,7 @@ test("new user registers via invite link and accepts the invitation", async ({
           invitee: "35c34cb3-559d-4001-a67b-23259e45e69e",
           status: "INVITED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
+          chatId: "chat-mary-invited-joe",
         },
       ]),
     )
@@ -592,7 +580,7 @@ test("new user registers via invite link and accepts the invitation", async ({
       await page.getByLabel("How should others see you?").fill("Joe Invited");
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
-      // Then: the accept PUT and the chat-document POST above are verified by
+      // Then: the accept PUT and the chats-document PUT above are verified by
       // executeTest (it fails if an interaction was not called). Confirm the
       // SPA finished registration and landed in the app rather than erroring
       // on the dialog. Wait for the activities list to actually render (not

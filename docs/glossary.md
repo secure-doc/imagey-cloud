@@ -12,3 +12,5 @@
 * **Root-Folder**: A default folder assigned to every user to hold their documents. The ID of this folder is stored in the `documents` attribute of the **Settings** document.
 * **Root-Folder Key**: A symmetric key used to encrypt the contents of the Root-Folder and the keys of the documents within it. It is encrypted using the **Settings Key**.
 * **Document Key**: A symmetric key generated for each uploaded document. It is encrypted using the symmetric key of the folder (e.g., **Root-Folder Key**) where the document is located.
+* **Chat owner**: The account whose tree holds a chat Document, its messages and its key entries - always the **inviter** of the contact request that created the chat (ADR 0015). Recorded client-side as `ContactEntry.owner`.
+* **Provisional chat membership**: The narrowly scoped `member` role the invitee of an `ACCEPTED` contact request holds on `/users/{owner}/documents/{chatId}/messages` (and nothing else) between accepting and the inviter creating the chat Document. Re-evaluated on every request, never cached (ADR 0015 decision 4).

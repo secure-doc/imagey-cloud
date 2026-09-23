@@ -7,11 +7,15 @@ import { ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
 import {
   documentRepository,
+  HttpError,
   PreconditionFailedError,
 } from "../document/DocumentRepository";
-import { documentService } from "../document/DocumentService";
+import {
+  DocumentLoadError,
+  documentService,
+} from "../document/DocumentService";
 
-// How often updateContactProfileSnapshot re-reads the "chats" document and
+// How often updateContact re-reads the "chats" document and
 // retries after the server rejected the write because it changed concurrently
 // (e.g. the same chat open in two tabs, or a contact-request accept/receive
 // racing this update) - same reasoning as DocumentService.storeDocument's own
@@ -19,7 +23,7 @@ import { documentService } from "../document/DocumentService";
 const MAX_CHATS_UPDATE_RETRIES = 3;
 
 // Re-fetches and decrypts the "chats" document with a key we already hold,
-// returning just what updateContactProfileSnapshot needs to re-apply its
+// returning just what updateContact needs to re-apply its
 // change after a concurrent-modification 412: the current contacts list and
 // the current revision.
 async function reloadChatsContacts(
@@ -55,6 +59,35 @@ function appendContact(
   return [...others, contact];
 }
 
+// Until the inviter has created the chat Document and the server has filed the
+// invitee's key entry (ADR 0015 leg 3), loading it answers 401/403 (no key
+// entry yet) or 404. Anything else - a server error, a network failure, an
+// undecryptable key - is a real error and must not be masked by `pending`.
+function isChatNotAccessibleYet(e: unknown): boolean {
+  return (
+    e instanceof DocumentLoadError &&
+    e.cause instanceof HttpError &&
+    [401, 403, 404].includes(e.cause.status)
+  );
+}
+
+// Both parties' "public-profile" Document ids, keyed by UserId. The other
+// party's id is only missing if their public-profile somehow does not exist
+// yet (should not normally happen, see docs/plans/chat-public-profile.md §3.6).
+function makePublicProfiles(
+  ownUserId: string,
+  ownPublicProfileId: string,
+  contactUserId: string,
+  contactPublicProfileId: string | undefined,
+): Record<string, string> {
+  return {
+    [ownUserId]: ownPublicProfileId,
+    ...(contactPublicProfileId
+      ? { [contactUserId]: contactPublicProfileId }
+      : {}),
+  };
+}
+
 // The other party's name/avatar aren't known yet at accept/receive time, only
 // their userId - name falls back to the userId for now, and profileRevision
 // starts as "" so the first time this chat is opened, the mismatch against
@@ -68,17 +101,78 @@ function makePlaceholderContactEntry(
   return { userId, chatId, owner, name: userId, profileRevision: "" };
 }
 
+// What the chat view keeps of the "chats" document to write it back.
+type ChatsDocumentState = {
+  documentId: string;
+  name: string;
+  key: JsonWebKey;
+  revision: string | null;
+  contacts: ContactEntry[];
+};
+
+// Applies `patch` to one contact of the "chats" document and writes it back -
+// a read-modify-write that re-reads the document and re-applies the patch if
+// the server rejects the write because it changed concurrently (e.g. the same
+// chat open in two tabs, a contact-request accept/receive, or the chat view's
+// own profile-snapshot and pending-key updates racing each other) - same
+// reasoning as DocumentService.storeDocument's own retry loop.
+async function updateContact(
+  userId: UserId,
+  chatsDocument: ChatsDocumentState,
+  contactUserId: string,
+  patch: (contact: ContactEntry) => ContactEntry,
+): Promise<{ contacts: ContactEntry[]; revision: string | null }> {
+  let currentContacts = chatsDocument.contacts;
+  let currentRevision = chatsDocument.revision;
+  for (let attempt = 1; attempt <= MAX_CHATS_UPDATE_RETRIES; attempt++) {
+    const updatedContacts = currentContacts.map((contact) =>
+      contact.userId === contactUserId ? patch(contact) : contact,
+    );
+    try {
+      const newRevision = await documentService.updateDocumentMetadata(
+        userId,
+        chatsDocument.documentId,
+        chatsDocument.key,
+        {
+          name: chatsDocument.name,
+          type: "chatList",
+          contacts: updatedContacts,
+        },
+        currentRevision,
+      );
+      return { contacts: updatedContacts, revision: newRevision };
+    } catch (e) {
+      if (
+        !(e instanceof PreconditionFailedError) ||
+        attempt >= MAX_CHATS_UPDATE_RETRIES
+      ) {
+        throw e;
+      }
+      const reloaded = await reloadChatsContacts(
+        userId,
+        chatsDocument.documentId,
+        chatsDocument.key,
+      );
+      currentContacts = reloaded.contacts;
+      currentRevision = reloaded.revision;
+    }
+  }
+  // Unreachable: the final iteration either returns or rethrows.
+  throw new PreconditionFailedError("Chats document update retries exhausted");
+}
+
 export const contactService = {
-  // Invitee side: accept an INVITED request. The chat is - like everything
-  // else - its own encrypted Document, created here as a child of the
-  // user's "chats" document; its Document key doubles as the chat's shared
-  // key (messages, documents shared in-chat, ...). We keep our own access
-  // to it the normal way (self-issued, wrapped under the chats document's
-  // key), and hand the inviter their own access by ECDH-wrapping the same
-  // key with their public key and our private key.
+  // Invitee side, leg 2 of the handshake (ADR 0015): accept an INVITED
+  // request. The inviter owns the chat and creates its Document later (leg 3);
+  // we only derive the chat key (ECDH + HKDF, nothing is transported), record
+  // the contact - with the key in its `pending` part, so the chat is usable
+  // right away - share our public profile into the chat, and hand the server
+  // our own entry for the chat key (wrapped under our "chats" document key),
+  // which it files under the chat Document once the inviter created it.
   acceptContactRequest: async (
     userId: UserId,
     contactId: UserId,
+    chatId: string,
     inviterPublicKey: JsonWebKey,
     inviterPublicProfileId: string | undefined,
     ownPublicProfile: PublicProfile,
@@ -98,96 +192,62 @@ export const contactService = {
         );
       }
 
-      const chatId = cryptoService.generateUuid();
-      const chatDocumentKey = await cryptoService.generateSymmetricKey();
-      // Both parties' "public-profile" Document ids travel in the chat's own metadata (see
-      // docs/plans/chat-public-profile.md §3.3), so either side can find the other's without relying
-      // on the message history. The inviter's id is only missing if their public-profile somehow
-      // does not exist yet (should not normally happen, see §3.6) - the chat is still created either
-      // way, it just leaves that lookup unresolved until a later exchange fills it in (§6/§11).
-      const publicProfiles: Record<string, string> = {
-        [userId]: ownPublicProfile.documentId,
-        ...(inviterPublicProfileId
-          ? { [contactId]: inviterPublicProfileId }
-          : {}),
-      };
-      const [encryptedChatContent] = await cryptoService.encryptDocument(
-        chatDocumentKey,
-        [
-          new TextEncoder().encode(
-            JSON.stringify({
-              documentId: chatId,
-              name: contactId,
-              type: "chat",
-              publicProfiles,
-            }),
-          ).buffer,
-        ],
-      );
-      const encryptedChatKey = await cryptoService.encryptKey(
-        chatDocumentKey,
-        chatsDocument.key,
-      );
-
-      const contact = makePlaceholderContactEntry(contactId, chatId, userId);
-      const updatedContacts = appendContact(chatsDocument.contacts, contact);
-      const [encryptedChatsContent] = await cryptoService.encryptDocument(
-        chatsDocument.key,
-        [
-          new TextEncoder().encode(
-            JSON.stringify({
-              name: chatsDocument.name,
-              type: chatsDocument.type,
-              contacts: updatedContacts,
-            }),
-          ).buffer,
-        ],
-      );
-
-      await documentRepository.uploadDocument(
+      const chatKey = await cryptoService.deriveChatKey(
+        mainKeyPair.privateKey,
+        inviterPublicKey,
+        chatId,
+        contactId,
         userId,
-        userId, // the chat is created under the invitee's own "chats" document
+      );
+      const wrappedChatKey = await cryptoService.encryptKey(
+        chatKey,
+        chatsDocument.key,
+      );
+      // Both parties' "public-profile" Document ids (see
+      // docs/plans/chat-public-profile.md §3.3) - the inviter writes them into
+      // the chat's metadata in leg 3; until then we keep them in `pending`.
+      const publicProfiles = makePublicProfiles(
+        userId,
+        ownPublicProfile.documentId,
+        contactId,
+        inviterPublicProfileId,
+      );
+
+      const contact: ContactEntry = {
+        ...makePlaceholderContactEntry(contactId, chatId, contactId),
+        pending: { chatKey, publicProfiles },
+      };
+      await documentService.updateDocumentMetadata(
+        userId,
         settings.chats,
-        encryptedChatsContent,
+        chatsDocument.key,
+        {
+          name: chatsDocument.name,
+          type: chatsDocument.type,
+          contacts: appendContact(chatsDocument.contacts, contact),
+        },
         // Reject (rather than silently clobber) if the "chats" document changed
         // since we loaded it - another accepted request would otherwise be lost.
         chatsDocument.revision,
-        chatId,
-        encryptedChatContent,
-        {
-          issuer: userId,
-          kid: settings.chats,
-          sharedKey: encryptedChatKey,
-        },
-        [],
-      );
-
-      // Hand the inviter their own copy of the chat's Document key, ECDH-
-      // wrapped so only they (and we) can decrypt it. Their public key is
-      // already known - it was sent along with the original request - so
-      // no extra fetch is needed here.
-      const sharedKeyForInviter = await cryptoService.encryptKey(
-        chatDocumentKey,
-        inviterPublicKey,
-        mainKeyPair.privateKey,
-      );
-      await contactRepository.acceptContactRequest(
-        userId,
-        contactId,
-        mainKeyPair.publicKey,
-        chatId,
-        sharedKeyForInviter,
-        ownPublicProfile.documentId,
       );
 
       // Share our own public profile into the chat (§3.2): a keys/{contactId}.json entry under our
-      // ppId, wrapped with the chat's own key - the same mechanism documentService.shareDocument
-      // uses for any other document shared into a chat.
+      // ppId, wrapped with the chat key - the same mechanism documentService.shareDocument uses for
+      // any other document shared into a chat. Done before the accept so a failure leaves the
+      // request INVITED and the whole step can be retried.
       await documentService.shareDocument(
         userId,
         { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
         contactId,
-        chatDocumentKey,
+        chatKey,
+      );
+
+      await contactRepository.acceptContactRequest(
+        userId,
+        contactId,
+        mainKeyPair.publicKey,
+        wrappedChatKey,
+        ownPublicProfile.documentId,
       );
 
       return contact;
@@ -202,11 +262,12 @@ export const contactService = {
     }
   },
 
-  // Inviter side: pick up a request the invitee has ACCEPTED. Decrypts the
-  // chat Document key (to make sure it's actually usable before we tell
-  // the server we're done with this request), records the contact in our
-  // own "chats" document, and confirms receipt so the server can delete
-  // the now-redundant request.
+  // Inviter side, leg 3 of the handshake (ADR 0015): pick up a request the
+  // invitee has ACCEPTED. Derives the chat key from the invitee's public key,
+  // creates the chat Document under our own "chats" document (atomically
+  // together with the new contact entry), shares our public profile into the
+  // chat and confirms receipt - whereupon the server files the invitee's key
+  // entry under the chat Document.
   receiveContactRequest: async (
     userId: UserId,
     request: ContactRequest,
@@ -214,9 +275,7 @@ export const contactService = {
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
   ): Promise<ContactEntry> => {
-    if (!request.chatId || !request.sharedKey) {
-      throw new Error("Accepted contact request is missing chatId/sharedKey");
-    }
+    const chatId = request.chatId;
 
     const chatsDocument = await documentService.loadDocument(
       userId,
@@ -230,57 +289,79 @@ export const contactService = {
       );
     }
 
-    // Decrypt the ECDH-wrapped chat Document key from the invitee, then
-    // re-wrap it symmetrically under our own chats-document key. The server
-    // files that entry under the chat Document in the invitee's tree
-    // (issuer = us), which is what grants us the "member" role on the chat
-    // from now on - we no longer keep an ECDH-wrapped copy.
-    const chatDocumentKey = await cryptoService.decryptKey(
-      request.sharedKey,
-      request.publicKey,
+    const chatKey = await cryptoService.deriveChatKey(
       mainKeyPair.privateKey,
-    );
-    const rewrappedChatKey = await cryptoService.encryptKey(
-      chatDocumentKey,
-      chatsDocument.key,
+      request.publicKey,
+      chatId,
+      userId,
+      request.invitee,
     );
 
-    // Share our own public profile into the chat (§3.2/§4): the invitee already put both parties'
-    // ppIds into the chat metadata at accept time, but only we can grant them read access to ours
-    // (issuer = them, filed under our own ppId).
+    // A retry after a failed confirm finds the chat already created (the
+    // contact entry and the chat Document are written in one atomic upload).
+    const existing = chatsDocument.contacts.find((c) => c.chatId === chatId);
+    const contact =
+      existing ?? makePlaceholderContactEntry(request.invitee, chatId, userId);
+    if (!existing) {
+      const [encryptedChatContent] = await cryptoService.encryptDocument(
+        chatKey,
+        [
+          new TextEncoder().encode(
+            JSON.stringify({
+              documentId: chatId,
+              name: request.invitee,
+              type: "chat",
+              publicProfiles: makePublicProfiles(
+                userId,
+                ownPublicProfile.documentId,
+                request.invitee,
+                request.publicProfileId,
+              ),
+            }),
+          ).buffer,
+        ],
+      );
+      const [encryptedChatsContent] = await cryptoService.encryptDocument(
+        chatsDocument.key,
+        [
+          new TextEncoder().encode(
+            JSON.stringify({
+              name: chatsDocument.name,
+              type: chatsDocument.type,
+              contacts: appendContact(chatsDocument.contacts, contact),
+            }),
+          ).buffer,
+        ],
+      );
+      await documentRepository.uploadDocument(
+        userId,
+        userId, // the chat is created under the inviter's own "chats" document
+        settings.chats,
+        encryptedChatsContent,
+        chatsDocument.revision,
+        chatId,
+        encryptedChatContent,
+        {
+          issuer: userId,
+          kid: settings.chats,
+          sharedKey: await cryptoService.encryptKey(chatKey, chatsDocument.key),
+        },
+        [],
+      );
+    }
+
+    // Share our own public profile into the chat (§3.2/§4): only we can grant the invitee read
+    // access to ours (issuer = them, filed under our own ppId).
     await documentService.shareDocument(
       userId,
       { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
       request.invitee,
-      chatDocumentKey,
-    );
-
-    const contact = makePlaceholderContactEntry(
-      request.invitee,
-      request.chatId,
-      request.invitee,
-    );
-    const updatedContacts = appendContact(chatsDocument.contacts, contact);
-    await documentService.updateDocumentMetadata(
-      userId,
-      settings.chats,
-      chatsDocument.key,
-      {
-        name: chatsDocument.name,
-        type: chatsDocument.type,
-        contacts: updatedContacts,
-      },
-      chatsDocument.revision,
+      chatKey,
     );
 
     await contactRepository.confirmContactRequestReceived(
       userId,
       request.invitee,
-      {
-        issuer: userId,
-        kid: settings.chats,
-        sharedKey: rewrappedChatKey,
-      },
     );
 
     return contact;
@@ -288,99 +369,87 @@ export const contactService = {
 
   // Loads the symmetric key of a chat's Document. Both parties keep their
   // own key entry wrapped symmetrically under their own "chats" document's
-  // key: the owner (whoever accepted the original request) filed theirs
-  // when creating the chat Document; the other party's copy was synced into
-  // the chat Document (in the owner's tree, under their own email) by the
-  // server during the receipt-confirmation step. Either way it unwraps with
-  // our own chats-document key.
+  // key: the owner (the inviter) filed theirs when creating the chat
+  // Document; the invitee's entry was filed by the server during the
+  // receipt-confirmation step. Either way it unwraps with our own
+  // chats-document key. Until the inviter has created the chat Document, the
+  // invitee falls back to the `pending` part of their contact entry.
   loadChatKey: async (
     user: UserId,
     contact: ContactEntry,
     chatsId: string,
     chatsDocumentKey: JsonWebKey,
-  ): Promise<{ key: JsonWebKey; publicProfiles: Record<string, string> }> => {
-    const document =
-      contact.owner === user
-        ? await documentService.loadDocument(
-            user,
-            contact.chatId,
-            chatsId,
-            chatsDocumentKey,
-          )
-        : await documentService.loadDocument(
-            contact.owner,
-            contact.chatId,
-            user,
-            chatsDocumentKey,
-          );
+  ): Promise<{
+    key: JsonWebKey;
+    publicProfiles: Record<string, string>;
+    // true if the chat Document could not be loaded and `contact.pending` was
+    // used instead.
+    pending: boolean;
+  }> => {
+    let document;
+    try {
+      document =
+        contact.owner === user
+          ? await documentService.loadDocument(
+              user,
+              contact.chatId,
+              chatsId,
+              chatsDocumentKey,
+            )
+          : await documentService.loadDocument(
+              contact.owner,
+              contact.chatId,
+              user,
+              chatsDocumentKey,
+            );
+    } catch (e) {
+      if (contact.pending && isChatNotAccessibleYet(e)) {
+        return {
+          key: contact.pending.chatKey,
+          publicProfiles: contact.pending.publicProfiles,
+          pending: true,
+        };
+      }
+      throw e;
+    }
     if (document.type !== "chat") {
       throw new Error(`Expected a chat document, got ${document.type}`);
     }
-    return { key: document.key, publicProfiles: document.publicProfiles };
+    return {
+      key: document.key,
+      publicProfiles: document.publicProfiles,
+      pending: false,
+    };
   },
 
   // Patches one contact's denormalized public-profile snapshot (name/avatarId
   // /profileRevision) in the "chats" document - called from the chat view
   // when the freshly-loaded PublicProfileMetadata.revision no longer matches
-  // the cached ContactEntry.profileRevision. Same read-modify-write shape as
-  // accept/receiveContactRequest's own writes to the same document.
-  updateContactProfileSnapshot: async (
+  // the cached ContactEntry.profileRevision.
+  updateContactProfileSnapshot: (
     userId: UserId,
-    chatsDocument: {
-      documentId: string;
-      name: string;
-      key: JsonWebKey;
-      revision: string | null;
-      contacts: ContactEntry[];
-    },
+    chatsDocument: ChatsDocumentState,
     contactUserId: string,
     snapshot: { name: string; avatarId?: string; revision: string },
-  ): Promise<{ contacts: ContactEntry[]; revision: string | null }> => {
-    let currentContacts = chatsDocument.contacts;
-    let currentRevision = chatsDocument.revision;
-    for (let attempt = 1; attempt <= MAX_CHATS_UPDATE_RETRIES; attempt++) {
-      const updatedContacts = currentContacts.map((contact) =>
-        contact.userId === contactUserId
-          ? {
-              ...contact,
-              name: snapshot.name,
-              avatarId: snapshot.avatarId,
-              profileRevision: snapshot.revision,
-            }
-          : contact,
-      );
-      try {
-        const newRevision = await documentService.updateDocumentMetadata(
-          userId,
-          chatsDocument.documentId,
-          chatsDocument.key,
-          {
-            name: chatsDocument.name,
-            type: "chatList",
-            contacts: updatedContacts,
-          },
-          currentRevision,
-        );
-        return { contacts: updatedContacts, revision: newRevision };
-      } catch (e) {
-        if (
-          !(e instanceof PreconditionFailedError) ||
-          attempt >= MAX_CHATS_UPDATE_RETRIES
-        ) {
-          throw e;
-        }
-        const reloaded = await reloadChatsContacts(
-          userId,
-          chatsDocument.documentId,
-          chatsDocument.key,
-        );
-        currentContacts = reloaded.contacts;
-        currentRevision = reloaded.revision;
-      }
-    }
-    // Unreachable: the final iteration either returns or rethrows.
-    throw new PreconditionFailedError(
-      "Chats document update retries exhausted",
-    );
-  },
+  ): Promise<{ contacts: ContactEntry[]; revision: string | null }> =>
+    updateContact(userId, chatsDocument, contactUserId, (contact) => ({
+      ...contact,
+      name: snapshot.name,
+      avatarId: snapshot.avatarId,
+      profileRevision: snapshot.revision,
+    })),
+
+  // Removes a contact's `pending` chat key (ADR 0015 decision 5) - called
+  // from the chat view once the chat Document itself has been loaded, i.e.
+  // the inviter has created it and the server has filed our key entry.
+  dropPendingChatKey: (
+    userId: UserId,
+    chatsDocument: ChatsDocumentState,
+    contactUserId: string,
+  ): Promise<{ contacts: ContactEntry[]; revision: string | null }> =>
+    updateContact(userId, chatsDocument, contactUserId, (contact) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { pending, ...rest } = contact;
+      return rest;
+    }),
 };

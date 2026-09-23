@@ -50,6 +50,9 @@ import org.junit.jupiter.api.Test;
 import cloud.imagey.domain.contact.ContactExchange;
 import cloud.imagey.domain.contact.ContactRepository;
 import cloud.imagey.domain.contact.ContactStatus;
+import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.User;
@@ -66,6 +69,7 @@ public class ContactRequestTest {
 
     private static final File TEST_DATA_DIRECTORY = new File("src/test/resources/data");
     private static final String ORIGIN = "https://secure-doc.store";
+    private static final DocumentId CHAT_ID = new DocumentId("chat-mary-laura");
     private static final String PUBLIC_KEY
         = "{\"crv\": \"P-256\", \"ext\": true, \"key_ops\": [], \"kty\": \"EC\","
         + " \"x\": \"O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4\","
@@ -80,6 +84,8 @@ public class ContactRequestTest {
     private TokenService tokenService;
     @Inject
     private ContactRepository contactRepository;
+    @Inject
+    private DocumentRepository documentRepository;
 
     private final User mary = UserFactory.mary();
     private final User laura = UserFactory.laura();
@@ -145,17 +151,37 @@ public class ContactRequestTest {
     @DisplayName("Inviting a not-yet-registered user without a public key still sends an invitation")
     public void inviteUnregisteredUserWithoutKey() {
         Response response = contactRequests(mary, mary, ORIGIN)
-            .post(json("{\"invitee\": \"newcomer@imagey.cloud\", \"inviterEmail\": \"mary@imagey.cloud\"}"));
+            .post(json("{\"invitee\": \"newcomer@imagey.cloud\", \"inviterEmail\": \"mary@imagey.cloud\","
+            + " \"chatId\": \"chat-newcomer\"}"));
 
         assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
     }
 
     @Test
-    @DisplayName("Accepting without a chatId is rejected with 400")
-    public void acceptWithoutChatId() {
+    @DisplayName("Inviting without a chatId is rejected with 400")
+    public void inviteWithoutChatId() {
+        Response response = contactRequests(mary, mary, ORIGIN)
+            .post(json("{\"invitee\": \"" + emailOf(laura).address() + "\", \"inviterEmail\": \"mary@imagey.cloud\"}"));
+
+        assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Inviting with the id of an existing document of the inviter fails with a conflict")
+    public void inviteWithExistingDocumentAsChatId() {
+        createChatDocument();
+
+        Response response = contactRequests(mary, mary, ORIGIN).post(json(invitation(emailOf(laura))));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Accepting without the invitee's wrapped chat key is rejected with 400")
+    public void acceptWithoutSharedKey() {
         contactRequests(mary, mary, ORIGIN).post(json(invitation(emailOf(laura))));
 
-        String acceptBody = "{\"status\": \"ACCEPTED\", \"publicKey\": " + PUBLIC_KEY + ", \"sharedKey\": \"AAAA\"}";
+        String acceptBody = "{\"status\": \"ACCEPTED\", \"publicKey\": " + PUBLIC_KEY + "}";
         Response response = contactRequest(laura, laura, mary, ORIGIN).put(json(acceptBody));
 
         assertThat(response.getStatus()).isEqualTo(BAD_REQUEST.getStatusCode());
@@ -180,10 +206,41 @@ public class ContactRequestTest {
     @Test
     @DisplayName("Accepting an invitation that was never sent fails with a conflict")
     public void acceptWithoutInvitation() {
-        String acceptBody = "{\"status\": \"ACCEPTED\", \"chatId\": \"chat-x\", \"publicKey\": " + PUBLIC_KEY
-            + ", \"sharedKey\": \"AAAA\"}";
+        Response response = contactRequest(laura, laura, mary, "https://secure-doc.store").put(json(acceptBody()));
 
-        Response response = contactRequest(laura, laura, mary, "https://secure-doc.store").put(json(acceptBody));
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("The inviter cannot accept their own invitation")
+    public void inviterCannotAccept() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(emailOf(laura))));
+
+        Response response = contactRequest(mary, mary, laura, ORIGIN).put(json(acceptBody()));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Confirming receipt before the inviter created the chat document fails with a conflict")
+    public void confirmReceiptBeforeChatExists() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(emailOf(laura))));
+        contactRequest(laura, laura, mary, ORIGIN).put(json(acceptBody()));
+
+        Response response = contactRequest(mary, mary, laura, ORIGIN).put(json("{\"status\": \"RECEIVED\"}"));
+
+        assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.ACCEPTED);
+    }
+
+    @Test
+    @DisplayName("The invitee cannot confirm receipt in the inviter's place")
+    public void inviteeCannotConfirmReceipt() {
+        contactRequests(mary, mary, ORIGIN).post(json(invitation(emailOf(laura))));
+        contactRequest(laura, laura, mary, ORIGIN).put(json(acceptBody()));
+
+        Response response = contactRequest(laura, laura, mary, ORIGIN).put(json("{\"status\": \"RECEIVED\"}"));
 
         assertThat(response.getStatus()).isEqualTo(CONFLICT.getStatusCode());
     }
@@ -203,6 +260,8 @@ public class ContactRequestTest {
         // mary invites laura: only laura has something to act on
         assertThat(contactRequests(mary, mary, ORIGIN).post(json(invitation(emailOf(laura)))).getStatus())
             .isEqualTo(CREATED.getStatusCode());
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::chatId).isEqualTo(CHAT_ID);
         assertThat(contactRequestsOf(laura)).contains(UserFactory.MARY_ID.id());
         assertThat(contactRequestsOf(mary)).doesNotContain(UserFactory.LAURA_ID.id());
 
@@ -214,11 +273,14 @@ public class ContactRequestTest {
         assertThat(contactRequestsOf(mary)).contains(UserFactory.LAURA_ID.id());
         assertThat(contactRequestsOf(laura)).doesNotContain(UserFactory.MARY_ID.id());
 
-        // mary confirms she picked up the acceptance
+        // mary creates the chat and confirms she picked up the acceptance - the server files
+        // laura's key entry under the chat, making her a regular member
+        createChatDocument();
         assertThat(contactRequest(mary, mary, laura, ORIGIN).put(json("{\"status\": \"RECEIVED\"}"))
             .getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
         assertThat(contactRepository.getContactExchange(mary, laura))
             .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.RECEIVED);
+        assertThat(documentRepository.hasDirectGrant(mary, CHAT_ID, laura)).isTrue();
 
         // a completed exchange is no longer actionable for either side
         assertThat(contactRequestsOf(mary)).doesNotContain(UserFactory.LAURA_ID.id());
@@ -317,8 +379,11 @@ public class ContactRequestTest {
     }
 
     private String acceptBody() {
-        return "{\"status\": \"ACCEPTED\", \"chatId\": \"chat-mary-laura\", \"publicKey\": " + PUBLIC_KEY
-            + ", \"sharedKey\": \"AAAA\"}";
+        return "{\"status\": \"ACCEPTED\", \"publicKey\": " + PUBLIC_KEY + ", \"sharedKey\": \"AAAA\"}";
+    }
+
+    private void createChatDocument() {
+        documentRepository.persist(mary, CHAT_ID, new EncryptedContent("chat".getBytes(UTF_8)));
     }
 
     private Builder contactRequests(User owner, User tokenUser, String origin) {
@@ -348,7 +413,8 @@ public class ContactRequestTest {
     private String invitation(Email invitee) {
         return "{\"invitee\": \"" + invitee.address() + "\","
             + " \"inviterEmail\": \"inviter@imagey.cloud\","
-            + " \"publicKey\": " + PUBLIC_KEY + "}";
+            + " \"publicKey\": " + PUBLIC_KEY + ","
+            + " \"chatId\": \"" + CHAT_ID.id() + "\"}";
     }
 
     private static Email emailOf(User user) {

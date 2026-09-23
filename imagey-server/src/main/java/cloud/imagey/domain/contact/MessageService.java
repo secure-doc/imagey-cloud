@@ -40,6 +40,8 @@ public class MessageService {
     @Inject
     private DocumentRepository documentRepository;
     @Inject
+    private ContactService contactService;
+    @Inject
     private Event<Message> messageEvent;
 
     public Message sendMessage(User owner, DocumentId chatId, User sender, MessageContent encryptedContent) throws IOException {
@@ -47,8 +49,10 @@ public class MessageService {
         // member could address /{self}/documents/{chatId}/messages and silently create a stray
         // messages folder in their own tree - a 201 for a message nobody else can read. Messages
         // are single-copy (kept only in the chat owner's tree), so require the chat document to
-        // actually exist there.
-        if (!documentRepository.documentExists(owner, chatId)) {
+        // actually exist there - or, before the inviter has created it, the sender to be the
+        // invitee of an accepted exchange naming exactly this chat (ADR 0015 decision 4).
+        if (!documentRepository.documentExists(owner, chatId)
+            && !contactService.isProvisionalChatMember(owner, chatId, sender)) {
             throw new ResourceNotFoundException(
                 "Chat " + chatId.id() + " does not exist for " + owner.id().id() + ".");
         }

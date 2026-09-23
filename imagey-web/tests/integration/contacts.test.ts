@@ -95,6 +95,7 @@ test("send contact request", async ({ page }) => {
           inviterEmail: "mary@imagey.cloud",
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
+          chatId: MatchersV3.uuid(),
         });
       },
     )
@@ -175,6 +176,7 @@ test("send contact request from the chats list without a known inviter email", a
           inviterEmail: "",
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
+          chatId: MatchersV3.uuid(),
         });
       },
     )
@@ -244,6 +246,7 @@ test("invite contact from empty panel", async ({ page }) => {
           inviterEmail: "mary@imagey.cloud",
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
+          chatId: MatchersV3.uuid(),
         });
       },
     )
@@ -333,6 +336,7 @@ test("invite from empty panel sends an empty inviter email when it is not known 
           inviterEmail: "",
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
+          chatId: MatchersV3.uuid(),
         });
       },
     )
@@ -429,6 +433,7 @@ test("send contact request prompts for a display name when mary has no public pr
           // The public profile is freshly created in this test, so its id is
           // client-generated - only its shape is asserted.
           publicProfileId: MatchersV3.string("new-public-profile-id"),
+          chatId: MatchersV3.uuid(),
         });
       },
     )
@@ -585,6 +590,7 @@ test("invite from empty panel prompts for a display name when mary has no public
           inviterEmail: "mary@imagey.cloud",
           publicKey: TestData.mary.publicMainKey,
           publicProfileId: MatchersV3.string("new-public-profile-id"),
+          chatId: MatchersV3.uuid(),
         });
       },
     )
