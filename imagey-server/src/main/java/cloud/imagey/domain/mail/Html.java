@@ -16,14 +16,30 @@
  */
 package cloud.imagey.domain.mail;
 
-/**
- * An HTML fragment. Separate paragraphs by a blank line ({@code \n\n}); each one is rendered as its
- * own paragraph by the {@link MailService}.
- */
-public record EmailBody(String body) {
+final class Html {
 
-    public EmailBody formatted(Object... values) {
-        return new EmailBody(body.formatted(values));
+    private Html() {
     }
 
+    static String escape(String text) {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;");
+    }
+
+    static String unescape(String html) {
+        return html
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&");
+    }
+
+    static String toPlainText(String html) {
+        return unescape(html.replaceAll("<[^>]*>", ""));
+    }
 }

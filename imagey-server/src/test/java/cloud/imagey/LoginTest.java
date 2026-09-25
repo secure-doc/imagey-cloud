@@ -80,6 +80,7 @@ public class LoginTest {
 
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
+        assertThat(receivedMessages[0].getSubject()).isEqualTo("Sign in to Secure Doc");
 
         // When
         String link = extractLink(receivedMessages[0]);
@@ -97,6 +98,37 @@ public class LoginTest {
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         Optional<DecodedToken> decodedToken = tokenService.decode(new Token(tokenValue));
         assertThat(decodedToken).get().extracting(t -> t.jwt().getSubject()).isEqualTo(UserFactory.MARY_ID.id());
+    }
+
+    @Test
+    @DisplayName("Login mail is sent as plain text and HTML, branded with the product of the requesting domain")
+    public void loginMailIsBrandedWithProductName() throws IOException, MessagingException {
+        // When
+        newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/verifications")
+            .request().header("Origin", "https://imagey.cloud")
+            .post(json("{\"email\":\"mary@imagey.cloud\"}"));
+
+        // Then
+        MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
+        assertThat(receivedMessages).hasSize(1);
+        assertThat(receivedMessages[0].getSubject()).isEqualTo("Sign in to Imagey");
+        MimeMultipart content = (MimeMultipart)receivedMessages[0].getContent();
+        assertThat(content.getContentType()).startsWith("multipart/alternative");
+        assertThat(content.getBodyPart(0).isMimeType("text/plain")).isTrue();
+        assertThat(content.getBodyPart(1).isMimeType("text/html")).isTrue();
+        String plainText = content.getBodyPart(0).getContent().toString();
+        String html = content.getBodyPart(1).getContent().toString();
+        assertThat(plainText)
+            .contains("Sign in to Imagey")
+            .contains("https://imagey.cloud/authentications/")
+            .doesNotContain("<");
+        assertThat(html)
+            .contains(">Sign in to Imagey</a>")
+            .contains("href=\"https://imagey.cloud/authentications/")
+            .doesNotContain("Secure Doc")
+            .doesNotContain("{{");
     }
 
     @Test
@@ -211,7 +243,7 @@ public class LoginTest {
     }
 
     private String extractLink(MimeMessage message) throws IOException, MessagingException {
-        String loginMail = ((MimeMultipart)message.getContent()).getBodyPart(0).getContent().toString();
+        String loginMail = ((MimeMultipart)message.getContent()).getBodyPart(1).getContent().toString();
         int startIndex = loginMail.indexOf("href=\"") + "href=\"".length();
         int endIndex = loginMail.indexOf('"', startIndex);
         return loginMail.substring(startIndex, endIndex)

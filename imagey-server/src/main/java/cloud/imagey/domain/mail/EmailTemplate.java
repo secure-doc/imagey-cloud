@@ -18,15 +18,29 @@ package cloud.imagey.domain.mail;
 
 import static java.util.Objects.requireNonNull;
 
-public record EmailTemplate(Email sender, EmailSubject subject, EmailBody body) {
+import java.util.Arrays;
+
+public record EmailTemplate(Email sender, String appName, EmailSubject subject, EmailBody body, EmailAction action) {
 
     public EmailTemplate {
         requireNonNull(sender);
+        requireNonNull(appName);
         requireNonNull(subject);
         requireNonNull(body);
+        requireNonNull(action);
     }
 
+    /**
+     * Fills the placeholders of subject, body and action label. The values are HTML-escaped where they
+     * end up in HTML, so user-supplied values (like the inviter's address) cannot inject markup.
+     */
     public EmailTemplate formatted(Object... values) {
-        return new EmailTemplate(sender, subject.formatted(values), body.formatted(values));
+        Object[] escapedValues = Arrays.stream(values).map(value -> Html.escape(String.valueOf(value))).toArray();
+        return new EmailTemplate(
+            sender,
+            appName,
+            subject.formatted(values),
+            body.formatted(escapedValues),
+            action.formatted(escapedValues));
     }
 }

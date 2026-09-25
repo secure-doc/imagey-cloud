@@ -41,6 +41,7 @@ import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.mail.EmailAction;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
 import cloud.imagey.domain.mail.EmailTemplate;
@@ -83,6 +84,9 @@ public class ContactService {
     @Inject
     @ConfigProperty(name = "mail.invitation.body")
     private EmailBody invitationBody;
+    @Inject
+    @ConfigProperty(name = "mail.invitation.action")
+    private String invitationAction;
 
     /**
      * @param sender        the inviting account
@@ -152,9 +156,11 @@ public class ContactService {
             String link = domain.value() + "/invitations/" + token.token() + "?invited-by=" + sender.id().id();
             mailService.send(recipient, new EmailTemplate(
                 new Email("invitation@" + domain.getHost()),
+                domain.getAppName(),
                 invitationSubject,
-                invitationBody
-            ).formatted(domain.getAppName(), senderEmail.address(), link));
+                invitationBody,
+                new EmailAction(invitationAction, link)
+            ).formatted(domain.getAppName(), senderEmail.address()));
         }
         return Optional.of(recipientUser);
     }

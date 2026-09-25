@@ -17,13 +17,12 @@
 package cloud.imagey.domain.mail;
 
 /**
- * An HTML fragment. Separate paragraphs by a blank line ({@code \n\n}); each one is rendered as its
- * own paragraph by the {@link MailService}.
+ * The call to action of an email, rendered as a button. The {@link #label()} may contain format
+ * placeholders that are filled by {@link #formatted(Object...)}; the {@link #link()} is used verbatim.
  */
-public record EmailBody(String body) {
+public record EmailAction(String label, String link) {
 
-    public EmailBody formatted(Object... values) {
-        return new EmailBody(body.formatted(values));
+    public EmailAction formatted(Object... values) {
+        return new EmailAction(label.formatted(values), link);
     }
-
 }

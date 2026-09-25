@@ -16,7 +16,18 @@
  */
 package cloud.imagey.domain.mail;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.stream.Collectors.joining;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -42,6 +53,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 public class MailService {
 
     private static final Logger LOG = LogManager.getLogger(MailService.class);
+    private static final String LAYOUT = loadLayout();
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{(\\w+)}}");
+    private static final String PARAGRAPH_START
+        = "<p style=\"margin:0 0 16px 0; font-size:16px; line-height:24px; color:#1f2933;\">";
 
     @Inject
     @ConfigProperty(name = "smtp.host")
@@ -73,7 +88,7 @@ public class MailService {
         message.setFrom(new InternetAddress(email.sender().address()));
         message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient.address()));
         message.setSubject(email.subject().subject());
-        message.setContent(createBody(email.body()));
+        message.setContent(createBody(email));
         return message;
     }
 
@@ -92,12 +107,54 @@ public class MailService {
         return session;
     }
 
-    private Multipart createBody(EmailBody body) throws MessagingException {
-        MimeBodyPart mimeBodyPart = new MimeBodyPart();
-        mimeBodyPart.setContent(body.body(), "text/html; charset=utf-8");
+    private Multipart createBody(EmailTemplate email) throws MessagingException {
+        List<String> paragraphs = Arrays.stream(email.body().body().split("\\n\\s*\\n"))
+            .map(String::strip)
+            .filter(paragraph -> !paragraph.isEmpty())
+            .toList();
 
-        Multipart multipart = new MimeMultipart();
-        multipart.addBodyPart(mimeBodyPart);
+        MimeBodyPart plainTextPart = new MimeBodyPart();
+        plainTextPart.setText(renderPlainText(email, paragraphs), UTF_8.name());
+        MimeBodyPart htmlPart = new MimeBodyPart();
+        htmlPart.setContent(renderHtml(email, paragraphs), "text/html; charset=utf-8");
+
+        // Clients show the last alternative they can display, so the HTML version goes last.
+        Multipart multipart = new MimeMultipart("alternative");
+        multipart.addBodyPart(plainTextPart);
+        multipart.addBodyPart(htmlPart);
         return multipart;
+    }
+
+    private String renderHtml(EmailTemplate email, List<String> paragraphs) {
+        Map<String, String> values = Map.of(
+            "appName", Html.escape(email.appName()),
+            "subject", Html.escape(email.subject().subject()),
+            "preheader", paragraphs.isEmpty() ? "" : Html.escape(Html.toPlainText(paragraphs.get(0))),
+            "content", paragraphs.stream().map(paragraph -> PARAGRAPH_START + paragraph + "</p>").collect(joining("\n")),
+            "actionLabel", email.action().label(),
+            "actionLink", Html.escape(email.action().link()));
+        // Single pass, so placeholder-like text inside a substituted value is never expanded again.
+        return PLACEHOLDER.matcher(LAYOUT).replaceAll(match -> Matcher.quoteReplacement(values.get(match.group(1))));
+    }
+
+    private String renderPlainText(EmailTemplate email, List<String> paragraphs) {
+        return email.subject().subject() + "\n\n"
+            + paragraphs.stream().map(Html::toPlainText).collect(joining("\n\n")) + "\n\n"
+            + Html.toPlainText(email.action().label()) + ":\n"
+            + email.action().link() + "\n\n"
+            + "-- \n"
+            + "This email was sent automatically by " + email.appName()
+            + ". If you did not expect it, you can safely ignore it.\n";
+    }
+
+    private static String loadLayout() {
+        try (InputStream layout = MailService.class.getResourceAsStream("/mail/layout.html")) {
+            if (layout == null) {
+                throw new IllegalStateException("Mail layout /mail/layout.html not found");
+            }
+            return new String(layout.readAllBytes(), UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }
