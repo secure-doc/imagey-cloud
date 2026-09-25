@@ -36,6 +36,7 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.mail.EmailAction;
 import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
 import cloud.imagey.domain.mail.EmailTemplate;
@@ -73,11 +74,17 @@ public class UserService {
     @ConfigProperty(name = "mail.login.body")
     private EmailBody loginBody;
     @Inject
+    @ConfigProperty(name = "mail.login.action")
+    private String loginAction;
+    @Inject
     @ConfigProperty(name = "mail.registration.subject")
     private EmailSubject registrationSubject;
     @Inject
     @ConfigProperty(name = "mail.registration.body")
     private EmailBody registrationBody;
+    @Inject
+    @ConfigProperty(name = "mail.registration.action")
+    private String registrationAction;
 
     public AuthenticationStatus startAuthenticationProcess(Email email) {
         LOG.info("authentiation starting...");
@@ -96,9 +103,11 @@ public class UserService {
             String link = domain.value() + "/authentications/" + token.token();
             mailService.send(email, new EmailTemplate(
                 new Email("login@" + domain.getHost()),
+                domain.getAppName(),
                 loginSubject,
-                loginBody
-            ).formatted(domain.getAppName(), link));
+                loginBody,
+                new EmailAction(loginAction, link)
+            ).formatted(domain.getAppName()));
             return AuthenticationStatus.AUTHENTICATION_STARTED;
         } else {
             LOG.info("User does not exist, starting registration...");
@@ -106,9 +115,11 @@ public class UserService {
             String link = domain.value() + "/registrations/" + token.token();
             mailService.send(email, new EmailTemplate(
                 new Email("verification@" + domain.getHost()),
+                domain.getAppName(),
                 registrationSubject,
-                registrationBody
-            ).formatted(domain.getAppName(), link));
+                registrationBody,
+                new EmailAction(registrationAction, link)
+            ).formatted(domain.getAppName()));
             return AuthenticationStatus.REGISTRATION_STARTED;
         }
     }

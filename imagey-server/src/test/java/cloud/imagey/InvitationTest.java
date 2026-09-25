@@ -85,6 +85,41 @@ public class InvitationTest {
     }
 
     @Test
+    @DisplayName("Invitation mail names the inviter and escapes markup in the inviter's address")
+    public void invitationMailEscapesInviter() throws IOException, MessagingException {
+        // When
+        newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/" + UserFactory.MARY_ID.id() + "/contact-requests")
+            .request()
+            .header("Origin", "https://imagey.cloud")
+            .cookie(marysToken)
+            .post(json("""
+                {
+                    "invitee": "luise@imagey.cloud",
+                    "inviterEmail": "<b>mary</b>@imagey.cloud",
+                    "publicKey": {
+                        "crv": "P-256", "ext": true, "key_ops": [], "kty": "EC",
+                        "x": "O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4",
+                        "y": "ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU"
+                    },
+                    "chatId": "chat-mary-luise"
+                }
+            """));
+
+        // Then
+        MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
+        assertThat(receivedMessages).hasSize(1);
+        assertThat(receivedMessages[0].getSubject()).isEqualTo("You are invited to Imagey");
+        MimeMultipart content = (MimeMultipart)receivedMessages[0].getContent();
+        assertThat(content.getBodyPart(0).getContent().toString())
+            .contains("<b>mary</b>@imagey.cloud invited you to Imagey");
+        assertThat(content.getBodyPart(1).getContent().toString())
+            .contains("<strong>&lt;b&gt;mary&lt;/b&gt;@imagey.cloud</strong> invited you to Imagey")
+            .contains(">Accept invitation</a>");
+    }
+
+    @Test
     @DisplayName("Invitation of new user")
     public void invitationOfNewUser() throws IOException, MessagingException {
         // Given
@@ -190,7 +225,7 @@ public class InvitationTest {
 
 
     private String extractLink(MimeMessage message) throws IOException, MessagingException {
-        String registrationMail = ((MimeMultipart)message.getContent()).getBodyPart(0).getContent().toString();
+        String registrationMail = ((MimeMultipart)message.getContent()).getBodyPart(1).getContent().toString();
         int startIndex = registrationMail.indexOf("href=\"") + "href=\"".length();
         int endIndex = registrationMail.indexOf('"', startIndex);
         return registrationMail.substring(startIndex, endIndex)
