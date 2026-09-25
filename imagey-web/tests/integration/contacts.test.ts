@@ -96,6 +96,8 @@ test("send contact request", async ({ page }) => {
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -177,6 +179,8 @@ test("send contact request from the chats list without a known inviter email", a
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -247,6 +251,8 @@ test("invite contact from empty panel", async ({ page }) => {
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -337,6 +343,8 @@ test("invite from empty panel sends an empty inviter email when it is not known 
           publicKey: TestData.mary.publicMainKey,
           publicProfileId,
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -434,6 +442,8 @@ test("send contact request prompts for a display name when mary has no public pr
           // client-generated - only its shape is asserted.
           publicProfileId: MatchersV3.string("new-public-profile-id"),
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -591,6 +601,8 @@ test("invite from empty panel prompts for a display name when mary has no public
           publicKey: TestData.mary.publicMainKey,
           publicProfileId: MatchersV3.string("new-public-profile-id"),
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )

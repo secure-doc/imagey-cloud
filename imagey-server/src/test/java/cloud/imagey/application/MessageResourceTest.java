@@ -291,7 +291,7 @@ public class MessageResourceTest {
 
     private void acceptedExchange(String chatId, ContactStatus status) {
         contactRepository.persist(new ContactExchange(
-            owner, contact, status, null, new DocumentId(chatId), new EncryptedSymmetricKey("d3JhcHBlZA=="), null));
+            owner, contact, status, null, new DocumentId(chatId), new EncryptedSymmetricKey("d3JhcHBlZA=="), null, null));
     }
 
     private void writeChatMetadata(String chatId) {

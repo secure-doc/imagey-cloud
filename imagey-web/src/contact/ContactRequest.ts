@@ -38,4 +38,17 @@ export type ContactRequest = {
   // is overwritten on accept. Optional: a sender's public-profile may not
   // exist yet (should not normally happen, see §3.6).
   publicProfileId?: string;
+  // The sender's display name and address (ContactInfo), encrypted - same
+  // "sender of the latest transition" semantics as `publicKey`: while
+  // INVITED the inviter's, under cryptoService.deriveInvitationKey(invitee's
+  // address, chatId); once ACCEPTED the invitee's, under the chat key. Opaque
+  // to the server. Optional: an older request may not carry it.
+  contactInfo?: string;
+};
+
+// What the other party tells about themselves on a contact request, so it
+// can show a name/address before any public profile is reachable.
+export type ContactInfo = {
+  name?: string;
+  email?: string;
 };

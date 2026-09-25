@@ -6,7 +6,16 @@ import {
 } from "@pact-foundation/pact";
 import { webcrypto } from "node:crypto";
 import * as fs from "fs";
-import { TestData, shortName, ALICE_ID, LAURA_ID } from "./testdata";
+import {
+  TestData,
+  shortName,
+  ALICE_ID,
+  BILL_ID,
+  LAURA_ID,
+  MARY_ID,
+  displayName,
+  emailOf,
+} from "./testdata";
 
 // --- Chats/contact-requests test helpers -----------------------------------
 // Contacts/chats are (like documents, folders and the profile) their own
@@ -111,6 +120,109 @@ export async function encryptKeyEnvelope(
     new TextEncoder().encode(JSON.stringify(keyToWrap)),
   );
   return encrypted.toString("base64");
+}
+
+// Mirrors cryptoService.deriveInvitationKey + contactService.
+// encryptInvitationInfo: the inviter's name/address on an INVITED contact
+// request, encrypted under a key derived from the invitee's address and the
+// chatId (ContactRequest.contactInfo).
+export async function encryptInvitationContactInfo(
+  info: { name?: string; email?: string },
+  inviteeEmail: string,
+  chatId: string,
+): Promise<string> {
+  const hkdfKey = await webcrypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(inviteeEmail.trim().toLowerCase()),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  const key = await webcrypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode(
+        ["imagey-invitation-key", chatId].join("\u0000"),
+      ),
+    },
+    hkdfKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  return encryptChatContactInfo(
+    info,
+    (await webcrypto.subtle.exportKey("jwk", key)) as JsonWebKey,
+  );
+}
+
+// The invitee's name/address on an ACCEPTED contact request, encrypted under
+// the chat key (see contactService.acceptContactRequest).
+export async function encryptChatContactInfo(
+  info: { name?: string; email?: string },
+  chatKey: JsonWebKey,
+): Promise<string> {
+  const encrypted = await aesGcmEncrypt(
+    chatKey,
+    new TextEncoder().encode(JSON.stringify(info)),
+  );
+  return encrypted.toString("base64");
+}
+
+// Mirrors cryptoService.deriveChatKey (ADR 0015): ECDH + HKDF over chatId and
+// both parties' userIds.
+export async function deriveChatKey(
+  ownPrivateKey: JsonWebKey,
+  otherPublicKey: JsonWebKey,
+  chatId: string,
+  inviterId: string,
+  inviteeId: string,
+): Promise<JsonWebKey> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { key_ops, ...privateKey } = ownPrivateKey;
+  const priv = await webcrypto.subtle.importKey(
+    "jwk",
+    privateKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
+  const pub = await webcrypto.subtle.importKey(
+    "jwk",
+    otherPublicKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    [],
+  );
+  const sharedSecret = await webcrypto.subtle.deriveBits(
+    { name: "ECDH", public: pub },
+    priv,
+    256,
+  );
+  const hkdfKey = await webcrypto.subtle.importKey(
+    "raw",
+    sharedSecret,
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  const chatKey = await webcrypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode(
+        ["imagey-chat-key", chatId, inviterId, inviteeId].join("\u0000"),
+      ),
+    },
+    hkdfKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  return webcrypto.subtle.exportKey("jwk", chatKey) as Promise<JsonWebKey>;
 }
 
 async function deriveEcdhAesKey(
@@ -244,6 +356,7 @@ async function mockChatsDocument(
     chatId: string;
     owner: string;
     name?: string;
+    email?: string;
     avatarId?: string;
     profileRevision?: string;
     pending?: { chatKey: JsonWebKey; publicProfiles: Record<string, string> };
@@ -258,7 +371,8 @@ async function mockChatsDocument(
   // pass explicit values.
   const contactEntries = contacts.map((c) => ({
     ...c,
-    name: c.name ?? c.userId,
+    name: c.name ?? displayName(c.userId),
+    email: c.email ?? emailOf(c.userId),
     profileRevision: c.profileRevision ?? "0",
   }));
   const content = await aesGcmEncrypt(
@@ -1909,6 +2023,11 @@ export async function prepareMarysContactRequests(
     "mary has no contacts and a contact request from bill",
     chatsDocumentKey,
   );
+  const contactInfo = await encryptInvitationContactInfo(
+    { name: "Bill", email: "bill@imagey.cloud" },
+    "mary@imagey.cloud",
+    BILLS_INVITATION_CHAT_ID,
+  );
 
   return provider
     .addInteraction()
@@ -1935,6 +2054,8 @@ export async function prepareMarysContactRequests(
           // becomes ContactService.acceptContactRequest's
           // inviterPublicProfileId when mary accepts.
           publicProfileId: "bills-public-profile-id",
+          // Bill's name/address, readable by mary before accepting.
+          contactInfo: MatchersV3.string(contactInfo),
         },
       ]),
     );
@@ -1952,6 +2073,17 @@ export async function prepareMarysAcceptedContactRequest(
   contacts: { userId: string; chatId: string; owner: string }[] = [],
 ) {
   await prepareMarysChatsDocument(contacts, given, chatsDocumentKey);
+  // Bill's name/address, encrypted under the chat key both derive.
+  const contactInfo = await encryptChatContactInfo(
+    { name: "Bill", email: "bill@imagey.cloud" },
+    await deriveChatKey(
+      TestData.mary.privateMainKey!,
+      TestData.bill.publicMainKey,
+      chatId,
+      MARY_ID,
+      BILL_ID,
+    ),
+  );
 
   return provider
     .addInteraction()
@@ -1978,6 +2110,7 @@ export async function prepareMarysAcceptedContactRequest(
           // Opaque to mary - the provider fixture carries its own; only the
           // shape matters for the contract.
           sharedKey: MatchersV3.string("YmlsbHMtd3JhcHBlZC1jaGF0LWtleQ=="),
+          contactInfo: MatchersV3.string(contactInfo),
         },
       ]),
     );

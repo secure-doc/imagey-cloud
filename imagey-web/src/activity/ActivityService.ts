@@ -38,10 +38,7 @@ export const activityService = {
           (request): InvitationActivity => ({
             id: `invitation-${request.inviter}`,
             type: ActivityType.INVITATION,
-            userId: request.inviter,
-            publicKey: request.publicKey,
-            chatId: request.chatId,
-            publicProfileId: request.publicProfileId,
+            request,
           }),
         ),
       ...documents.map(

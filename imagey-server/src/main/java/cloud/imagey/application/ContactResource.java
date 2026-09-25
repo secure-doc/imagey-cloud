@@ -50,6 +50,7 @@ import cloud.imagey.domain.contact.ContactExchange;
 import cloud.imagey.domain.contact.ContactRepository;
 import cloud.imagey.domain.contact.ContactService;
 import cloud.imagey.domain.contact.ContactStatus;
+import cloud.imagey.domain.contact.EncryptedContactInfo;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
 import cloud.imagey.domain.encryption.PublicKey;
@@ -76,7 +77,7 @@ public class ContactResource {
     public Response requestContact(@PathParam("userId") User inviter, ContactRequest request, @Context UriInfo uriInfo) throws IOException {
         Optional<User> invitee = contactService.invite(
             inviter, request.inviterEmail(), request.invitee(), request.publicKey(), request.publicProfileId(),
-            request.chatId());
+            request.chatId(), request.contactInfo());
         return invitee
             .map(i -> {
                 UriBuilder contactRequest = uriInfo.getAbsolutePathBuilder();
@@ -113,7 +114,8 @@ public class ContactResource {
         if (update.status() == ContactStatus.RECEIVED) {
             contactService.confirmReceipt(user, contact);
         } else if (update.status() == ContactStatus.ACCEPTED) {
-            contactService.acceptInvitation(user, contact, update.publicKey(), update.sharedKey(), update.publicProfileId());
+            contactService.acceptInvitation(
+                user, contact, update.publicKey(), update.sharedKey(), update.publicProfileId(), update.contactInfo());
         } else {
             // TODO move to Bean Validation
             throw new BadRequestException("Status " + update.status() + " not allowed");
@@ -130,10 +132,12 @@ public class ContactResource {
         // The inviter's "public-profile" Document id, nullable (see docs/plans/chat-public-profile.md).
         DocumentId publicProfileId,
         // The id of the chat the inviter will own (ADR 0015), chosen by the inviter's client.
-        DocumentId chatId) {
+        DocumentId chatId,
+        // The inviter's name and address, encrypted for the invitee (ADR 0016), nullable.
+        EncryptedContactInfo contactInfo) {
     }
 
-    // publicKey, sharedKey and publicProfileId are only meaningful on ACCEPTED (sent by the invitee);
+    // publicKey, sharedKey, publicProfileId and contactInfo are only meaningful on ACCEPTED (sent by the invitee);
     // RECEIVED carries nothing but the status (ADR 0015).
     public record ContactRequestUpdate(
         ContactStatus status,
@@ -142,6 +146,8 @@ public class ContactResource {
         // The chat key wrapped by the invitee under their own "chats" document key.
         EncryptedSymmetricKey sharedKey,
         // The invitee's "public-profile" Document id, nullable.
-        DocumentId publicProfileId) {
+        DocumentId publicProfileId,
+        // The invitee's name and address, encrypted under the chat key (ADR 0016), nullable.
+        EncryptedContactInfo contactInfo) {
     }
 }

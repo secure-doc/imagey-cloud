@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { contactService } from "../contact/ContactService";
+import { contactDisplayName } from "../contact/contactDisplayName";
 import { ContactEntry } from "../document/DocumentMetadata";
 import { SendMessageForm } from "../chat/SendMessageForm";
 import { usePolling } from "../chat/messageHooks";
@@ -11,6 +13,7 @@ import { useChatsId } from "../contexts/SettingsContext";
 import { useContactProfile } from "../hooks/useContactProfile";
 
 export default function Chat({ contactUserId }: { contactUserId: string }) {
+  const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
@@ -57,7 +60,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   );
 
   useBackButton();
-  useTitle(contactName || contactUserId);
 
   const handleChatsListLoaded = useCallback(
     (chatsDocument: {
@@ -172,6 +174,13 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   );
   const chatsDocumentKey = chatsDocumentInfo?.chatsDocumentKey;
 
+  // The freshly loaded public-profile name, else the contact entry's cached
+  // name/address - never the opaque userId.
+  const displayName =
+    contactName ||
+    contactDisplayName(contactUserId, contact ?? {}, t("Unknown contact"));
+  useTitle(displayName);
+
   useEffect(() => {
     if (!contactUserId || !privateKey || !chatsDocumentKey) {
       return;
@@ -250,15 +259,15 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
               {contactAvatarUrl ? (
                 <img
                   src={contactAvatarUrl}
-                  alt={contactName || contactUserId}
+                  alt={displayName}
                   className="circle small"
                 />
               ) : (
                 <div className="circle surface center-align middle-align small">
-                  {(contactName || contactUserId).charAt(0).toLocaleUpperCase()}
+                  {displayName.charAt(0).toLocaleUpperCase()}
                 </div>
               )}
-              <h6 className="no-margin">{contactName || contactUserId}</h6>
+              <h6 className="no-margin">{displayName}</h6>
             </div>
             <hr className="divider" />
             <div

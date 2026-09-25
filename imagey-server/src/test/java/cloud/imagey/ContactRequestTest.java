@@ -50,6 +50,7 @@ import org.junit.jupiter.api.Test;
 import cloud.imagey.domain.contact.ContactExchange;
 import cloud.imagey.domain.contact.ContactRepository;
 import cloud.imagey.domain.contact.ContactStatus;
+import cloud.imagey.domain.contact.EncryptedContactInfo;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
@@ -74,6 +75,10 @@ public class ContactRequestTest {
         = "{\"crv\": \"P-256\", \"ext\": true, \"key_ops\": [], \"kty\": \"EC\","
         + " \"x\": \"O1aGIpmfLo-SOJDBwBW1zyKJDUdIxpmYjg-vC8UTim4\","
         + " \"y\": \"ySJAF_0XeBWOrL-jboQvxy644ViTd0FDgp-pSCP3ONU\"}";
+
+    // Opaque to the server (ADR 0016) - any base64 string will do.
+    private static final EncryptedContactInfo INVITER_INFO = new EncryptedContactInfo("aW52aXRlci1pbmZv");
+    private static final EncryptedContactInfo INVITEE_INFO = new EncryptedContactInfo("aW52aXRlZS1pbmZv");
 
     @ConfigurationInject
     private static Meecrowave.Builder config;
@@ -262,6 +267,8 @@ public class ContactRequestTest {
             .isEqualTo(CREATED.getStatusCode());
         assertThat(contactRepository.getContactExchange(mary, laura))
             .get().extracting(ContactExchange::chatId).isEqualTo(CHAT_ID);
+        assertThat(contactRepository.getContactExchange(laura, mary))
+            .get().extracting(ContactExchange::contactInfo).isEqualTo(INVITER_INFO);
         assertThat(contactRequestsOf(laura)).contains(UserFactory.MARY_ID.id());
         assertThat(contactRequestsOf(mary)).doesNotContain(UserFactory.LAURA_ID.id());
 
@@ -270,6 +277,9 @@ public class ContactRequestTest {
             .isEqualTo(SUCCESSFUL);
         assertThat(contactRepository.getContactExchange(laura, mary))
             .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.ACCEPTED);
+        // the invitee's own info replaces the inviter's (ADR 0016)
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::contactInfo).isEqualTo(INVITEE_INFO);
         assertThat(contactRequestsOf(mary)).contains(UserFactory.LAURA_ID.id());
         assertThat(contactRequestsOf(laura)).doesNotContain(UserFactory.MARY_ID.id());
 
@@ -280,6 +290,8 @@ public class ContactRequestTest {
             .getStatusInfo().getFamily()).isEqualTo(SUCCESSFUL);
         assertThat(contactRepository.getContactExchange(mary, laura))
             .get().extracting(ContactExchange::status).isEqualTo(ContactStatus.RECEIVED);
+        assertThat(contactRepository.getContactExchange(mary, laura))
+            .get().extracting(ContactExchange::contactInfo).isEqualTo(INVITEE_INFO);
         assertThat(documentRepository.hasDirectGrant(mary, CHAT_ID, laura)).isTrue();
 
         // a completed exchange is no longer actionable for either side
@@ -379,7 +391,8 @@ public class ContactRequestTest {
     }
 
     private String acceptBody() {
-        return "{\"status\": \"ACCEPTED\", \"publicKey\": " + PUBLIC_KEY + ", \"sharedKey\": \"AAAA\"}";
+        return "{\"status\": \"ACCEPTED\", \"publicKey\": " + PUBLIC_KEY + ", \"sharedKey\": \"AAAA\","
+            + " \"contactInfo\": \"" + INVITEE_INFO.content() + "\"}";
     }
 
     private void createChatDocument() {
@@ -414,7 +427,8 @@ public class ContactRequestTest {
         return "{\"invitee\": \"" + invitee.address() + "\","
             + " \"inviterEmail\": \"inviter@imagey.cloud\","
             + " \"publicKey\": " + PUBLIC_KEY + ","
-            + " \"chatId\": \"" + CHAT_ID.id() + "\"}";
+            + " \"chatId\": \"" + CHAT_ID.id() + "\","
+            + " \"contactInfo\": \"" + INVITER_INFO.content() + "\"}";
     }
 
     private static Email emailOf(User user) {

@@ -56,7 +56,8 @@ test("navigate to chats", async ({ page }) => {
     // Then
     await expect(
       page.getByRole("heading", {
-        name: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+        name: "Bill",
+        exact: true,
       }),
     ).toBeVisible();
     await chatsKeyResponse;
@@ -103,6 +104,8 @@ test("accept open invitations", async ({ page }) => {
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId,
+          // Our own name/address, encrypted under the chat key.
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -145,11 +148,15 @@ test("accept open invitations", async ({ page }) => {
     // Then Invitation Visible
     const invitationPanel = page
       .getByRole("heading", {
-        name: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+        name: "Bill",
+        exact: true,
       })
       .locator("../..");
     await expect(invitationPanel).toBeVisible();
-    await expect(invitationPanel).toContainText(
+    // The inviter's name/address come from the request's encrypted
+    // contactInfo - never bill's userId.
+    await expect(invitationPanel).toContainText("bill@imagey.cloud");
+    await expect(invitationPanel).not.toContainText(
       "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
     );
 
@@ -199,11 +206,15 @@ test("decline open invitations", async ({ page }) => {
     // Then Invitation Visible
     const invitationPanel = page
       .getByRole("heading", {
-        name: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+        name: "Bill",
+        exact: true,
       })
       .locator("../..");
     await expect(invitationPanel).toBeVisible();
-    await expect(invitationPanel).toContainText(
+    // The inviter's name/address come from the request's encrypted
+    // contactInfo - never bill's userId.
+    await expect(invitationPanel).toContainText("bill@imagey.cloud");
+    await expect(invitationPanel).not.toContainText(
       "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
     );
 
@@ -296,12 +307,10 @@ test("pick up an accepted invitation (inviter side)", async ({ page }) => {
     await expect(chatsLink).toBeVisible();
     await chatsLink.click();
 
-    // Bill shows up as a contact automatically. .first() because the
-    // contact list item shows the email twice (heading + subtitle) - same
-    // pattern used for other contacts elsewhere in this suite.
-    await expect(
-      page.getByText("a358c2ed-07d4-4a25-a7db-d860d5c0b895").first(),
-    ).toBeVisible();
+    // Bill shows up as a contact automatically, with the name/address he
+    // sent (encrypted under the chat key) when accepting.
+    await expect(page.getByText("Bill", { exact: true })).toBeVisible();
+    await expect(page.getByText("bill@imagey.cloud")).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -377,10 +386,8 @@ test("pick up an accepted invitation again after a failed confirm reuses the cha
     await page.getByRole("link", { name: "Chats" }).first().click();
     await confirmed;
 
-    // Still exactly one entry for bill (heading + subtitle).
-    await expect(
-      page.getByText("a358c2ed-07d4-4a25-a7db-d860d5c0b895"),
-    ).toHaveCount(2);
+    // Still exactly one entry for bill.
+    await expect(page.getByText("Bill", { exact: true })).toHaveCount(1);
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

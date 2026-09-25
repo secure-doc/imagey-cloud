@@ -168,6 +168,40 @@ export const cryptoService = {
     return crypto.subtle.exportKey("jwk", chatKey);
   },
 
+  // The key the inviter encrypts their own name/email (ContactRequest.
+  // contactInfo) with for an INVITED request: the inviter does not know the
+  // invitee's public key yet (ADR 0015), but both know the invitee's address
+  // and the chatId. Addresses are low-entropy, so this only keeps the info
+  // from being stored in plaintext - it is no protection against someone
+  // who can guess the address (see docs/adr/0016-contact-info-on-contact-requests.md).
+  deriveInvitationKey: async (
+    inviteeEmail: string,
+    chatId: string,
+  ): Promise<JsonWebKey> => {
+    const hkdfKey = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(normalizeEmail(inviteeEmail)),
+      "HKDF",
+      false,
+      ["deriveKey"],
+    );
+    const invitationKey = await crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(0),
+        info: new TextEncoder().encode(
+          ["imagey-invitation-key", chatId].join("\u0000"),
+        ),
+      },
+      hkdfKey,
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt", "decrypt"],
+    );
+    return crypto.subtle.exportKey("jwk", invitationKey);
+  },
+
   encryptDocument: async (
     key: JsonWebKey,
     content: ArrayBuffer[],
@@ -379,4 +413,10 @@ export function base64ToArrayBuffer(base64: string) {
   const buffer = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
   return buffer.buffer;
+}
+
+// Same normalization as the server's Email record (lower case), so an address
+// typed with different case by inviter and invitee derives the same key.
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }

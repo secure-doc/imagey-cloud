@@ -29,7 +29,7 @@ import cloud.imagey.domain.user.User;
 
 // A contact request between two accounts, stored in both trees (see ContactRepository.persist).
 // ADR 0015: the inviter owns the chat; chatId is chosen by the inviter and set from INVITED on,
-// publicKey/publicProfileId are those of the sender of the latest transition, and sharedKey
+// publicKey/publicProfileId/contactInfo are those of the sender of the latest transition, and sharedKey
 // (set on ACCEPTED) is the chat key wrapped by the invitee under their own "chats" document key.
 public record ContactExchange(
     @JsonbTypeAdapter(User.Adapter.class) User inviter,
@@ -43,5 +43,10 @@ public record ContactExchange(
     // The id of the sender's "public-profile" Document (see docs/plans/chat-public-profile.md):
     // set by the inviter on the INVITED request, and by the invitee when they ACCEPT. Nullable -
     // an older client, or one where the sender's public-profile does not exist yet, may omit it.
-    @JsonbTypeAdapter(DocumentId.Adapter.class) DocumentId publicProfileId) {
+    @JsonbTypeAdapter(DocumentId.Adapter.class) DocumentId publicProfileId,
+    // The sender's name and address, encrypted by their client (ADR 0016) - same "sender of the
+    // latest transition" semantics as publicKey: the inviter's while INVITED (under a key derived
+    // from the invitee's address and chatId), the invitee's once ACCEPTED (under the chat key).
+    // Nullable - an older client may omit it.
+    @JsonbTypeAdapter(EncryptedContactInfo.Adapter.class) EncryptedContactInfo contactInfo) {
 }

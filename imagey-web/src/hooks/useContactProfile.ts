@@ -9,7 +9,7 @@ import { useObjectUrl } from "./useObjectUrl";
 // own metadata (see ContactService.loadChatKey). Never surfaces an error:
 // a missing/inaccessible profile - no public-profile yet, or the sharing key
 // not filed for us yet - simply resolves to an empty name/avatar, so callers
-// fall back to their own display (e.g. the contact's userId/initial).
+// fall back to their own display (the contact entry's cached name/address).
 export function useContactProfile(
   user: UserId,
   contactUserId: string | undefined,
@@ -44,7 +44,7 @@ export function useContactProfile(
   }, [user, contactUserId, publicProfileId, chatKey]);
 
   // Treat a blank/whitespace-only name as "no name" so callers fall back to
-  // the contact's userId/initial instead of rendering an empty label.
+  // the cached name/address instead of rendering an empty label.
   const name = profile?.name?.trim() || undefined;
   return {
     name,

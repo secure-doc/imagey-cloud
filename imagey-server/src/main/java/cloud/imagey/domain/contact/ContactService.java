@@ -104,12 +104,14 @@ public class ContactService {
      * @param chatId        the id of the chat the inviter will own (ADR 0015), chosen by their client;
      *                      it must not name an existing document in the inviter's tree, because the
      *                      invitee gets provisional access to its messages once they accept
+     * @param contactInfo   the inviter's name and address, encrypted by their client for the invitee
+     *                      (ADR 0016), nullable - stored verbatim
      * @return the invitee (by minted/resolved {@link UserId}) if a fresh request was filed, or
      *         empty if an exchange between the two already existed and nothing was sent
      */
     public Optional<User> invite(
-        User sender, Email senderEmail, Email recipient, PublicKey key, DocumentId publicProfileId, DocumentId chatId)
-            throws IOException {
+        User sender, Email senderEmail, Email recipient, PublicKey key, DocumentId publicProfileId, DocumentId chatId,
+        EncryptedContactInfo contactInfo) throws IOException {
         DomainName domain = currentDomain.get();
         if (!allowedUrls.contains(domain)) {
             throw new ValidationException("Invalid client URL");
@@ -146,7 +148,8 @@ public class ContactService {
         if (recipientUser == null) {
             recipientUser = new User(userMappingService.registerUser(recipient));
         }
-        contactRepository.persist(new ContactExchange(sender, recipientUser, INVITED, key, chatId, null, publicProfileId));
+        contactRepository.persist(new ContactExchange(
+            sender, recipientUser, INVITED, key, chatId, null, publicProfileId, contactInfo));
 
         if (!registered) {
             // The invitee accepts this request as the last step of registration; it reads the
@@ -178,11 +181,12 @@ public class ContactService {
     // ContactResource.updateContactRequest): they overwrite the inviter's public key from the
     // original invite with their own (so the inviter can derive the chat key) and hand over their own
     // entry for the chat key, wrapped under their "chats" document key - opaque to us, filed verbatim
-    // under the chat document in confirmReceipt. From now on the invitee is a provisional member of
+    // under the chat document in confirmReceipt - and their own name and address, encrypted under the
+    // chat key (ADR 0016), overwriting the inviter's. From now on the invitee is a provisional member of
     // the chat's messages (see isProvisionalChatMember).
     public void acceptInvitation(
-        User invitee, User inviter, PublicKey publicKey, EncryptedSymmetricKey sharedKey, DocumentId publicProfileId)
-            throws IOException {
+        User invitee, User inviter, PublicKey publicKey, EncryptedSymmetricKey sharedKey, DocumentId publicProfileId,
+        EncryptedContactInfo contactInfo) throws IOException {
 
         if (sharedKey == null) {
             throw new ValidationException("An accepted contact request must carry a sharedKey.");
@@ -194,7 +198,8 @@ public class ContactService {
             .orElseThrow(() -> new ResourceConflictException("Contact request rejected"));
 
         ContactExchange accepted = new ContactExchange(
-            exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, exchange.chatId(), sharedKey, publicProfileId);
+            exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, exchange.chatId(), sharedKey, publicProfileId,
+            contactInfo);
         contactRepository.persist(accepted);
     }
 
@@ -221,7 +226,7 @@ public class ContactService {
 
         ContactExchange received = new ContactExchange(
             exchange.inviter(), exchange.invitee(), RECEIVED, exchange.publicKey(), exchange.chatId(),
-            exchange.sharedKey(), exchange.publicProfileId());
+            exchange.sharedKey(), exchange.publicProfileId(), exchange.contactInfo());
         contactRepository.persist(received);
     }
 
@@ -245,9 +250,9 @@ public class ContactService {
         if (exchange != null) {
             contactRepository.persist(new ContactExchange(
                 exchange.inviter(), exchange.invitee(), DENIED, exchange.publicKey(), exchange.chatId(),
-                exchange.sharedKey(), exchange.publicProfileId()));
+                exchange.sharedKey(), exchange.publicProfileId(), exchange.contactInfo()));
         } else {
-            contactRepository.persist(new ContactExchange(requestor, user, DENIED, null, null, null, null));
+            contactRepository.persist(new ContactExchange(requestor, user, DENIED, null, null, null, null, null));
         }
     }
 }

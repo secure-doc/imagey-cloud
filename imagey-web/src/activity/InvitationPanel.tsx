@@ -5,6 +5,8 @@ import Person from "../components/Person";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import { useAuthentication } from "../contexts/AuthenticationContext";
+import { contactDisplayName } from "../contact/contactDisplayName";
+import { useInvitationInfo } from "../hooks/useInvitationInfo";
 
 export default function InvitationPanel({
   className,
@@ -17,6 +19,13 @@ export default function InvitationPanel({
 }) {
   const { t } = useTranslation();
   const user = useAuthentication().user;
+  const { request } = activity;
+  const inviterInfo = useInvitationInfo(request);
+  const inviterName = contactDisplayName(
+    request.inviter,
+    inviterInfo,
+    t("Unknown contact"),
+  );
   return (
     <Panel
       className={className}
@@ -30,23 +39,23 @@ export default function InvitationPanel({
         <AcceptInvitationButton
           key="accept"
           user={user}
-          contact={activity.userId}
-          contactPublicKey={activity.publicKey}
-          contactPublicProfileId={activity.publicProfileId}
-          chatId={activity.chatId}
+          invitation={request}
           onAccepted={() => onActivityHandled()}
         />,
         <DeclineInvitationButton
           key="decline"
           user={user}
-          contact={activity.userId}
+          contact={request.inviter}
           onDeclined={() => onActivityHandled()}
         />,
       ]}
     >
       <p className="center-align">
-        {t("{{user}} whants to connect with you.", { user: activity.userId })}
+        {t("{{user}} whants to connect with you.", { user: inviterName })}
       </p>
+      {inviterInfo.email && inviterInfo.email !== inviterName && (
+        <p className="center-align small-text">{inviterInfo.email}</p>
+      )}
     </Panel>
   );
 }
