@@ -3,6 +3,7 @@ import { test, expect } from "./fixtures";
 import {
   aesGcmEncrypt,
   clearLocalStorage,
+  encryptInvitationContactInfo,
   encryptKeyEnvelope,
   generateAesGcmKeyJwk,
   inputMarysPassword,
@@ -497,6 +498,8 @@ test("new user registers via invite link and accepts the invitation", async ({
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId: MatchersV3.string("joes-public-profile"),
+          // Our own name/address, encrypted under the chat key.
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -526,6 +529,12 @@ test("new user registers via invite link and accepts the invitation", async ({
     )
     .willRespondWith(200);
 
+  // Mary's name/address as she sent them with the invitation (ADR 0016).
+  const marysContactInfo = await encryptInvitationContactInfo(
+    { name: "Mary", email: "mary@imagey.cloud" },
+    "joe@imagey.cloud",
+    "chat-mary-invited-joe",
+  );
   await provider
     .addInteraction()
     .given("mary has invited joe")
@@ -546,6 +555,7 @@ test("new user registers via invite link and accepts the invitation", async ({
           status: "INVITED",
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           chatId: "chat-mary-invited-joe",
+          contactInfo: MatchersV3.string(marysContactInfo),
         },
       ]),
     )

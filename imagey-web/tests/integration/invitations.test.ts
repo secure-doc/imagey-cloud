@@ -64,6 +64,8 @@ test("accept open invitations", async ({ page }) => {
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId,
+          // Our own name/address, encrypted under the chat key.
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -100,9 +102,12 @@ test("accept open invitations", async ({ page }) => {
       .locator("..");
     await expect(invitationPanel).toBeVisible();
 
+    // The inviter's name/address come from the request's encrypted
+    // contactInfo - never bill's userId.
     await expect(invitationPanel).toContainText(
-      "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+      "Bill whants to connect with you.",
     );
+    await expect(invitationPanel).toContainText("bill@imagey.cloud");
 
     // Act: Accept Alice
     const acceptAliceBtn = invitationPanel.getByRole("button", {
@@ -152,9 +157,12 @@ test("decline open invitations", async ({ page }) => {
       .locator("..");
     await expect(invitationPanel).toBeVisible();
 
+    // The inviter's name/address come from the request's encrypted
+    // contactInfo - never bill's userId.
     await expect(invitationPanel).toContainText(
-      "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
+      "Bill whants to connect with you.",
     );
+    await expect(invitationPanel).toContainText("bill@imagey.cloud");
 
     // Act: Decline Alice
     const declineAliceBtn = invitationPanel.getByRole("button", {
@@ -324,6 +332,8 @@ test("send contact request", async ({ page }) => {
           publicProfileId,
           // Chosen by mary's client (ADR 0015) - random per run.
           chatId: MatchersV3.uuid(),
+          // Our own name/address for the invitee (random IV per run).
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )
@@ -397,6 +407,8 @@ test("accept invitation prompts for a display name when mary has no public profi
           publicKey: MatchersV3.like(TestData.mary.publicMainKey),
           sharedKey: MatchersV3.string("dummy-encrypted-key"),
           publicProfileId: MatchersV3.string("new-public-profile-id"),
+          // Our own name/address, encrypted under the chat key.
+          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
         });
       },
     )

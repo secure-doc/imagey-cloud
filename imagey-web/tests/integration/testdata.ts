@@ -36,6 +36,18 @@ export function shortName(idOrEmail: string): string {
   return email.split("@")[0];
 }
 
+// The persona's display name ("Mary", "Bill", ...) - what the public profile
+// / contact entry of a persona is named in the chats fixtures.
+export function displayName(idOrEmail: string): string {
+  const name = shortName(idOrEmail);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+// The persona's address for a userId (unknown ids are returned unchanged).
+export function emailOf(idOrEmail: string): string {
+  return idToEmail[idOrEmail] ?? idOrEmail;
+}
+
 export interface TestDevice {
   deviceId: string;
   publicDeviceKey?: JsonWebKey;

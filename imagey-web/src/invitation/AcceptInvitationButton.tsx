@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ContactRequest } from "../contact/ContactRequest";
 import { contactService } from "../contact/ContactService";
 import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
@@ -9,22 +10,18 @@ import { publicProfileService } from "../profile/publicProfileService";
 export default function AcceptInvitationButton({
   className = "",
   user,
-  contact,
-  contactPublicKey,
-  contactPublicProfileId,
-  chatId,
+  invitation,
   onAccepted,
 }: {
   className?: string;
   user: string;
-  contact: string;
-  contactPublicKey: JsonWebKey;
-  // The inviter's "public-profile" Document id, carried on the contact
-  // request (see docs/plans/chat-public-profile.md §4). May be absent (an
-  // older client, or an inviter whose public-profile somehow does not exist).
-  contactPublicProfileId?: string;
-  // The chat id the inviter chose when sending the request (ADR 0015).
-  chatId: string;
+  // The INVITED request: the inviter, the chat id they chose (ADR 0015),
+  // their public main key and "public-profile" Document id (may be absent,
+  // see docs/plans/chat-public-profile.md §4) and their encrypted name/address.
+  invitation: Pick<
+    ContactRequest,
+    "inviter" | "chatId" | "publicKey" | "publicProfileId" | "contactInfo"
+  >;
   onAccepted: (contact: ContactEntry) => void;
 }) {
   const authentication = useAuthentication();
@@ -42,10 +39,8 @@ export default function AcceptInvitationButton({
     try {
       const newContact = await contactService.acceptContactRequest(
         user,
-        contact,
-        chatId,
-        contactPublicKey,
-        contactPublicProfileId,
+        invitation,
+        authentication.email,
         ownPublicProfile,
         settings,
         mainKeyPair,

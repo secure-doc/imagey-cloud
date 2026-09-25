@@ -3,7 +3,7 @@ import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { PublicProfile } from "../profile/PublicProfile";
 import { ContactEntry } from "../document/DocumentMetadata";
-import { ContactRequest } from "./ContactRequest";
+import { ContactInfo, ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
 import {
   documentRepository,
@@ -88,17 +88,59 @@ function makePublicProfiles(
   };
 }
 
-// The other party's name/avatar aren't known yet at accept/receive time, only
-// their userId - name falls back to the userId for now, and profileRevision
-// starts as "" so the first time this chat is opened, the mismatch against
-// the real loaded PublicProfileMetadata.revision triggers a snapshot refresh
-// (see Chat.tsx / updateContactProfileSnapshot).
+// The other party's public profile isn't reachable yet at accept/receive
+// time - name/email come from what they told on the contact request (see
+// ContactRequest.contactInfo), if anything. profileRevision starts as "" so
+// the first time this chat is opened, the mismatch against the real loaded
+// PublicProfileMetadata.revision triggers a snapshot refresh (see Chat.tsx /
+// updateContactProfileSnapshot).
 function makePlaceholderContactEntry(
   userId: string,
   chatId: string,
   owner: string,
+  info: ContactInfo,
 ): ContactEntry {
-  return { userId, chatId, owner, name: userId, profileRevision: "" };
+  return {
+    userId,
+    chatId,
+    owner,
+    name: info.name ?? "",
+    ...(info.email ? { email: info.email } : {}),
+    profileRevision: "",
+  };
+}
+
+async function encryptContactInfo(
+  info: ContactInfo,
+  key: JsonWebKey,
+): Promise<string> {
+  return cryptoService.encryptMessage(JSON.stringify(info), key);
+}
+
+// Never rejects: contact info is a display nicety only - a missing or
+// undecryptable one (e.g. the invitee signed in with a different address than
+// the one they were invited with) resolves to {}.
+async function decryptContactInfo(
+  encrypted: string | undefined,
+  key: JsonWebKey,
+): Promise<ContactInfo> {
+  if (!encrypted) {
+    return {};
+  }
+  try {
+    const info = JSON.parse(await cryptoService.decryptMessage(encrypted, key));
+    return {
+      name:
+        typeof info.name === "string"
+          ? info.name.trim() || undefined
+          : undefined,
+      email:
+        typeof info.email === "string" ? info.email || undefined : undefined,
+    };
+  } catch (e) {
+    console.error("Failed to decrypt contact info", e);
+    return {};
+  }
 }
 
 // What the chat view keeps of the "chats" document to write it back.
@@ -162,6 +204,33 @@ async function updateContact(
 }
 
 export const contactService = {
+  // Inviter side, leg 1: encrypts our own name/address for the invitee, who
+  // can read it before accepting (see ContactRequest.contactInfo).
+  encryptInvitationInfo: async (
+    info: ContactInfo,
+    inviteeEmail: string,
+    chatId: string,
+  ): Promise<string> =>
+    encryptContactInfo(
+      info,
+      await cryptoService.deriveInvitationKey(inviteeEmail, chatId),
+    ),
+
+  // Invitee side: reads the inviter's name/address off an INVITED request.
+  // Resolves to {} if it cannot be read.
+  readInvitationInfo: async (
+    request: Pick<ContactRequest, "chatId" | "contactInfo">,
+    ownEmail: string | undefined,
+  ): Promise<ContactInfo> => {
+    if (!ownEmail) {
+      return {};
+    }
+    return decryptContactInfo(
+      request.contactInfo,
+      await cryptoService.deriveInvitationKey(ownEmail, request.chatId),
+    );
+  },
+
   // Invitee side, leg 2 of the handshake (ADR 0015): accept an INVITED
   // request. The inviter owns the chat and creates its Document later (leg 3);
   // we only derive the chat key (ECDH + HKDF, nothing is transported), record
@@ -171,14 +240,21 @@ export const contactService = {
   // which it files under the chat Document once the inviter created it.
   acceptContactRequest: async (
     userId: UserId,
-    contactId: UserId,
-    chatId: string,
-    inviterPublicKey: JsonWebKey,
-    inviterPublicProfileId: string | undefined,
+    invitation: Pick<
+      ContactRequest,
+      "inviter" | "chatId" | "publicKey" | "publicProfileId" | "contactInfo"
+    >,
+    ownEmail: string | undefined,
     ownPublicProfile: PublicProfile,
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
   ): Promise<ContactEntry> => {
+    const {
+      inviter: contactId,
+      chatId,
+      publicKey: inviterPublicKey,
+      publicProfileId: inviterPublicProfileId,
+    } = invitation;
     try {
       const chatsDocument = await documentService.loadDocument(
         userId,
@@ -214,7 +290,12 @@ export const contactService = {
       );
 
       const contact: ContactEntry = {
-        ...makePlaceholderContactEntry(contactId, chatId, contactId),
+        ...makePlaceholderContactEntry(
+          contactId,
+          chatId,
+          contactId,
+          await contactService.readInvitationInfo(invitation, ownEmail),
+        ),
         pending: { chatKey, publicProfiles },
       };
       await documentService.updateDocumentMetadata(
@@ -248,6 +329,12 @@ export const contactService = {
         mainKeyPair.publicKey,
         wrappedChatKey,
         ownPublicProfile.documentId,
+        // Our own name/address for the inviter, who can read it with the
+        // chat key they derive in leg 3.
+        await encryptContactInfo(
+          { name: ownPublicProfile.name, email: ownEmail },
+          chatKey,
+        ),
       );
 
       return contact;
@@ -301,7 +388,13 @@ export const contactService = {
     // contact entry and the chat Document are written in one atomic upload).
     const existing = chatsDocument.contacts.find((c) => c.chatId === chatId);
     const contact =
-      existing ?? makePlaceholderContactEntry(request.invitee, chatId, userId);
+      existing ??
+      makePlaceholderContactEntry(
+        request.invitee,
+        chatId,
+        userId,
+        await decryptContactInfo(request.contactInfo, chatKey),
+      );
     if (!existing) {
       const [encryptedChatContent] = await cryptoService.encryptDocument(
         chatKey,

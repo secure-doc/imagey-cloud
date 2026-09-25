@@ -9,6 +9,8 @@ import { contactRepository } from "../contact/ContactRepository";
 import { contactService } from "../contact/ContactService";
 import { ContactEntry } from "../document/DocumentMetadata";
 import { ContactRequest } from "../contact/ContactRequest";
+import { contactDisplayName } from "../contact/contactDisplayName";
+import { useInvitationInfo } from "../hooks/useInvitationInfo";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
@@ -225,73 +227,65 @@ export function ChatsList({
       openInvitations.length > 0 ? (
         <ul className="list border">
           {openInvitations.map((contactRequest, index) => (
-            <li key={index}>
-              <button className="circle">
-                {contactRequest.inviter.charAt(0).toLocaleUpperCase()}
-              </button>
-              <div className="max">
-                <h6 className="small">{contactRequest.inviter}</h6>
-                <div>{contactRequest.inviter}</div>
-              </div>
-              <div>
-                <AcceptInvitationButton
-                  user={user}
-                  contact={contactRequest.inviter}
-                  contactPublicKey={contactRequest.publicKey}
-                  contactPublicProfileId={contactRequest.publicProfileId}
-                  chatId={contactRequest.chatId}
-                  onAccepted={(newContact) => {
-                    setContactRequests((contactRequests) =>
-                      contactRequests?.filter(
-                        (request) => request.inviter !== contactRequest.inviter,
-                      ),
-                    );
-                    setChatsDocument((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            contacts: prev.contacts.concat(newContact),
-                          }
-                        : prev,
-                    );
-                  }}
-                />
-                <DeclineInvitationButton
-                  user={user}
-                  contact={contactRequest.inviter}
-                  onDeclined={() =>
-                    setContactRequests((contactRequests) =>
-                      contactRequests?.filter(
-                        (request) => request.inviter !== contactRequest.inviter,
-                      ),
-                    )
-                  }
-                />
-              </div>
-            </li>
+            <InvitationListItem
+              key={index}
+              user={user}
+              contactRequest={contactRequest}
+              onAccepted={(newContact) => {
+                setContactRequests((contactRequests) =>
+                  contactRequests?.filter(
+                    (request) => request.inviter !== contactRequest.inviter,
+                  ),
+                );
+                setChatsDocument((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        contacts: prev.contacts.concat(newContact),
+                      }
+                    : prev,
+                );
+              }}
+              onDeclined={() =>
+                setContactRequests((contactRequests) =>
+                  contactRequests?.filter(
+                    (request) => request.inviter !== contactRequest.inviter,
+                  ),
+                )
+              }
+            />
           ))}
           {chatsDocument?.contacts &&
-            chatsDocument.contacts.map((contact, index) => (
-              <li key={index + openInvitations.length}>
-                <NavLink
-                  to={`/chats/${contact.userId}`}
-                  className={({ isActive }) =>
-                    isActive ? "active surface-variant" : ""
-                  }
-                >
-                  <button className="circle transparent">
-                    {(contact.name || contact.userId)
-                      .charAt(0)
-                      .toLocaleUpperCase()}
-                  </button>
-                  <div className="max">
-                    <h6 className="small">{contact.name || contact.userId}</h6>
-                    <div>{contact.userId}</div>
-                  </div>
-                  <label>{new Date().toLocaleDateString(i18n.language)}</label>
-                </NavLink>
-              </li>
-            ))}
+            chatsDocument.contacts.map((contact, index) => {
+              const displayName = contactDisplayName(
+                contact.userId,
+                contact,
+                i18n.t("Unknown contact"),
+              );
+              return (
+                <li key={index + openInvitations.length}>
+                  <NavLink
+                    to={`/chats/${contact.userId}`}
+                    className={({ isActive }) =>
+                      isActive ? "active surface-variant" : ""
+                    }
+                  >
+                    <button className="circle transparent">
+                      {displayName.charAt(0).toLocaleUpperCase()}
+                    </button>
+                    <div className="max">
+                      <h6 className="small">{displayName}</h6>
+                      {contact.email && contact.email !== displayName && (
+                        <div>{contact.email}</div>
+                      )}
+                    </div>
+                    <label>
+                      {new Date().toLocaleDateString(i18n.language)}
+                    </label>
+                  </NavLink>
+                </li>
+              );
+            })}
         </ul>
       ) : (
         <NoContactsPanel className="s12" />
@@ -315,5 +309,53 @@ export function ChatsList({
         />
       )}
     </section>
+  );
+}
+
+// An invitation still awaiting our decision - the inviter's name/address come
+// from the request itself (see ContactRequest.contactInfo), since their
+// public profile is not reachable before accepting.
+function InvitationListItem({
+  user,
+  contactRequest,
+  onAccepted,
+  onDeclined,
+}: {
+  user: string;
+  contactRequest: ContactRequest;
+  onAccepted: (contact: ContactEntry) => void;
+  onDeclined: () => void;
+}) {
+  const { t } = useTranslation();
+  const inviterInfo = useInvitationInfo(contactRequest);
+  const displayName = contactDisplayName(
+    contactRequest.inviter,
+    inviterInfo,
+    t("Unknown contact"),
+  );
+  return (
+    <li>
+      <button className="circle">
+        {displayName.charAt(0).toLocaleUpperCase()}
+      </button>
+      <div className="max">
+        <h6 className="small">{displayName}</h6>
+        {inviterInfo.email && inviterInfo.email !== displayName && (
+          <div>{inviterInfo.email}</div>
+        )}
+      </div>
+      <div>
+        <AcceptInvitationButton
+          user={user}
+          invitation={contactRequest}
+          onAccepted={onAccepted}
+        />
+        <DeclineInvitationButton
+          user={user}
+          contact={contactRequest.inviter}
+          onDeclined={onDeclined}
+        />
+      </div>
+    </li>
   );
 }

@@ -1,4 +1,4 @@
-import { UserId } from "../authentication/UserId";
+import { ContactRequest } from "../contact/ContactRequest";
 import { MessageContent } from "../chat/Message";
 import { NewDocumentMetadata } from "../document/DocumentMetadata";
 
@@ -13,14 +13,10 @@ export type Activity =
 export interface InvitationActivity {
   id: ActivityId;
   type: ActivityType.INVITATION;
-  userId: UserId;
-  // The inviter's public main key, carried over from the ContactRequest -
-  // needed to accept without a separate public-key fetch (see
-  // ContactService.acceptContactRequest).
-  publicKey: JsonWebKey;
-  // The id the inviter chose for the chat (ADR 0015).
-  chatId: string;
-  publicProfileId?: string;
+  // The INVITED request itself - carries everything needed to show (the
+  // inviter's encrypted name/address) and accept it (their public main key,
+  // the chat id they chose, their public-profile id) without further fetches.
+  request: ContactRequest;
   message?: MessageContent;
 }
 

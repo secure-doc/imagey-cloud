@@ -78,6 +78,10 @@ public class ContractTest {
     private static final String MARY = UserFactory.MARY_ID.id();
     private static final String JOE = UserFactory.JOE_ID.id();
     private static final String ALICE = UserFactory.ALICE_ID.id();
+    // mary's {"name":"Mary","email":"mary@imagey.cloud"}, encrypted under the key of her chat with alice
+    // ("chat-mary", ADR 0015/0016).
+    private static final String MARYS_CONTACT_INFO
+        = "PS088SPWu7mQlNhICLrcw3+0RzLPQgqNHdCfIgZBLFm0QFJCx76TFYJ/xIO5+2hDN3dgVtzJD1nsLBvcq2Yw+xVnQjQ9c0g=";
     // Bill's public key below matches TestData.bill.publicMainKey in imagey-web's setup.ts -
     // several Pact interactions assert its exact JWK content, not just its shape.
     private static final String BILLS_PUBLIC_KEY = "{"
@@ -356,7 +360,9 @@ public class ContractTest {
         writeStringToFile(new File(marysContactRequests, "a358c2ed-07d4-4a25-a7db-d860d5c0b895.json"),
             "{\"inviter\":\"a358c2ed-07d4-4a25-a7db-d860d5c0b895\",\"invitee\":\"d20cf443-4f96-418f-a957-c8cbef8677c3\","
             + "\"status\":\"INVITED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":\"chat-bill-invited-mary\",\"sharedKey\":null,\"publicProfileId\":\"bills-public-profile-id\"}",
+            + "\"chatId\":\"chat-bill-invited-mary\",\"sharedKey\":null,\"publicProfileId\":\"bills-public-profile-id\","
+            // {"name":"Bill","email":"bill@imagey.cloud"}, encrypted for mary@imagey.cloud (ADR 0016).
+            + "\"contactInfo\":\"Yk3/WwuoCnnHaA3q3UOgYNIvqbTVFEnBYIRUhTjMZ8ZokKTXo0toexHtRJRgm0+woiZYNs3/Rb4WQL6qS8dlKW4olQYgL44=\"}",
             UTF_8);
     }
 
@@ -384,7 +390,9 @@ public class ContractTest {
             + "\"crv\":\"P-256\",\"ext\":true,\"key_ops\":[],\"kty\":\"EC\","
             + "\"x\":\"OT9blIwjsWgWB3QjXX8wl443BWanoPRvhn546qiw3rY\","
             + "\"y\":\"D9imFHRhbrBGPyC_QPTjZBf-SVbF5a6lvVb-JczKUCM\"},"
-            + "\"chatId\":\"chat-mary-invited-joe\",\"sharedKey\":null,\"publicProfileId\":null}",
+            + "\"chatId\":\"chat-mary-invited-joe\",\"sharedKey\":null,\"publicProfileId\":null,"
+            // {"name":"Mary","email":"mary@imagey.cloud"}, encrypted for joe@imagey.cloud (ADR 0016).
+            + "\"contactInfo\":\"pusvktL15ZR9QuM5BzVTDDERa5pGEtNEoGBVy8N2bC2e+tZxkgrHpLfjtOxvu3ancoT4eT9YVwQK3VpJYNZYuo15txuxfbY=\"}",
             UTF_8);
     }
 
@@ -421,18 +429,22 @@ public class ContractTest {
         String exchange = "{\"inviter\":\"" + ALICE + "\",\"invitee\":\"" + MARY + "\","
             + "\"status\":\"ACCEPTED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
             + "\"chatId\":\"chat-alice-pending\",\"sharedKey\":\"bWFyeXMtd3JhcHBlZC1jaGF0LWtleQ==\","
-            + "\"publicProfileId\":null}";
+            // mary's {"name":"Mary","email":"mary@imagey.cloud"}, encrypted under the chat key (ADR 0016).
+            + "\"publicProfileId\":null,\"contactInfo\":"
+            + "\"51+L6wiIUwkkPOMV8oUkHoU6daUN44WdsndFm94C7V6GXy9g5f8uj8rfA9e1zQ16iM11IvqVDvIF2OK4IOarD3QVWdOO7dQ=\"}";
         writeStringToFile(new File(getMarysContactRequests(), ALICE + ".json"), exchange, UTF_8);
         writeStringToFile(new File(getAlicesData(), "contact-requests/" + MARY + ".json"), exchange, UTF_8);
     }
 
     // A completed handshake (ADR 0015 leg 3 done), stored in both trees like ContactRepository.persist
-    // does; sharedKey is the invitee's key entry the server filed under the chat document.
-    private void writeReceivedExchange(String inviter, String invitee, String chatId, String sharedKey)
-            throws IOException {
+    // does; sharedKey is the invitee's key entry the server filed under the chat document, contactInfo
+    // the invitee's name and address encrypted under the chat key (ADR 0016).
+    private void writeReceivedExchange(
+        String inviter, String invitee, String chatId, String sharedKey, String contactInfo) throws IOException {
         String exchange = "{\"inviter\":\"" + inviter + "\",\"invitee\":\"" + invitee + "\","
             + "\"status\":\"RECEIVED\",\"publicKey\":" + BILLS_PUBLIC_KEY + ","
-            + "\"chatId\":\"" + chatId + "\",\"sharedKey\":\"" + sharedKey + "\",\"publicProfileId\":null}";
+            + "\"chatId\":\"" + chatId + "\",\"sharedKey\":\"" + sharedKey + "\","
+            + "\"publicProfileId\":null,\"contactInfo\":\"" + contactInfo + "\"}";
         writeStringToFile(new File(rootPath, inviter + "/contact-requests/" + invitee + ".json"), exchange, UTF_8);
         writeStringToFile(new File(rootPath, invitee + "/contact-requests/" + inviter + ".json"), exchange, UTF_8);
     }
@@ -452,7 +464,9 @@ public class ContractTest {
             + "\"chatId\":\"" + chatId + "\",\"sharedKey\":"
             + "\"5g3Pwjzwg5gFdJ1VLcsU/3oWZoZsdpeZJ/1dstB/y/tYRXjeWojoXV30BE3WWoMqGr4vo/"
             + "GywXw7XrOtDE95dVDHqrZwmjZ6fn0ux8HA2u5F2VcQh6mX2LnkqCoQnMIVCwheSlJaQ0Wx1ulCdW06MgO"
-            + "+yMugMY/jae47T8Hu7fgKooQ+HbZl637mOULWTjzG6CCPnmpu\",\"publicProfileId\":null}",
+            + "+yMugMY/jae47T8Hu7fgKooQ+HbZl637mOULWTjzG6CCPnmpu\",\"publicProfileId\":null,"
+            // Bill's name and address, encrypted under the chat key (ADR 0016) - opaque to the server.
+            + "\"contactInfo\":\"LtzgPDOqmlmZrGsA68kHs5kDwdY1yRgTo06j4INu//BV48sRObbq2GlQU3v34/dzxXSzhnWm1MIzOhYbUNRXPaLN/Rchg1c=\"}",
             UTF_8);
     }
 
@@ -527,7 +541,7 @@ public class ContractTest {
         // invitee key entry in alice's tree. Every request of this state is made by mary, also
         // those addressing alice's tree.
         user = getMary();
-        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=");
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=", MARYS_CONTACT_INFO);
     }
 
     @State("marys second device unlocked")
@@ -617,7 +631,7 @@ public class ContractTest {
     void aliceHasChatWithMary() throws IOException {
         // Alice invited mary and owns the chat (ADR 0015): src/test/resources/data/<alice>/documents/
         // chat-mary holds alice's self-issued key entry and mary's invitee entry.
-        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=");
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=", MARYS_CONTACT_INFO);
 
         // Message storage lives under the chat document itself (see MessageRepository.persist/
         // fetchMessages), not under a flat "messages/{contact}" folder.
@@ -634,7 +648,7 @@ public class ContractTest {
     void aRequestToReceiveMessagesWithSharedDoc() throws IOException {
         // Same ContactExchange as "Alice has a chat with mary" - written independently here since
         // pact interactions using this state don't necessarily also declare that one.
-        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=");
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=", MARYS_CONTACT_INFO);
 
         File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         messagesDir.mkdirs();

@@ -108,16 +108,15 @@ test("view chat and send message", async ({ page }) => {
     await page.getByRole("link", { name: "Chats" }).first().click();
 
     // Click on Laura's contact
-    const lauraContact = page
-      .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
-      .first();
+    const lauraContact = page.getByText("Laura", { exact: true }).first();
     await expect(lauraContact).toBeVisible();
     await lauraContact.click();
 
     // Verify chat UI loaded
     await expect(
       page.getByRole("heading", {
-        name: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+        name: "Laura",
+        exact: true,
       }),
     ).toBeVisible();
 
@@ -168,15 +167,14 @@ test("send empty message does not submit", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page
-      .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
-      .first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
     await aliceContact.click();
 
     await expect(
       page.getByRole("heading", {
-        name: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+        name: "Alice",
+        exact: true,
       }),
     ).toBeVisible();
 
@@ -230,15 +228,14 @@ test("send message fails and restores input", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page
-      .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
-      .first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
     await aliceContact.click();
 
     await expect(
       page.getByRole("heading", {
-        name: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+        name: "Alice",
+        exact: true,
       }),
     ).toBeVisible();
 
@@ -281,9 +278,7 @@ test("polling fails gracefully", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page
-      .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
-      .first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
     await aliceContact.click();
 
@@ -291,7 +286,8 @@ test("polling fails gracefully", async ({ page }) => {
     // and polling attempted (which hits 500 error)
     await expect(
       page.getByRole("heading", {
-        name: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+        name: "Alice",
+        exact: true,
       }),
     ).toBeVisible();
 
@@ -417,9 +413,7 @@ test("share a document in chat", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const lauraContact = page
-      .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
-      .first();
+    const lauraContact = page.getByText("Laura", { exact: true }).first();
     await expect(lauraContact).toBeVisible();
     await lauraContact.click();
 
@@ -579,16 +573,15 @@ test("view shared document from another user", async ({ page }) => {
       await loginAsAlice(page);
 
       await page.getByRole("link", { name: "Chats" }).first().click();
-      const maryContact = page
-        .getByText("d20cf443-4f96-418f-a957-c8cbef8677c3")
-        .first();
+      const maryContact = page.getByText("Mary", { exact: true }).first();
       await expect(maryContact).toBeVisible();
       await maryContact.click();
 
       // Verify chat UI loaded
       await expect(
         page.getByRole("heading", {
-          name: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          name: "Mary",
+          exact: true,
         }),
       ).toBeVisible();
 
@@ -650,9 +643,7 @@ test("view chat owned by another user (synced chat key)", async ({ page }) => {
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page
-      .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
-      .first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
     await aliceContact.click();
 
@@ -665,7 +656,8 @@ test("view chat owned by another user (synced chat key)", async ({ page }) => {
     // wait for the ECDH round trip instead of racing ahead of it.
     await expect(
       page.getByRole("heading", {
-        name: "10ad1cce-816b-4e12-b94d-7ef824c0d162",
+        name: "Alice",
+        exact: true,
       }),
     ).toBeVisible();
     await expect(page.getByLabel("Type a message")).toBeVisible();
@@ -754,9 +746,7 @@ test("send a message in a chat owned by another user (posts to the owner's tree)
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page
-      .getByText("10ad1cce-816b-4e12-b94d-7ef824c0d162")
-      .first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
     await aliceContact.click();
 
@@ -847,9 +837,7 @@ test("view chat shows the contact's display name and avatar", async ({
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const lauraContact = page
-      .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
-      .first();
+    const lauraContact = page.getByText("Laura", { exact: true }).first();
     await expect(lauraContact).toBeVisible();
     // The stale-snapshot refresh (see Chat.tsx's profile-revision-mismatch
     // effect) fires as soon as the contact's real profile loads, which can
@@ -962,7 +950,7 @@ test("write and read messages right after accepting, before the inviter created 
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page.getByText(alice).first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
     await aliceContact.click();
 
@@ -1050,7 +1038,7 @@ test("opening a chat that the inviter has created removes the pending chat key",
     await loginAsMary(page);
 
     await page.getByRole("link", { name: "Chats" }).first().click();
-    const aliceContact = page.getByText(alice).first();
+    const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
 
     const pendingDropped = page.waitForResponse(

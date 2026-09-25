@@ -77,6 +77,9 @@ export interface ContactEntry {
   chatId: string;
   owner: string;
   name: string;
+  // The contact's address, as told on the contact request (see
+  // ContactRequest.contactInfo) - a display value only, may be absent.
+  email?: string;
   avatarId?: string;
   profileRevision: string;
   // Only on the invitee's side, between accepting and the inviter creating the

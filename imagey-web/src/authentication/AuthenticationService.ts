@@ -181,10 +181,8 @@ export const authenticationService = {
           );
       await contactService.acceptContactRequest(
         userId,
-        inviter,
-        invitation.chatId,
-        invitation.publicKey,
-        invitation.publicProfileId,
+        invitation,
+        email,
         publicProfile,
         settings,
         mainKeyPair,

@@ -10,6 +10,7 @@ export const contactRepository = {
     publicKey: JsonWebKey,
     publicProfileId: string,
     chatId: string,
+    contactInfo: string,
   ): Promise<void> => {
     const response = await fetch(`/users/${inviter}/contact-requests`, {
       method: "POST",
@@ -25,6 +26,7 @@ export const contactRepository = {
         publicKey,
         publicProfileId,
         chatId,
+        contactInfo,
       }),
     });
     if (!response.ok) {
@@ -57,6 +59,7 @@ export const contactRepository = {
     publicKey: JsonWebKey,
     sharedKey: string,
     publicProfileId: string,
+    contactInfo: string,
   ): Promise<void> => {
     const response = await fetch(
       `/users/${invitee}/contact-requests/${inviter}`,
@@ -73,6 +76,7 @@ export const contactRepository = {
           publicKey,
           sharedKey,
           publicProfileId,
+          contactInfo,
         }),
       },
     );

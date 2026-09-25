@@ -13,6 +13,7 @@ import {
   encryptKeyEnvelope,
   encryptKeyEnvelopeEcdh,
   generateAesGcmKeyJwk,
+  encryptInvitationContactInfo,
 } from "./setup";
 import type { deviceService } from "../../src/device/DeviceService";
 import type { contactService } from "../../src/contact/ContactService";
@@ -250,6 +251,56 @@ test.describe("DeviceService error paths", () => {
 // -------------------------------------------------------------------------
 
 test.describe("ContactService error paths", () => {
+  test("readInvitationInfo resolves to what it can read, never rejects", async ({
+    page,
+  }) => {
+    const chatId = "chat-info";
+    const odd = await encryptInvitationContactInfo(
+      { name: 42, email: "" } as unknown as { name: string; email: string },
+      "mary@imagey.cloud",
+      chatId,
+    );
+    const padded = await encryptInvitationContactInfo(
+      { name: "  Bill  ", email: 7 } as unknown as {
+        name: string;
+        email: string;
+      },
+      "mary@imagey.cloud",
+      chatId,
+    );
+    await page.goto("/");
+
+    const results = await page.evaluate(
+      async ({ chatId, odd, padded }) => {
+        const read = (contactInfo: string | undefined, email?: string) =>
+          window.contactService.readInvitationInfo(
+            { chatId, contactInfo },
+            email,
+          );
+        return {
+          // no own address known - nothing to derive the key from
+          noOwnEmail: await read(odd),
+          // an older request without contact info
+          noContactInfo: await read(undefined, "mary@imagey.cloud"),
+          // invited under a different address - the key doesn't fit
+          wrongAddress: await read(odd, "other@imagey.cloud"),
+          // decryptable, but not strings / blank
+          odd: await read(odd, "mary@imagey.cloud"),
+          padded: await read(padded, "MARY@imagey.cloud"),
+        };
+      },
+      { chatId, odd, padded },
+    );
+
+    expect(results).toEqual({
+      noOwnEmail: {},
+      noContactInfo: {},
+      wrongAddress: {},
+      odd: {},
+      padded: { name: "Bill" },
+    });
+  });
+
   test("acceptContactRequest rejects when the chats document can't be loaded", async ({
     page,
   }) => {
@@ -264,10 +315,12 @@ test.describe("ContactService error paths", () => {
     const message = await messageFromBrowser(page, () =>
       window.contactService.acceptContactRequest(
         "d20cf443-4f96-418f-a957-c8cbef8677c3",
-        "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
-        "chat-1",
-        {} as JsonWebKey,
-        undefined,
+        {
+          inviter: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+          chatId: "chat-1",
+          publicKey: {} as JsonWebKey,
+        },
+        "mary@imagey.cloud",
         { documentId: "pp", key: {} as JsonWebKey },
         {
           documents: "docs",
@@ -317,10 +370,12 @@ test.describe("ContactService error paths", () => {
         try {
           await window.contactService.acceptContactRequest(
             userId,
-            "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
-            "chat-1",
-            {} as JsonWebKey,
-            undefined,
+            {
+              inviter: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+              chatId: "chat-1",
+              publicKey: {} as JsonWebKey,
+            },
+            "mary@imagey.cloud",
             { documentId: "pp", key: {} as JsonWebKey },
             {
               documents: "docs",
@@ -2254,10 +2309,13 @@ async function prepareMarysBrokenChatAndOpenIt(
   await inputMarysPassword(page);
 
   await page.getByRole("link", { name: "Chats" }).first().click();
-  const lauraContact = page
-    .getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6")
-    .first();
+  // The contact entry carries neither a name nor an address - the list
+  // falls back to a generic label, never to the opaque userId.
+  const lauraContact = page.getByText("Unknown contact").first();
   await expect(lauraContact).toBeVisible();
+  await expect(
+    page.getByText("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6"),
+  ).toHaveCount(0);
   await lauraContact.click();
 }
 
