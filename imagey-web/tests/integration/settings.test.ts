@@ -97,10 +97,24 @@ test("navigate to settings index directly", async ({ page }) => {
     // Then
     const settingsLink = page.getByRole("link", { name: "Settings" }).first();
     await expect(settingsLink).toBeVisible();
+    // Settings opens the profile page, which loads the profile document
+    // (content GET, then key GET). The "Devices" heading below is part of the
+    // settings list and renders before that load finishes, and
+    // runningPactRequests briefly dips to 0 between the two GETs - so wait
+    // for the key GET explicitly, or the mock server may be torn down while
+    // it is still in flight (route.fetch -> ECONNREFUSED, flaky in CI).
+    const profileKeyResponse = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.profile}/keys/`,
+        ),
+    );
     await settingsLink.click();
 
     const devicesHeading = page.getByRole("heading", { name: "Devices" });
     await expect(devicesHeading).toBeVisible();
+    await profileKeyResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
