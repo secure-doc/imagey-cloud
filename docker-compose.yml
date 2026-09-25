@@ -15,7 +15,7 @@ services:
   # used unless the meecrowave service's MEECROWAVE_OPTS is switched to -Dstorage.type=s3 below -
   # the default storage.type is filesystem, on the "data" bind mount, same as before this existed.
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-09-13T20-26-02Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     ports:
       - "${MINIO_PORT:-9000}:9000"
       # Web console, only useful when poking around manually
