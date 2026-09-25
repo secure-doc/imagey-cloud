@@ -48,9 +48,10 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
  * ({@code putIfAbsent}, {@code putIfVersionMatches}) are exactly where a mocked {@code S3Client} would
  * give false confidence.
  *
- * <p>The image is pulled from {@code quay.io}, not Docker Hub: MinIO stopped publishing to
- * {@code minio/minio} on Docker Hub, which now 404s. The tag is pinned to a release on/after
- * {@code RELEASE.2024-09-13T20-26-02Z}: MinIO's {@code If-None-Match: *} support (what
+ * <p>The image is {@code pgsty/minio}, a community build of the unmodified MinIO server: MinIO
+ * stopped publishing free images, and both {@code minio/minio} (Docker Hub) and
+ * {@code quay.io/minio/minio} no longer allow anonymous pulls. The tag must stay pinned to a release
+ * on/after {@code RELEASE.2024-09-13T20-26-02Z}: MinIO's {@code If-None-Match: *} support (what
  * {@link S3BlobStore#putIfAbsent} relies on) was broken before that release
  * (github.com/minio/minio/issues/20346) - do not relax this to {@code latest}.
  *
@@ -61,9 +62,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 @Testcontainers
 class S3BlobStoreTest extends BlobStoreContractTest {
 
-    // MinIO's image moved off Docker Hub to Quay - "minio/minio" on Docker Hub no longer resolves.
+    // The official MinIO images (Docker Hub and Quay) are no longer pullable anonymously.
     private static final DockerImageName MINIO_IMAGE =
-        DockerImageName.parse("quay.io/minio/minio:RELEASE.2024-09-13T20-26-02Z");
+        DockerImageName.parse("pgsty/minio:RELEASE.2026-08-04T00-00-00Z");
     private static final int MINIO_PORT = 9000;
     private static final String ACCESS_KEY = "minioadmin";
     private static final String SECRET_KEY = "minioadmin";
