@@ -34,6 +34,7 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
+import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserId;
 
@@ -117,6 +118,30 @@ public class TokenServiceTest {
         assertThat(trusted.isTrusted()).isTrue();
         assertThat(untrusted.isTrusted()).isFalse();
         assertThat(legacy.isTrusted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("The device claim survives a round trip; without it the session is unbound")
+    public void testDeviceClaim() {
+        User mary = new User(new UserId("mary"));
+        DeviceId device = new DeviceId("device-1");
+
+        DecodedToken bound = tokenService.decode(
+            tokenService.generateAuthenticationToken(mary, 10000, true, Optional.of(device))).orElseThrow();
+        DecodedToken unbound = tokenService.decode(
+            tokenService.generateAuthenticationToken(mary, 10000, true)).orElseThrow();
+
+        assertThat(bound.device()).contains(device);
+        assertThat(bound.isTrusted()).isTrue();
+        assertThat(unbound.device()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("A device claim that is not a string counts as unbound")
+    public void testMalformedDeviceClaim() throws Exception {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder().claim(TokenService.DEVICE_CLAIM, 42).build();
+
+        assertThat(new DecodedToken(claims).device()).isEmpty();
     }
 
     @Test

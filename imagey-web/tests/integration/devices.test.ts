@@ -13,6 +13,8 @@ import {
   setupMockServer,
   TestData,
   prepareMarysNewDeviceInfo,
+  prepareMarysSessionBinding,
+  rejectOnceAsUnbound,
   decryptMarysDeviceInfo,
 } from "./setup";
 import { MatchersV2 as Matchers } from "@pact-foundation/pact";
@@ -61,6 +63,7 @@ test("mary renames her second device", async ({ page }) => {
   await provider
     .addInteraction()
     .given("marys second device registered")
+    .given("mary is signed in with her first device")
     .uponReceiving("a request of mary to store renamed info of second device")
     .withRequest(
       "PUT",
@@ -111,6 +114,120 @@ test("mary renames her second device", async ({ page }) => {
       await reload;
       await expect.poll(() => runningPactRequests).toBe(0);
     });
+});
+
+function renamedInfoInteraction(name: string, signedIn: boolean) {
+  let builder = provider
+    .addInteraction()
+    .given("marys second device registered");
+  if (signedIn) {
+    builder = builder.given("mary is signed in with her first device");
+  }
+  return builder
+    .uponReceiving(name)
+    .withRequest(
+      "PUT",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/info`,
+      (r) =>
+        r
+          .headers({ "Content-Type": "application/json" })
+          .jsonBody(Matchers.string(TestData.mary.devices[1].encryptedInfo!)),
+    );
+}
+
+test("mary cannot rename a device with a session that is not bound to a device", async ({
+  page,
+}) => {
+  // Given
+  await prepareMarysDevicesPage(page);
+  await renamedInfoInteraction(
+    "a request of mary to store renamed info without a bound session",
+    false,
+  )
+    .willRespondWith(403)
+    .executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      // Binding the session is tested below, here the challenge is refused.
+      await page.route("**/challenges", (route) =>
+        route.fulfill({ status: 500 }),
+      );
+      const secondDevice = await openDevices(page);
+
+      // When
+      await secondDevice.getByRole("button", { name: "Rename device" }).click();
+      await page.getByLabel("Device name").fill("Mary's iPhone");
+      await page.getByRole("button", { name: "Save" }).click();
+
+      // Then
+      await expect(page.getByText("Error renaming device")).toBeVisible();
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
+test("mary renames a device after her session was bound to her device", async ({
+  page,
+}) => {
+  // Given
+  await prepareMarysDevicesPage(page);
+  prepareMarysSessionBinding();
+  await renamedInfoInteraction(
+    "a request of mary to store renamed info with a bound session",
+    true,
+  )
+    .willRespondWith(200)
+    .executeTest(async (mockServer) => {
+      await setupMockServer(page, mockServer);
+      await rejectOnceAsUnbound(page, "**/devices/*/info");
+      const secondDevice = await openDevices(page);
+      const challenges: string[] = [];
+      const recoveryKeys: string[] = [];
+      page.on("request", (request) => {
+        if (request.url().endsWith("/challenges")) {
+          challenges.push(request.url());
+        }
+        if (request.url().endsWith("/recovery-key")) {
+          recoveryKeys.push(request.url());
+        }
+      });
+
+      // When
+      await secondDevice.getByRole("button", { name: "Rename device" }).click();
+      await page.getByLabel("Device name").fill("Mary's iPhone");
+      const reload = deviceListReload(page);
+      await page.getByRole("button", { name: "Save" }).click();
+
+      // Then
+      await expect(page.getByLabel("Device name")).not.toBeVisible();
+      await reload;
+      expect(challenges).toHaveLength(1);
+      // Binding the session must not rotate the recovery key.
+      expect(recoveryKeys).toHaveLength(0);
+      await expect.poll(() => runningPactRequests).toBe(0);
+    });
+});
+
+test("mary sees an error when the server still refuses renaming after binding", async ({
+  page,
+}) => {
+  // Given
+  const builder = await prepareMarysDevicesPage(page);
+  prepareMarysSessionBinding();
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await page.route("**/devices/*/info", (route) =>
+      route.fulfill({ status: 403 }),
+    );
+    const secondDevice = await openDevices(page);
+
+    // When
+    await secondDevice.getByRole("button", { name: "Rename device" }).click();
+    await page.getByLabel("Device name").fill("Mary's iPhone");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    // Then
+    await expect(page.getByText("Error renaming device")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
 });
 
 test("mary sees an error when renaming a device fails", async ({ page }) => {

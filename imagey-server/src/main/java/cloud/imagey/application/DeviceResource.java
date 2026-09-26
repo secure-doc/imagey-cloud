@@ -21,6 +21,7 @@ import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -29,8 +30,10 @@ import jakarta.json.Json;
 import jakarta.json.JsonException;
 import jakarta.json.JsonReader;
 import jakarta.json.JsonString;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
@@ -43,6 +46,7 @@ import jakarta.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.application.authentication.SessionDevice;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
@@ -60,6 +64,8 @@ public class DeviceResource {
 
     @Inject
     private DeviceRepository deviceRepository;
+    @Inject
+    private HttpServletRequest request;
 
     @GET
     @RolesAllowed("owner")
@@ -70,6 +76,9 @@ public class DeviceResource {
 
     // The info is opaque ciphertext to us (ADR 0017), sent as a JSON string. A device's info can
     // only be stored once the device is registered, otherwise any id would show up as a device.
+    // Who may write it is decided by ADR 0018: a session bound to an activated device, or - the
+    // one write of a freshly registered device, made on the email session - the first info of a
+    // device that is neither activated nor described yet.
     @PUT
     @RolesAllowed("owner")
     @Path("{deviceId}/info")
@@ -82,8 +91,21 @@ public class DeviceResource {
         if (!deviceRepository.isRegistered(user, deviceId)) {
             throw new NotFoundException();
         }
-        deviceRepository.storeDeviceInfo(user, deviceId, parseDeviceInfo(info));
+        EncryptedDeviceInfo parsed = parseDeviceInfo(info);
+        boolean boundToActivatedDevice = sessionDevice()
+            .filter(device -> deviceRepository.isActivated(user, device))
+            .isPresent();
+        boolean firstInfoOfPendingDevice = !deviceRepository.isActivated(user, deviceId)
+            && deviceRepository.loadDeviceInfo(user, deviceId).isEmpty();
+        if (!boundToActivatedDevice && !firstInfoOfPendingDevice) {
+            throw new ForbiddenException("The session is not bound to an activated device.");
+        }
+        deviceRepository.storeDeviceInfo(user, deviceId, parsed);
         return Response.ok().build();
+    }
+
+    private Optional<DeviceId> sessionDevice() {
+        return SessionDevice.of(request);
     }
 
     private static EncryptedDeviceInfo parseDeviceInfo(String json) {
@@ -130,12 +152,20 @@ public class DeviceResource {
     public Response storeEncryptedPrivateKey(
         @PathParam("userId") User user,
         @PathParam("deviceId") DeviceId deviceId,
-        String key) throws IOException {
+        PrivateKeyMetadata key) throws IOException {
 
-        deviceRepository.storeEncryptedPrivateKey(
-            user,
-            deviceId,
-            key);
+        if (!deviceRepository.isRegistered(user, deviceId)) {
+            throw new NotFoundException();
+        }
+        // Only an activated device may hand the main key to another one, and only in its own name.
+        boolean boundToEncryptingDevice = sessionDevice()
+            .filter(device -> device.equals(key.encryptingDeviceId()))
+            .filter(device -> deviceRepository.isActivated(user, device))
+            .isPresent();
+        if (!boundToEncryptingDevice) {
+            throw new ForbiddenException("The session is not bound to the activated encrypting device.");
+        }
+        deviceRepository.storeEncryptedPrivateKey(user, deviceId, key);
         return Response.ok().build();
     }
 
@@ -160,6 +190,10 @@ public class DeviceResource {
         @PathParam("deviceId") DeviceId deviceId,
         String recoveryKey) throws IOException {
 
+        // The recovery key only matters to the device it belongs to.
+        if (sessionDevice().filter(deviceId::equals).isEmpty()) {
+            throw new ForbiddenException("The session is not bound to this device.");
+        }
         deviceRepository.storeDeviceRecoveryKey(user, deviceId, recoveryKey);
         return Response.ok().build();
     }

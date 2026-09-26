@@ -204,9 +204,15 @@ export const authenticationRepository = {
     userId: string,
     deviceId: string,
     signature: string,
-    trustedDevice: boolean,
+    // "keep": re-bind the current session, the server keeps its trusted state.
+    trustedDevice: boolean | "keep",
   ): Promise<void> => {
-    const query = trustedDevice ? "?trusted=true" : "";
+    const query =
+      trustedDevice === "keep"
+        ? "?rebind=true"
+        : trustedDevice
+          ? "?trusted=true"
+          : "";
     const response = await fetch(
       "/users/" + userId + "/devices/" + deviceId + "/authentications" + query,
       {

@@ -45,7 +45,7 @@ public class DeviceRepository extends AbstractUserFileRepository {
             .map(DeviceId::new)
             .map(deviceId -> new Device(
                 deviceId,
-                exists(privateKeyFile(user, deviceId)),
+                isActivated(user, deviceId),
                 loadDevicePublicKey(user, deviceId, new Kid("0")).orElse(null),
                 loadDeviceInfo(user, deviceId).orElse(null)))
             .toList();
@@ -53,6 +53,11 @@ public class DeviceRepository extends AbstractUserFileRepository {
 
     public boolean isRegistered(User user, DeviceId deviceId) {
         return exists(join(devicesFolder(user, deviceId), "public-keys", "0.json"));
+    }
+
+    /** Whether the device has its private main key, i.e. has been activated by another device. */
+    public boolean isActivated(User user, DeviceId deviceId) {
+        return exists(privateKeyFile(user, deviceId));
     }
 
     public void storeDeviceInfo(User user, DeviceId deviceId, EncryptedDeviceInfo info) {
