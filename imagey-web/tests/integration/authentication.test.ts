@@ -20,6 +20,7 @@ import {
   TestData,
   runningPactRequests,
   optOutOfKeepLoggedIn,
+  prepareMarysNewDeviceInfo,
 } from "./setup";
 import { cryptoService } from "../../src/authentication/CryptoService";
 
@@ -648,6 +649,7 @@ test("mary logges in with new device", async ({ page }) => {
         }),
     )
     .willRespondWith(200);
+  prepareMarysNewDeviceInfo();
   provider
     .addInteraction()
     .given("marys second device registered")

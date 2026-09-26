@@ -60,6 +60,7 @@ export const authenticationService = {
 
     const [
       encryptedPrivateMainKey,
+      encryptedDeviceInfo,
       encryptedSettingsKey,
       encryptedSettings,
       documentList,
@@ -70,6 +71,13 @@ export const authenticationService = {
         mainKeyPair.privateKey,
         device.deviceKeyPair.publicKey,
         device.deviceKeyPair.privateKey,
+      ),
+      deviceService.encryptDeviceInfo(
+        device.info,
+        mainKeyPair.privateKey,
+        device.deviceKeyPair.publicKey,
+        userId,
+        device.deviceId,
       ),
       cryptoService.encryptKey(
         settingsKey,
@@ -103,6 +111,7 @@ export const authenticationService = {
         devicePublicKey: device.deviceKeyPair.publicKey,
         mainPublicKey: mainKeyPair.publicKey,
         encryptedPrivateKey: encryptedPrivateMainKey,
+        deviceInfo: encryptedDeviceInfo,
         settingsKey: {
           issuer: userId,
           kid: "0",

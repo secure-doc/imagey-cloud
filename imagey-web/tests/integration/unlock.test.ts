@@ -13,6 +13,8 @@ import {
   TestData,
   prepareMarysContactRequests,
   optOutOfKeepLoggedIn,
+  prepareMarysDevices,
+  prepareMarysNewDeviceInfo,
 } from "./setup";
 import { MatchersV2 as Matchers } from "@pact-foundation/pact";
 
@@ -54,6 +56,7 @@ test("mary registers new device", async ({ page }) => {
     )
     .willRespondWith(200);
 
+  prepareMarysNewDeviceInfo();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -150,22 +153,7 @@ test("mary unlocks new device", async ({ page }) => {
   // /settings/profile, so ProfilePage's own document fetch needs a mock too
   // before we can get to the Devices page from there.
   await prepareMarysEmptyProfile();
-  provider
-    .addInteraction()
-    .given("marys second device registered")
-    .uponReceiving("a request of mary to get devices")
-    .withRequest(
-      "GET",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices",
-      (r) => r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) =>
-      r.jsonBody([
-        TestData.mary.devices[1].deviceId,
-        TestData.mary.devices[0].deviceId,
-      ]),
-    );
-
+  await prepareMarysDevices();
   provider
     .addInteraction()
     .given("marys second device registered")
@@ -235,18 +223,31 @@ test("mary unlocks new device", async ({ page }) => {
       await expect(devicesLink).toBeVisible();
       await devicesLink.click();
       const deviceEntry = page
-        .locator("li", { hasText: TestData.mary.devices[1].deviceId })
+        .locator("li", { hasText: "Safari on iOS" })
         .locator("div.max");
+      await expect(deviceEntry).toContainText("Waiting for activation");
       await deviceEntry.click({ force: true }); // force is required, because the onClick is on a parent
+      const question = page.getByText(
+        "Do you want to activate the device Safari on iOS?",
+      );
+      await expect(question).toBeVisible();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByText("Registered on 9/20/2026")).toBeVisible();
       await expect(
-        page.getByText(/Do you want to activate the device with id/),
+        dialog.getByText(`ID: ${TestData.mary.devices[1].deviceId}`),
       ).toBeVisible();
+      // Activating reloads the device list; wait for that reload so the mock
+      // server is not torn down while it is still in flight.
+      const reload = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          response.url().endsWith("/devices"),
+      );
       await page.getByRole("button", { name: "Confirm" }).click();
 
       // Then
-      await expect(
-        page.getByText(/Do you want to activate the device with id/),
-      ).not.toBeVisible();
+      await expect(question).not.toBeVisible();
+      await reload;
       await expect.poll(() => runningPactRequests).toBe(0);
     });
 });
@@ -394,6 +395,7 @@ test("mary successfully activates newly registered device after unlocking", asyn
   // gets stuck on "Loading settings..." because that fetch has no mock.
   await prepareMarysSettingsDocument();
 
+  prepareMarysNewDeviceInfo();
   provider
     .addInteraction()
     .uponReceiving(

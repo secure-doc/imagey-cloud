@@ -173,6 +173,68 @@ export async function encryptChatContactInfo(
 
 // Mirrors cryptoService.deriveChatKey (ADR 0015): ECDH + HKDF over chatId and
 // both parties' userIds.
+// Decrypts what a device of mary stored as its info (ADR 0017) the way her
+// activated devices do: with her private main key and the device's public key.
+export async function decryptMarysDeviceInfo(
+  encryptedInfo: string,
+  deviceId: string,
+  publicDeviceKey: JsonWebKey,
+) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { key_ops, ...privateMainKey } = TestData.mary.privateMainKey!;
+  const priv = await webcrypto.subtle.importKey(
+    "jwk",
+    privateMainKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
+  const pub = await webcrypto.subtle.importKey(
+    "jwk",
+    publicDeviceKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    [],
+  );
+  const sharedSecret = await webcrypto.subtle.deriveBits(
+    { name: "ECDH", public: pub },
+    priv,
+    256,
+  );
+  const hkdfKey = await webcrypto.subtle.importKey(
+    "raw",
+    sharedSecret,
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  const key = await webcrypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode(
+        [
+          "imagey-device-info",
+          "d20cf443-4f96-418f-a957-c8cbef8677c3",
+          deviceId,
+        ].join("\u0000"),
+      ),
+    },
+    hkdfKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["decrypt"],
+  );
+  const combined = Buffer.from(encryptedInfo, "base64");
+  const decrypted = await webcrypto.subtle.decrypt(
+    { name: "AES-GCM", iv: combined.subarray(0, 12) },
+    key,
+    combined.subarray(12),
+  );
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
 export async function deriveChatKey(
   ownPrivateKey: JsonWebKey,
   otherPublicKey: JsonWebKey,
@@ -1896,12 +1958,49 @@ export async function prepareMarysDevices() {
           Accept: "application/json",
         }),
     )
-    .willRespondWith(200, (r) =>
-      r.jsonBody([
-        TestData.mary.devices[1].deviceId,
-        TestData.mary.devices[0].deviceId,
-      ]),
-    );
+    .willRespondWith(200, (r) => r.jsonBody(marysDevicesBody()));
+}
+
+// A newly registered device of mary stores its (encrypted) info right after
+// its public key; its id is generated in the browser, hence the regex. The
+// server only accepts it for a registered device, hence the state.
+export function prepareMarysNewDeviceInfo() {
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving("a request of mary to store info of new device")
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        generate: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[1].deviceId}/info`,
+        matcher: "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/.+/info",
+      }),
+      (r) =>
+        r
+          .headers({ "Content-Type": "application/json" })
+          .jsonBody(Matchers.string(TestData.mary.devices[1].encryptedInfo!)),
+    )
+    .willRespondWith(200);
+}
+
+// Mary's device list with her second device registered but not activated yet.
+// The infos are opaque ciphertext to the server, hence only type-matched; the
+// public keys come along to decrypt them (ADR 0017).
+function marysDevicesBody() {
+  return [
+    {
+      deviceId: TestData.mary.devices[1].deviceId,
+      activated: false,
+      publicKey: Matchers.like(TestData.mary.devices[1].publicDeviceKey!),
+      info: Matchers.string(TestData.mary.devices[1].encryptedInfo!),
+    },
+    {
+      deviceId: TestData.mary.devices[0].deviceId,
+      activated: true,
+      publicKey: Matchers.like(TestData.mary.devices[0].publicDeviceKey!),
+      info: Matchers.string(TestData.mary.devices[0].encryptedInfo!),
+    },
+  ];
 }
 
 export async function setupMarysDevice(page: Page, storeEmail: boolean = true) {

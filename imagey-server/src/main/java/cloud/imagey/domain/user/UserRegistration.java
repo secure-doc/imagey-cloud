@@ -32,6 +32,7 @@ public record UserRegistration(
     EncryptedPrivateKey encryptedPrivateKey,
     PublicKey mainPublicKey,
     PublicKey devicePublicKey,
+    EncryptedDeviceInfo deviceInfo,
     EncryptedContent settings,
     EncryptedSharedKey settingsSharedKey,
     DocumentId documentListId,

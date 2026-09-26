@@ -77,7 +77,7 @@ public class UserResourceTest {
     @Test
     @DisplayName("A user cannot register an account for someone else's userId")
     public void registerDifferentUserIdFails() {
-        Response response = register("00000000-0000-0000-0000-00000000dead");
+        Response response = register("00000000-0000-0000-0000-00000000dead", "AAAA");
 
         assertThat(response.getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
     }
@@ -86,7 +86,7 @@ public class UserResourceTest {
     @DisplayName("Registration stores the account keys and all four bootstrapped documents")
     public void registerStoresAccountAndDocuments() {
         String joe = UserFactory.JOE_ID.id();
-        Response response = register(joe);
+        Response response = register(joe, "AAAA");
 
         assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
 
@@ -94,11 +94,23 @@ public class UserResourceTest {
         assertThat(new File(joesData, "public-keys/0.json")).exists();
         assertThat(new File(joesData, "devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/public-keys/0.json")).exists();
         assertThat(new File(joesData, "devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/private-keys/0.json")).exists();
+        assertThat(new File(joesData, "devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45/info.txt")).hasContent("AAAA");
         // Settings is filed under the user's own userId, the other three under their client-generated ids.
         assertDocument(joesData, joe);
         assertDocument(joesData, "22222222-2222-2222-2222-222222222222");
         assertDocument(joesData, "33333333-3333-3333-3333-333333333333");
         assertDocument(joesData, "44444444-4444-4444-4444-444444444444");
+    }
+
+    @Test
+    @DisplayName("Registration still works for clients that do not describe the device yet")
+    public void registerWithoutDeviceInfo() {
+        Response response = register(UserFactory.JOE_ID.id(), null);
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        File device = new File(rootPath, UserFactory.JOE_ID.id() + "/devices/2d9e9f58-2f39-408a-b3d7-e66e6a431b45");
+        assertThat(new File(device, "public-keys/0.json")).exists();
+        assertThat(new File(device, "info.txt")).doesNotExist();
     }
 
     private static void assertDocument(File userData, String documentId) {
@@ -108,7 +120,7 @@ public class UserResourceTest {
         assertThat(new File(document, "keys").list()).hasSize(1);
     }
 
-    private Response register(String userId) {
+    private Response register(String userId, String deviceInfo) {
         Cookie joesToken = new Cookie.Builder("token")
             .value(tokenService.generateAuthenticationToken(UserFactory.joe(), MAX_VALUE).token())
             .build();
@@ -120,16 +132,17 @@ public class UserResourceTest {
             .request()
             .header("Origin", "https://secure-doc.store")
             .cookie(joesToken)
-            .post(entity(registrationBody(userId), contentType));
+            .post(entity(registrationBody(userId, deviceInfo), contentType));
     }
 
-    private static String registrationBody(String userId) {
+    private static String registrationBody(String userId, String deviceInfo) {
         String metadata = "{"
             + "\"userId\":\"" + userId + "\","
             + "\"deviceId\":\"2d9e9f58-2f39-408a-b3d7-e66e6a431b45\","
             + "\"devicePublicKey\":" + PUBLIC_KEY + ","
             + "\"mainPublicKey\":" + PUBLIC_KEY + ","
             + "\"encryptedPrivateKey\":\"dummy-private-key\","
+            + (deviceInfo == null ? "" : "\"deviceInfo\":\"" + deviceInfo + "\",")
             + "\"settingsKey\":{\"issuer\":\"" + userId + "\",\"kid\":\"0\",\"sharedKey\":\"AAAA\"},"
             + "\"documentList\":{\"id\":\"22222222-2222-2222-2222-222222222222\","
             + "\"key\":{\"issuer\":\"" + userId + "\",\"kid\":\"" + userId + "\",\"sharedKey\":\"AAAA\"}},"

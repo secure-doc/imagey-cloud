@@ -1,4 +1,5 @@
 import { ResponseError } from "./ResponseError";
+import { EncryptedDevice } from "../device/DeviceInfo";
 
 export interface SharedKey {
   issuer: string;
@@ -16,6 +17,8 @@ export interface RegistrationMetadata {
   devicePublicKey: JsonWebKey;
   mainPublicKey: JsonWebKey;
   encryptedPrivateKey: string;
+  // The registering device's DeviceInfo, encrypted (ADR 0017).
+  deviceInfo: string;
   settingsKey: SharedKey;
   documentList: { id: string; key: SharedKey };
   chatList: { id: string; key: SharedKey };
@@ -69,7 +72,7 @@ export const authenticationRepository = {
       ? Promise.resolve()
       : Promise.reject();
   },
-  findDevices: async (userId: string): Promise<string[]> => {
+  findDevices: async (userId: string): Promise<EncryptedDevice[]> => {
     const response = await fetch("/users/" + userId + "/devices", {
       method: "GET",
       headers: {
@@ -215,6 +218,21 @@ export const authenticationRepository = {
         credentials: "same-origin",
       },
     );
+    await resolve(response);
+  },
+  storeDeviceInfo: async (
+    userId: string,
+    deviceId: string,
+    encryptedInfo: string,
+  ): Promise<void> => {
+    const response = await fetch(`/users/${userId}/devices/${deviceId}/info`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(encryptedInfo),
+      credentials: "same-origin",
+    });
     await resolve(response);
   },
   loadRecoveryKey: async (

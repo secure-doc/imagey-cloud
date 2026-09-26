@@ -148,6 +148,11 @@ public class UserService {
             user,
             registration.deviceId(),
             new PrivateKeyMetadata(new Kid("0"), registration.deviceId(), registration.encryptedPrivateKey()));
+        // Optional: a client from before ADR 0017 (e.g. a PWA still served by an old service worker)
+        // registers without it; the device is then listed by its id.
+        if (registration.deviceInfo() != null) {
+            deviceRepository.storeDeviceInfo(user, registration.deviceId(), registration.deviceInfo());
+        }
 
         // Settings always lives under the user's own userId as document id (see DocumentResource
         // path conventions elsewhere); documentList/chatList/profile get their ids from the client

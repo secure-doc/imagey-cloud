@@ -120,53 +120,32 @@ export const cryptoService = {
     chatId: string,
     inviterId: string,
     inviteeId: string,
-  ): Promise<JsonWebKey> => {
-    // Main private keys are exported with key_ops ["deriveKey"]; drop them so
-    // the key can be imported for deriveBits.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { key_ops, ...privateKey } = ownPrivateKey;
-    const priv = await crypto.subtle.importKey(
-      "jwk",
-      privateKey,
-      { name: "ECDH", namedCurve: "P-256" },
-      false,
-      ["deriveBits"],
-    );
-    const pub = await crypto.subtle.importKey(
-      "jwk",
-      otherPublicKey,
-      { name: "ECDH", namedCurve: "P-256" },
-      false,
-      [],
-    );
-    const sharedSecret = await crypto.subtle.deriveBits(
-      { name: "ECDH", public: pub },
-      priv,
-      256,
-    );
-    const hkdfKey = await crypto.subtle.importKey(
-      "raw",
-      sharedSecret,
-      "HKDF",
-      false,
-      ["deriveKey"],
-    );
-    const chatKey = await crypto.subtle.deriveKey(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new Uint8Array(0),
-        info: new TextEncoder().encode(
-          ["imagey-chat-key", chatId, inviterId, inviteeId].join("\u0000"),
-        ),
-      },
-      hkdfKey,
-      { name: "AES-GCM", length: 256 },
-      true,
-      ["encrypt", "decrypt"],
-    );
-    return crypto.subtle.exportKey("jwk", chatKey);
-  },
+  ): Promise<JsonWebKey> =>
+    deriveAgreedKey(ownPrivateKey, otherPublicKey, [
+      "imagey-chat-key",
+      chatId,
+      inviterId,
+      inviteeId,
+    ]),
+
+  // Derives the key a device's info (name, platform, registration date) is
+  // encrypted with (ADR 0017): ECDH of the user's main key pair and the
+  // device's key pair, expanded with HKDF-SHA-256 and bound to the device.
+  // The device itself computes it from its private device key and the public
+  // main key, so it can store its info before it is activated; every activated
+  // device computes the same key from the private main key and the device's
+  // public key.
+  deriveDeviceInfoKey: async (
+    ownPrivateKey: JsonWebKey,
+    otherPublicKey: JsonWebKey,
+    userId: string,
+    deviceId: string,
+  ): Promise<JsonWebKey> =>
+    deriveAgreedKey(ownPrivateKey, otherPublicKey, [
+      "imagey-device-info",
+      userId,
+      deviceId,
+    ]),
 
   // The key the inviter encrypts their own name/email (ContactRequest.
   // contactInfo) with for an INVITED request: the inviter does not know the
@@ -264,6 +243,59 @@ export const cryptoService = {
   arrayBufferToBase64,
   base64ToArrayBuffer,
 };
+
+// ECDH of the own private and the other party's public key, expanded with
+// HKDF-SHA-256 and bound to its purpose via `info`. Both parties compute the
+// same key independently, so it never has to be sent.
+async function deriveAgreedKey(
+  ownPrivateKey: JsonWebKey,
+  otherPublicKey: JsonWebKey,
+  info: string[],
+): Promise<JsonWebKey> {
+  // Private keys are exported with key_ops ["deriveKey"]; drop them so the
+  // key can be imported for deriveBits.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { key_ops, ...privateKey } = ownPrivateKey;
+  const priv = await crypto.subtle.importKey(
+    "jwk",
+    privateKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
+  const pub = await crypto.subtle.importKey(
+    "jwk",
+    otherPublicKey,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    [],
+  );
+  const sharedSecret = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: pub },
+    priv,
+    256,
+  );
+  const hkdfKey = await crypto.subtle.importKey(
+    "raw",
+    sharedSecret,
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  const agreedKey = await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode(info.join("\u0000")),
+    },
+    hkdfKey,
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  return crypto.subtle.exportKey("jwk", agreedKey);
+}
 
 async function deriveKey(
   privateKey: JsonWebKey,

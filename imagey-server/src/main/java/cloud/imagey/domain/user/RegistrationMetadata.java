@@ -38,6 +38,7 @@ public record RegistrationMetadata(
     PublicKey devicePublicKey,
     PublicKey mainPublicKey,
     EncryptedPrivateKey encryptedPrivateKey,
+    EncryptedDeviceInfo deviceInfo,
     EncryptedSharedKey settingsKey,
     RegisteredDocument documentList,
     RegisteredDocument chatList,

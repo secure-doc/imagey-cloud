@@ -37,13 +37,31 @@ public class DeviceRepository extends AbstractUserFileRepository {
 
     private static final Logger LOG = LogManager.getLogger(DeviceRepository.class);
 
-    public List<DeviceId> loadDevices(User user) {
+    public List<Device> loadDevices(User user) {
         String devicesPrefix = join(getUserPrefix(user), "devices");
         return list(devicesPrefix).commonPrefixes().stream()
             .map(commonPrefix -> commonPrefix.substring(devicesPrefix.length() + 1, commonPrefix.length() - 1))
             .sorted()
             .map(DeviceId::new)
+            .map(deviceId -> new Device(
+                deviceId,
+                exists(privateKeyFile(user, deviceId)),
+                loadDevicePublicKey(user, deviceId, new Kid("0")).orElse(null),
+                loadDeviceInfo(user, deviceId).orElse(null)))
             .toList();
+    }
+
+    public boolean isRegistered(User user, DeviceId deviceId) {
+        return exists(join(devicesFolder(user, deviceId), "public-keys", "0.json"));
+    }
+
+    public void storeDeviceInfo(User user, DeviceId deviceId, EncryptedDeviceInfo info) {
+        // Overwrite: renaming a device re-encrypts and replaces its whole info.
+        put(join(devicesFolder(user, deviceId), "info.txt"), info.info());
+    }
+
+    public Optional<EncryptedDeviceInfo> loadDeviceInfo(User user, DeviceId deviceId) {
+        return findString(join(devicesFolder(user, deviceId), "info.txt")).map(EncryptedDeviceInfo::new);
     }
 
     public Optional<PrivateKeyMetadata> loadPrivateKey(User user, DeviceId deviceId, Kid kid) {
@@ -70,7 +88,7 @@ public class DeviceRepository extends AbstractUserFileRepository {
     }
 
     public void storeEncryptedPrivateKey(User user, DeviceId deviceId, String metadata) {
-        createIfAbsent(join(devicesFolder(user, deviceId), "private-keys", "0.json"), metadata);
+        createIfAbsent(privateKeyFile(user, deviceId), metadata);
     }
 
     public void storeDeviceRecoveryKey(User user, DeviceId deviceId, String recoveryKey) {
@@ -90,6 +108,10 @@ public class DeviceRepository extends AbstractUserFileRepository {
             LOG.info("Recovery key loaded");
         }
         return recoveryKey;
+    }
+
+    private String privateKeyFile(User user, DeviceId deviceId) {
+        return join(devicesFolder(user, deviceId), "private-keys", "0.json");
     }
 
     private String devicesFolder(User user, DeviceId deviceId) {

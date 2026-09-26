@@ -30,6 +30,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import cloud.imagey.domain.encryption.PublicKey;
+
 @MonoMeecrowaveConfig
 public class DeviceRepositoryTest {
 
@@ -70,5 +72,25 @@ public class DeviceRepositoryTest {
         deviceRepository.storeDeviceRecoveryKey(user, deviceId, "\"rotated-key\"");
 
         assertThat(deviceRepository.loadDeviceRecoveryKey(user, deviceId)).contains("\"rotated-key\"");
+    }
+
+    @Test
+    @DisplayName("a device without private key and info is listed as not activated and undescribed")
+    void loadUndescribedDevice() {
+        deviceRepository.storeDevicePublicKey(user, deviceId, new PublicKey("{}"));
+
+        assertThat(deviceRepository.loadDevices(user)).containsExactly(new Device(deviceId, false, new PublicKey("{}"), null));
+    }
+
+    @Test
+    @DisplayName("storing the private key activates a device and its info is listed")
+    void loadActivatedDescribedDevice() {
+        deviceRepository.storeDevicePublicKey(user, deviceId, new PublicKey("{}"));
+        deviceRepository.storeEncryptedPrivateKey(user, deviceId, "{}");
+        deviceRepository.storeDeviceInfo(user, deviceId, new EncryptedDeviceInfo("AAAA"));
+
+        assertThat(deviceRepository.isRegistered(user, deviceId)).isTrue();
+        assertThat(deviceRepository.loadDevices(user))
+            .containsExactly(new Device(deviceId, true, new PublicKey("{}"), new EncryptedDeviceInfo("AAAA")));
     }
 }

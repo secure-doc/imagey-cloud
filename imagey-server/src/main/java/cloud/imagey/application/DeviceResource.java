@@ -19,15 +19,22 @@ package cloud.imagey.application;
 import static jakarta.ws.rs.core.MediaType.APPLICATION_JSON;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.List;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.Json;
+import jakarta.json.JsonException;
+import jakarta.json.JsonReader;
+import jakarta.json.JsonString;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -39,8 +46,10 @@ import org.apache.logging.log4j.Logger;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
 import cloud.imagey.domain.token.Kid;
+import cloud.imagey.domain.user.Device;
 import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.DeviceRepository;
+import cloud.imagey.domain.user.EncryptedDeviceInfo;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -55,8 +64,37 @@ public class DeviceResource {
     @GET
     @RolesAllowed("owner")
     @Produces(APPLICATION_JSON)
-    public List<DeviceId> getDevices(@PathParam("userId") User user) {
+    public List<Device> getDevices(@PathParam("userId") User user) {
         return deviceRepository.loadDevices(user);
+    }
+
+    // The info is opaque ciphertext to us (ADR 0017), sent as a JSON string. A device's info can
+    // only be stored once the device is registered, otherwise any id would show up as a device.
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{deviceId}/info")
+    @Consumes(APPLICATION_JSON)
+    public Response storeDeviceInfo(
+        @PathParam("userId") User user,
+        @PathParam("deviceId") DeviceId deviceId,
+        String info) {
+
+        if (!deviceRepository.isRegistered(user, deviceId)) {
+            throw new NotFoundException();
+        }
+        deviceRepository.storeDeviceInfo(user, deviceId, parseDeviceInfo(info));
+        return Response.ok().build();
+    }
+
+    private static EncryptedDeviceInfo parseDeviceInfo(String json) {
+        try (JsonReader reader = Json.createReader(new StringReader(json))) {
+            if (reader.readValue() instanceof JsonString info) {
+                return new EncryptedDeviceInfo(info.getString());
+            }
+        } catch (JsonException | IllegalArgumentException e) {
+            LOG.debug("Invalid device info", e);
+        }
+        throw new BadRequestException("Device info must be a base64 JSON string");
     }
 
     @POST
