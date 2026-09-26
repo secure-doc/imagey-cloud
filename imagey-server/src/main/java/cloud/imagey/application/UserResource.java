@@ -99,6 +99,7 @@ public class UserResource {
             metadata.encryptedPrivateKey(),
             metadata.mainPublicKey(),
             metadata.devicePublicKey(),
+            metadata.deviceInfo(),
             settings,
             metadata.settingsKey(),
             metadata.documentList().id(),

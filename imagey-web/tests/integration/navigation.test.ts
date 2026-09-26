@@ -212,7 +212,7 @@ test("navigate to devices and back on mobile resolution", async ({ page }) => {
     const devicesLink = page.getByRole("heading", { name: "Devices" });
     await expect(devicesLink).toBeVisible();
     await devicesLink.click();
-    const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);
+    const deviceEntry = page.getByRole("heading", { name: "Mary's MacBook" });
     await expect(deviceEntry).toBeVisible();
     const backButton = page.getByRole("button", { name: "back-button" });
     await expect(backButton).toBeVisible();

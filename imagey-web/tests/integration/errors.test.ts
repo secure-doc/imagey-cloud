@@ -1961,6 +1961,9 @@ test.describe("Component error handlers", () => {
   }) => {
     const thisDeviceId = TestData.mary.devices[0].deviceId;
     const otherDeviceId = TestData.mary.devices[1].deviceId;
+    // The second device's info is bound to its id, so under this id it fails
+    // authentication like a corrupted one.
+    const corruptDeviceId = "c0ffee00-0000-4000-8000-000000000000";
     const profileId = TestData.mary.settings!.profile;
 
     await loginMary(page, async (p) => {
@@ -1975,7 +1978,28 @@ test.describe("Component error handlers", () => {
       await p.route(`**/users/${MARY}/devices`, (route) =>
         route.fulfill({
           status: 200,
-          json: [thisDeviceId, otherDeviceId],
+          // The other device predates device infos (ADR 0017), a third
+          // one's info cannot be decrypted: both are listed by their ids
+          // and cannot be renamed - without taking the list down.
+          json: [
+            {
+              deviceId: thisDeviceId,
+              activated: true,
+              publicKey: TestData.mary.devices[0].publicDeviceKey,
+              info: TestData.mary.devices[0].encryptedInfo,
+            },
+            {
+              deviceId: otherDeviceId,
+              activated: false,
+              publicKey: TestData.mary.devices[1].publicDeviceKey,
+            },
+            {
+              deviceId: corruptDeviceId,
+              activated: true,
+              publicKey: TestData.mary.devices[1].publicDeviceKey,
+              info: TestData.mary.devices[1].encryptedInfo,
+            },
+          ],
         }),
       );
       await p.route(
@@ -1998,12 +2022,21 @@ test.describe("Component error handlers", () => {
     await page.getByRole("link", { name: "Settings" }).first().click();
     await page.getByRole("heading", { name: "Devices" }).click();
 
-    const deviceEntry = page
-      .locator("li", { hasText: otherDeviceId })
-      .locator("div.max");
-    await deviceEntry.click({ force: true });
+    const corruptDevice = page.locator("li", { hasText: corruptDeviceId });
+    await expect(corruptDevice).toBeVisible();
     await expect(
-      page.getByText(/Do you want to activate the device with id/),
+      corruptDevice.getByRole("button", { name: "Rename device" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Mary's MacBook" }),
+    ).toBeVisible();
+    const otherDevice = page.locator("li", { hasText: otherDeviceId });
+    await expect(
+      otherDevice.getByRole("button", { name: "Rename device" }),
+    ).toHaveCount(0);
+    await otherDevice.locator("div.max").click({ force: true });
+    await expect(
+      page.getByText(`Do you want to activate the device ${otherDeviceId}?`),
     ).toBeVisible();
     await page.getByRole("button", { name: "Confirm" }).click();
 

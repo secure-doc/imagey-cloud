@@ -41,11 +41,18 @@ test("navigate to devices", async ({ page }) => {
     await devicesLink.click();
 
     // Then
-    const deviceEntry = page.getByRole("heading", { name: "This device" });
-    await expect(deviceEntry).toBeVisible();
-    await expect(
-      page.getByText(TestData.mary.devices[0].deviceId),
-    ).toBeVisible();
+    const thisDevice = page.locator("li", {
+      has: page.getByRole("heading", { name: "Mary's MacBook" }),
+    });
+    await expect(thisDevice).toContainText(
+      "Chrome on macOS · Registered on 1/15/2026 · This device",
+    );
+    await expect(thisDevice).not.toContainText("Waiting for activation");
+    const otherDevice = page.locator("li", {
+      has: page.getByRole("heading", { name: "Safari on iOS" }),
+    });
+    await expect(otherDevice).toContainText("Registered on 9/20/2026");
+    await expect(otherDevice).toContainText("Waiting for activation");
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -75,7 +82,7 @@ test("navigate to devices on mobile resolution", async ({ page }) => {
     await devicesLink.click();
 
     // Then
-    const deviceEntry = page.getByText(TestData.mary.devices[0].deviceId);
+    const deviceEntry = page.getByRole("heading", { name: "Mary's MacBook" });
     await expect(deviceEntry).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -165,7 +172,7 @@ test("navigate from profile to devices via settings list", async ({ page }) => {
     await devicesLink.click();
 
     // Then
-    const deviceEntry = page.getByRole("heading", { name: "This device" });
+    const deviceEntry = page.getByRole("heading", { name: "Mary's MacBook" });
     await expect(deviceEntry).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -211,7 +218,7 @@ test("navigate from devices to profile via settings list", async ({ page }) => {
     await devicesLink.click();
 
     // Verify on Devices page
-    const deviceEntry = page.getByRole("heading", { name: "This device" });
+    const deviceEntry = page.getByRole("heading", { name: "Mary's MacBook" });
     await expect(deviceEntry).toBeVisible();
 
     // Navigate to Profile via Settings list. ProfilePage's own <h5> "Profile"

@@ -179,6 +179,7 @@ public class ContractTest {
                     + "\"devicePublicKey\":" + dummyKey + ","
                     + "\"mainPublicKey\":" + dummyKey + ","
                     + "\"encryptedPrivateKey\":\"dummy-private-key\","
+                    + "\"deviceInfo\":\"AAAA\","
                     + "\"settingsKey\":{\"issuer\":\"" + JOE + "\",\"kid\":\"0\",\"sharedKey\":\"AAAA\"},"
                     + "\"documentList\":{\"id\":\"22222222-2222-2222-2222-222222222222\",\"key\":" + joeKey + "},"
                     + "\"chatList\":{\"id\":\"33333333-3333-3333-3333-333333333333\",\"key\":" + joeKey + "},"
@@ -336,6 +337,7 @@ public class ContractTest {
         }
         File secondPublicKey = new File(secondPublicKeyDir, "0.json");
         copyURLToFile(ContractTest.class.getResource("/second-device-public-key.json"), secondPublicKey);
+        copyURLToFile(ContractTest.class.getResource("/second-device-info.txt"), new File(secondDevice, "info.txt"));
 
     }
 
