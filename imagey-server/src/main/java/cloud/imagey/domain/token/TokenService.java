@@ -21,6 +21,7 @@ import static java.util.Optional.empty;
 
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -42,6 +43,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
 import cloud.imagey.domain.mail.Email;
+import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -61,6 +63,12 @@ public class TokenService {
      * and is slid forward on activity; without the claim the session is treated as short-lived.
      */
     public static final String TRUSTED_CLAIM = "trusted";
+
+    /**
+     * Claim name (string) on an {@code AUTHENTICATION} token: the {@code DeviceId} whose challenge
+     * was answered to obtain the session (ADR 0018). Missing on sessions from emailed links.
+     */
+    public static final String DEVICE_CLAIM = "device";
 
     /** {@code Max-Age} (seconds) of the persistent "keep me logged in" cookie. */
     public static final long TRUSTED_COOKIE_MAX_AGE_SECONDS = ONE_MONTH / 1000;
@@ -104,11 +112,23 @@ public class TokenService {
      * of hard-expiring (see {@code AuthenticationTokenRefreshFilter}).
      */
     public Token generateAuthenticationToken(User user, long validityInMilliseconds, boolean trusted) {
-        return generate(
-            user.id().id(),
-            TokenType.AUTHENTICATION,
-            validityInMilliseconds,
-            Map.of(TRUSTED_CLAIM, trusted));
+        return generateAuthenticationToken(user, validityInMilliseconds, trusted, empty());
+    }
+
+    /**
+     * Session cookie bound to {@code device} (if present): the session proves possession of that
+     * device's private key (ADR 0018).
+     */
+    public Token generateAuthenticationToken(
+        User user,
+        long validityInMilliseconds,
+        boolean trusted,
+        Optional<DeviceId> device) {
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put(TRUSTED_CLAIM, trusted);
+        device.ifPresent(d -> claims.put(DEVICE_CLAIM, d.id()));
+        return generate(user.id().id(), TokenType.AUTHENTICATION, validityInMilliseconds, claims);
     }
 
     /**
@@ -117,8 +137,13 @@ public class TokenService {
      * one lasts an hour and is dropped when the browser closes.
      */
     public String authenticationCookie(User user, boolean trusted) {
+        return authenticationCookie(user, trusted, empty());
+    }
+
+    /** Like {@link #authenticationCookie(User, boolean)}, for a session bound to {@code device}. */
+    public String authenticationCookie(User user, boolean trusted, Optional<DeviceId> device) {
         long validity = trusted ? ONE_MONTH : ONE_HOUR;
-        Token token = generateAuthenticationToken(user, validity, trusted);
+        Token token = generateAuthenticationToken(user, validity, trusted, device);
         String cookie = sessionAuthenticationCookie(token);
         if (trusted) {
             cookie += "; Max-Age=" + TRUSTED_COOKIE_MAX_AGE_SECONDS;

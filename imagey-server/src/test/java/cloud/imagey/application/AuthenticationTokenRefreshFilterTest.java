@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Optional;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Cookie;
@@ -37,7 +38,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import cloud.imagey.UserFactory;
+import cloud.imagey.domain.token.DecodedToken;
+import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 
 // Covers AuthenticationTokenRefreshFilter: an aging trusted session cookie is slid forward on
@@ -88,6 +92,24 @@ public class AuthenticationTokenRefreshFilterTest {
             .build();
 
         assertThat(requestPublicKey(untrusted).getHeaderString("Set-Cookie")).isNull();
+    }
+
+    @Test
+    @DisplayName("The device a session is bound to is carried over when the cookie is re-issued")
+    void deviceClaimSurvivesRefresh() {
+        DeviceId device = new DeviceId("device-1");
+        Cookie bound = new Cookie.Builder("token")
+            .value(tokenService.generateAuthenticationToken(mary, TokenService.ONE_HOUR, true, Optional.of(device)).token())
+            .build();
+
+        assertThat(refreshedToken(requestPublicKey(bound)).device()).contains(device);
+        assertThat(refreshedToken(requestPublicKey(trustedCookie(TokenService.ONE_HOUR))).device()).isEmpty();
+    }
+
+    private DecodedToken refreshedToken(Response response) {
+        String cookie = response.getHeaderString("Set-Cookie");
+        String value = cookie.substring("token=".length(), cookie.indexOf(';'));
+        return tokenService.decode(new Token(value)).orElseThrow();
     }
 
     private Cookie trustedCookie(long validity) {

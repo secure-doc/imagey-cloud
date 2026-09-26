@@ -1,5 +1,6 @@
 import { authenticationRepository } from "../authentication/AuthenticationRepository";
 import { cryptoService } from "../authentication/CryptoService";
+import { authenticationService } from "../authentication/AuthenticationService";
 import { deviceRepository } from "./DeviceRepository";
 import { Device, DeviceInfo, describeThisDevice } from "./DeviceInfo";
 
@@ -127,18 +128,25 @@ export const deviceService = {
     info: DeviceInfo,
     name: string,
     privateMainKey: JsonWebKey,
+    privateDeviceKeyOfThisDevice: JsonWebKey,
   ): Promise<DeviceInfo> => {
     const renamed = { ...info, name };
-    await authenticationRepository.storeDeviceInfo(
+    const encryptedInfo = await deviceService.encryptDeviceInfo(
+      renamed,
+      privateMainKey,
+      publicDeviceKey,
       userId,
       deviceId,
-      await deviceService.encryptDeviceInfo(
-        renamed,
-        privateMainKey,
-        publicDeviceKey,
-        userId,
-        deviceId,
-      ),
+    );
+    await authenticationService.withBoundSession(
+      userId,
+      privateDeviceKeyOfThisDevice,
+      () =>
+        authenticationRepository.storeDeviceInfo(
+          userId,
+          deviceId,
+          encryptedInfo,
+        ),
     );
     return renamed;
   },
@@ -161,11 +169,16 @@ export const deviceService = {
       publicDeviceKey,
       privateDeviceKeyOfThisDevice,
     );
-    return authenticationRepository.storePrivateMainKey(
+    return authenticationService.withBoundSession(
       userId,
-      thisDeviceId,
-      deviceId,
-      encryptedPrivateMainKey,
+      privateDeviceKeyOfThisDevice,
+      () =>
+        authenticationRepository.storePrivateMainKey(
+          userId,
+          thisDeviceId,
+          deviceId,
+          encryptedPrivateMainKey,
+        ),
     );
   },
   unlockLocalDeviceKey: async (deviceId: string, devicePassword: string) => {
