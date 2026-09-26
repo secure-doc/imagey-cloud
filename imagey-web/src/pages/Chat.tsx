@@ -179,7 +179,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const displayName =
     contactName ||
     contactDisplayName(contactUserId, contact ?? {}, t("Unknown contact"));
-  useTitle(displayName);
+  useTitle(displayName, contactAvatarUrl ?? "");
 
   useEffect(() => {
     if (!contactUserId || !privateKey || !chatsDocumentKey) {
@@ -252,24 +252,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           </div>
         ) : (
           <>
-            <div
-              className="row padding"
-              style={{ alignItems: "center", gap: "0.5rem" }}
-            >
-              {contactAvatarUrl ? (
-                <img
-                  src={contactAvatarUrl}
-                  alt={displayName}
-                  className="circle small"
-                />
-              ) : (
-                <div className="circle surface center-align middle-align small">
-                  {displayName.charAt(0).toLocaleUpperCase()}
-                </div>
-              )}
-              <h6 className="no-margin">{displayName}</h6>
-            </div>
-            <hr className="divider" />
             <div
               className="scroll padding vertical"
               style={{

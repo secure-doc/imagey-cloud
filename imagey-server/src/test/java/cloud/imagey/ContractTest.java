@@ -62,6 +62,7 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.domain.user.UserId;
 import cloud.imagey.infrastructure.common.KeyFileCrypto;
@@ -103,9 +104,12 @@ public class ContractTest {
 
     private TokenState tokenState = VALID_TOKEN;
     private User user;
+    // The device the session cookie is bound to (ADR 0018); empty like a session from an emailed link.
+    private Optional<DeviceId> sessionDevice = Optional.empty();
 
     @BeforeEach
     void before(PactVerificationContext context) throws IOException {
+        sessionDevice = Optional.empty();
         context.setTarget(fromUrl(create("http://localhost:" + config.getHttpPort()).toURL()));
         File data = new File(rootPath);
         if (data.exists()) {
@@ -339,6 +343,23 @@ public class ContractTest {
         copyURLToFile(ContractTest.class.getResource("/second-device-public-key.json"), secondPublicKey);
         copyURLToFile(ContractTest.class.getResource("/second-device-info.txt"), new File(secondDevice, "info.txt"));
 
+    }
+
+    // Mary's first device is activated by the fixture data, her second one is not (ADR 0018).
+    @State("mary is signed in with her first device")
+    void maryIsSignedInWithHerFirstDevice() {
+        sessionDevice = Optional.of(new DeviceId("1fd4f9f5-4b06-4cf3-8e86-a2e609a8e30c"));
+    }
+
+    @State("mary is signed in with her second device")
+    void maryIsSignedInWithHerSecondDevice() {
+        sessionDevice = Optional.of(new DeviceId("00b7d225-202c-4ab9-8efc-36e6f3afb169"));
+    }
+
+    @State("marys second device registered without info")
+    void marysSecondDeviceRegisteredWithoutInfo() throws URISyntaxException, IOException {
+        marysSecondDeviceRegistered();
+        deleteQuietly(new File(rootPath, "d20cf443-4f96-418f-a957-c8cbef8677c3/devices/00b7d225-202c-4ab9-8efc-36e6f3afb169/info.txt"));
     }
 
     @State("marys second device registered with recovery key")
@@ -696,7 +717,7 @@ public class ContractTest {
         }
         Optional<User> extractedUser = extractUser(request);
         long validity = tokenState == VALID_TOKEN ? ONE_DAY : -1;
-        return extractedUser.map(u -> tokenService.generateAuthenticationToken(u, validity));
+        return extractedUser.map(u -> tokenService.generateAuthenticationToken(u, validity, false, sessionDevice));
     }
 
     private Optional<User> extractUser(HttpRequest request) {

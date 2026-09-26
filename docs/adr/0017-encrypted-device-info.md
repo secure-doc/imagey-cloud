@@ -80,12 +80,10 @@ device has to be able to read and change that description later.
   activation; only those can be activated from the list.
 - The server learns when a device is renamed (the file changes) and can
   withhold, delete or replay an older info blob, but cannot read or forge one.
-- So can any `owner` session: sessions are not bound to a device yet, so the
-  server cannot tell a session of an activated device from one that only
-  went through the email login. Such a session can overwrite the info of any
-  registered device with garbage (the device is then listed by its id) or with
-  an older blob (an older name), but cannot forge a name. Device-bound
-  sessions are planned together with the verification code below.
+- So could any `owner` session, until sessions became device-bound (ADR
+  0018): now only a session bound to an activated device may rewrite an
+  existing info. A session from the mailbox alone can still write the first
+  info of a device that is not activated yet (see next point).
 - The info of a device that is **not activated yet** is self-asserted by that
   device. Someone who gets hold of an owner session (e.g. through the user's
   mailbox) can register a device and call it like one of the user's own. The

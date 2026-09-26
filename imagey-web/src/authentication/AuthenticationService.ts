@@ -228,29 +228,23 @@ export const authenticationService = {
       return Promise.reject("Failed to request challenge");
     }
   },
-  authenticateWithChallenge: async (
+  // Proves possession of the device key and swaps the session cookie for one
+  // bound to that device (ADR 0018).
+  answerChallenge: async (
     userId: UserId,
     deviceId: DeviceId,
-    password: Password,
-    trustedDevice: boolean = false,
-  ): Promise<{ privateMainKey: JsonWebKey; privateDeviceKey: JsonWebKey }> => {
-    const challenge = await authenticationService.requestChallenge(
-      userId,
-      deviceId,
-    );
-    const serverPublicKey = challenge.ephemeralPublicKey;
-
-    const privateDeviceKey = await deviceService.unlockLocalDeviceKey(
-      deviceId,
-      password,
-    );
-
+    privateDeviceKey: JsonWebKey,
+    trustedDevice: boolean | "keep",
+    challenge?: { nonce: Nonce; ephemeralPublicKey: JsonWebKey },
+  ): Promise<void> => {
+    const { nonce, ephemeralPublicKey } =
+      challenge ??
+      (await authenticationService.requestChallenge(userId, deviceId));
     const signature = await cryptoService.encryptChallengeNonce(
-      challenge.nonce,
-      serverPublicKey,
+      nonce,
+      ephemeralPublicKey,
       privateDeviceKey,
     );
-
     try {
       await authenticationRepository.authenticateWithChallenge(
         userId,
@@ -261,6 +255,66 @@ export const authenticationService = {
     } catch {
       return Promise.reject("Authentication failed");
     }
+  },
+  // Binds the current session to this device without the password (the private
+  // device key is in memory after unlock). The server keeps the trusted state
+  // of the session being replaced (neither downgrading a trusted session nor
+  // upgrading an email-link one) and - unlike a sign-in - the recovery key is
+  // not rotated.
+  bindSession: async (
+    userId: UserId,
+    privateDeviceKey: JsonWebKey,
+  ): Promise<void> => {
+    const deviceId = deviceRepository.loadDeviceId(userId);
+    if (!deviceId) {
+      return Promise.reject("deviceId not found");
+    }
+    await authenticationService.answerChallenge(
+      userId,
+      deviceId,
+      privateDeviceKey,
+      "keep",
+    );
+  },
+  // Runs a write that needs a device-bound session (ADR 0018). If the server
+  // rejects it with 403 the session is bound to this device and the write is
+  // retried once; any other error, or a second 403, is passed on.
+  withBoundSession: async <T>(
+    userId: UserId,
+    privateDeviceKey: JsonWebKey,
+    write: () => Promise<T>,
+  ): Promise<T> => {
+    try {
+      return await write();
+    } catch (e) {
+      if (e !== ResponseError.FORBIDDEN) {
+        throw e;
+      }
+    }
+    await authenticationService.bindSession(userId, privateDeviceKey);
+    return write();
+  },
+  authenticateWithChallenge: async (
+    userId: UserId,
+    deviceId: DeviceId,
+    password: Password,
+    trustedDevice: boolean = false,
+  ): Promise<{ privateMainKey: JsonWebKey; privateDeviceKey: JsonWebKey }> => {
+    const challenge = await authenticationService.requestChallenge(
+      userId,
+      deviceId,
+    );
+    const privateDeviceKey = await deviceService.unlockLocalDeviceKey(
+      deviceId,
+      password,
+    );
+    await authenticationService.answerChallenge(
+      userId,
+      deviceId,
+      privateDeviceKey,
+      trustedDevice,
+      challenge,
+    );
 
     if (trustedDevice) {
       const recoveryKeyArray = new Uint8Array(32);

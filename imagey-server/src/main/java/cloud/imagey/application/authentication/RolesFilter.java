@@ -89,6 +89,7 @@ public class RolesFilter implements ContainerRequestFilter {
         Optional<DecodedToken> decodedToken = cookie
             .flatMap(c -> tokenService.decode(new Token(c.getValue())))
             .filter(token -> token.isOfType(TokenType.AUTHENTICATION));
+        SessionDevice.set(request, decodedToken.flatMap(DecodedToken::device));
         setupPrincipal(requestContext, decodedToken);
     }
 

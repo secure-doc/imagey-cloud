@@ -1226,6 +1226,7 @@ test("existing user authenticates via challenge-response and selects keep me log
   await provider
     .addInteraction()
     .given("marys second device registered")
+    .given("mary is signed in with her first device")
     .uponReceiving("a request to store recovery key")
     .withRequest(
       "POST",
@@ -1441,6 +1442,7 @@ test("device unlock with keep me logged in stores a recovery key and a persisten
   await provider
     .addInteraction()
     .given("marys second device registered")
+    .given("mary is signed in with her first device")
     .uponReceiving("a request to store recovery key from device setup")
     .withRequest(
       "POST",

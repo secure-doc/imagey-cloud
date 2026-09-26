@@ -35,6 +35,7 @@ export default function DeviceRenameDialog({
         info,
         name.trim(),
         authentication.keyPairs.mainKeyPair.privateKey,
+        authentication.keyPairs.deviceKeyPair.privateKey,
       )
       .then(() => onRenamed())
       .catch((e) => {

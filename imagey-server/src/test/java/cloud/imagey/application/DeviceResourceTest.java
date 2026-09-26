@@ -19,6 +19,7 @@ package cloud.imagey.application;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
 import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
+import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static java.lang.Integer.MAX_VALUE;
@@ -31,6 +32,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
@@ -53,6 +55,7 @@ import org.junit.jupiter.api.Test;
 
 import cloud.imagey.UserFactory;
 import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.user.DeviceId;
 import cloud.imagey.junit.GreenMail;
 
 // Covers the device list (activation status and encrypted info, ADR 0017) and storing a device's
@@ -106,9 +109,11 @@ public class DeviceResourceTest {
     @Test
     @DisplayName("Storing a device's info replaces the previous one")
     public void storeDeviceInfo() {
+        // The first info of a pending device comes from the email session, every later one from
+        // a session bound to an activated device (ADR 0018).
         assertThat(request("/" + SECOND_DEVICE + "/info").put(json("\"Zmlyc3Q=\"")).getStatus())
             .isEqualTo(OK.getStatusCode());
-        assertThat(request("/" + SECOND_DEVICE + "/info").put(json("\"cmVuYW1lZA==\"")).getStatus())
+        assertThat(requestBoundTo(FIRST_DEVICE, "/" + SECOND_DEVICE + "/info").put(json("\"cmVuYW1lZA==\"")).getStatus())
             .isEqualTo(OK.getStatusCode());
 
         assertThat(new File(secondDevice(), "info.txt")).hasContent("cmVuYW1lZA==");
@@ -134,13 +139,100 @@ public class DeviceResourceTest {
         assertThat(new File(secondDevice(), "info.txt")).doesNotExist();
     }
 
+    @Test
+    @DisplayName("A session bound to an activated device may rewrite the info of any device")
+    public void boundSessionStoresInfo() {
+        assertThat(requestBoundTo(FIRST_DEVICE, "/" + FIRST_DEVICE + "/info").put(json("\"Zmlyc3Q=\"")).getStatus())
+            .isEqualTo(OK.getStatusCode());
+        assertThat(requestBoundTo(FIRST_DEVICE, "/" + SECOND_DEVICE + "/info").put(json("\"Zmlyc3Q=\"")).getStatus())
+            .isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A session without a device cannot overwrite the info of an activated device or of one that has an info")
+    public void unboundSessionCannotOverwriteInfo() throws IOException {
+        assertThat(request("/" + FIRST_DEVICE + "/info").put(json("\"Zmlyc3Q=\"")).getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+
+        copyURLToFile(DeviceResourceTest.class.getResource("/second-device-info.txt"), new File(secondDevice(), "info.txt"));
+        assertThat(request("/" + SECOND_DEVICE + "/info").put(json("\"Zmlyc3Q=\"")).getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A session bound to a pending device cannot rewrite the info of an activated device")
+    public void pendingDeviceSessionCannotOverwriteInfoOfActivatedDevice() {
+        assertThat(requestBoundTo(SECOND_DEVICE, "/" + FIRST_DEVICE + "/info").put(json("\"Zmlyc3Q=\"")).getStatus())
+            .isEqualTo(FORBIDDEN.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A session bound to an activated device activates a pending device in its own name")
+    public void boundSessionActivatesDevice() {
+        Response response = requestBoundTo(FIRST_DEVICE, "/" + SECOND_DEVICE + "/private-keys")
+            .post(json(privateKey(FIRST_DEVICE)));
+
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(new File(secondDevice(), "private-keys/0.json")).content()
+            .contains("\"encryptingDeviceId\": \"" + FIRST_DEVICE + "\"", "\"key\": \"a2V5\"");
+    }
+
+    @Test
+    @DisplayName("Activating a device needs a session bound to the encrypting, activated device")
+    public void activationNeedsMatchingBoundSession() {
+        String path = "/" + SECOND_DEVICE + "/private-keys";
+
+        assertThat(request(path).post(json(privateKey(FIRST_DEVICE))).getStatus())
+            .as("unbound").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(requestBoundTo(SECOND_DEVICE, path).post(json(privateKey(SECOND_DEVICE))).getStatus())
+            .as("bound to a pending device").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(requestBoundTo(FIRST_DEVICE, path).post(json(privateKey(SECOND_DEVICE))).getStatus())
+            .as("encrypting device is not the session device").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(new File(secondDevice(), "private-keys")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("The private key of an unregistered device is rejected before anything is written")
+    public void activateUnregisteredDevice() {
+        Response response = requestBoundTo(FIRST_DEVICE, "/00000000-0000-0000-0000-000000000000/private-keys")
+            .post(json(privateKey(FIRST_DEVICE)));
+
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+        assertThat(new File(rootPath, MARY + "/devices/00000000-0000-0000-0000-000000000000")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("Only a session bound to the device itself may store its recovery key")
+    public void recoveryKeyNeedsSessionOfTheDevice() {
+        String path = "/" + FIRST_DEVICE + "/recovery-key";
+        File recoveryKey = new File(rootPath, MARY + "/devices/" + FIRST_DEVICE + "/recovery-key.txt");
+
+        assertThat(request(path).post(json("\"key\"")).getStatus()).as("unbound").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(requestBoundTo(SECOND_DEVICE, path).post(json("\"key\"")).getStatus())
+            .as("bound to another device").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(recoveryKey).doesNotExist();
+
+        assertThat(requestBoundTo(FIRST_DEVICE, path).post(json("\"key\"")).getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(recoveryKey).hasContent("\"key\"");
+    }
+
+    private static String privateKey(String encryptingDeviceId) {
+        return "{\"kid\":\"0\",\"encryptingDeviceId\":\"" + encryptingDeviceId + "\",\"key\":\"a2V5\"}";
+    }
+
     private File secondDevice() {
         return new File(rootPath, MARY + "/devices/" + SECOND_DEVICE);
     }
 
     private Invocation.Builder request(String path) {
+        return request(path, Optional.empty());
+    }
+
+    private Invocation.Builder requestBoundTo(String deviceId, String path) {
+        return request(path, Optional.of(new DeviceId(deviceId)));
+    }
+
+    private Invocation.Builder request(String path, Optional<DeviceId> device) {
         Cookie marysToken = new Cookie.Builder("token")
-            .value(tokenService.generateAuthenticationToken(UserFactory.mary(), MAX_VALUE).token())
+            .value(tokenService.generateAuthenticationToken(UserFactory.mary(), MAX_VALUE, false, device).token())
             .build();
         return newClient()
             .target("http://localhost:" + config.getHttpPort())
