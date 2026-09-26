@@ -1,3 +1,4 @@
+import { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
@@ -15,6 +16,8 @@ import {
   optOutOfKeepLoggedIn,
   prepareMarysDevices,
   prepareMarysNewDeviceInfo,
+  prepareMarysSessionBinding,
+  rejectOnceAsUnbound,
 } from "./setup";
 import { MatchersV2 as Matchers } from "@pact-foundation/pact";
 
@@ -144,7 +147,13 @@ test("mary registers new device", async ({ page }) => {
     });
 });
 
-test("mary unlocks new device", async ({ page }) => {
+// "activates": the write is accepted. "binds": the first attempt is rejected as
+// coming from an unbound session (ADR 0018), the session is bound to this
+// device and the retry succeeds. "refused": the server never accepts it.
+async function unlockNewDevice(
+  page: Page,
+  mode: "activates" | "binds" | "refused",
+) {
   // Given
   await prepareMarysLogin(page);
   await prepareMarysContactRequests();
@@ -167,11 +176,18 @@ test("mary unlocks new device", async ({ page }) => {
       r.jsonBody(TestData.mary.devices[1].publicDeviceKey),
     );
 
-  await provider
-    .addInteraction()
-    .given("marys second device registered")
+  if (mode === "binds") {
+    prepareMarysSessionBinding();
+  }
+  let store = provider.addInteraction().given("marys second device registered");
+  if (mode !== "refused") {
+    store = store.given("mary is signed in with her first device");
+  }
+  await store
     .uponReceiving(
-      "a request of mary to store encrypted private main key for second device",
+      mode === "refused"
+        ? "a request of mary to store encrypted private main key without a bound session"
+        : "a request of mary to store encrypted private main key for second device",
     )
     .withRequest(
       "POST",
@@ -185,10 +201,18 @@ test("mary unlocks new device", async ({ page }) => {
           ),
         }),
     )
-    .willRespondWith(200)
+    .willRespondWith(mode === "refused" ? 403 : 200)
     .executeTest(async (mockServer) => {
       // When
       await setupMockServer(page, mockServer);
+      if (mode === "binds") {
+        await rejectOnceAsUnbound(page, "**/devices/*/private-keys/");
+      } else if (mode === "refused") {
+        // The session cannot be bound, so the write is not retried.
+        await page.route("**/challenges", (route) =>
+          route.fulfill({ status: 500 }),
+        );
+      }
       await page.addInitScript(() => {
         const originalDecrypt = crypto.subtle.decrypt.bind(crypto.subtle);
         crypto.subtle.decrypt = async function (algorithm, key, data) {
@@ -238,18 +262,49 @@ test("mary unlocks new device", async ({ page }) => {
       ).toBeVisible();
       // Activating reloads the device list; wait for that reload so the mock
       // server is not torn down while it is still in flight.
-      const reload = page.waitForResponse(
-        (response) =>
-          response.request().method() === "GET" &&
-          response.url().endsWith("/devices"),
-      );
+      const reload =
+        mode === "refused"
+          ? undefined
+          : page.waitForResponse(
+              (response) =>
+                response.request().method() === "GET" &&
+                response.url().endsWith("/devices"),
+            );
+      const challenges: string[] = [];
+      page.on("request", (request) => {
+        if (request.url().endsWith("/challenges")) {
+          challenges.push(request.url());
+        }
+      });
       await page.getByRole("button", { name: "Confirm" }).click();
 
       // Then
+      if (mode === "refused") {
+        await expect(page.getByText("Error activating device")).toBeVisible();
+        await expect.poll(() => runningPactRequests).toBe(0);
+        return;
+      }
       await expect(question).not.toBeVisible();
       await reload;
+      expect(challenges.length).toBe(mode === "binds" ? 1 : 0);
       await expect.poll(() => runningPactRequests).toBe(0);
     });
+}
+
+test("mary unlocks new device", async ({ page }) => {
+  await unlockNewDevice(page, "activates");
+});
+
+test("mary unlocks new device after her session was bound to her device", async ({
+  page,
+}) => {
+  await unlockNewDevice(page, "binds");
+});
+
+test("mary cannot unlock a new device with a session that is not bound to a device", async ({
+  page,
+}) => {
+  await unlockNewDevice(page, "refused");
 });
 
 test("mary logs into new device", async ({ page }) => {

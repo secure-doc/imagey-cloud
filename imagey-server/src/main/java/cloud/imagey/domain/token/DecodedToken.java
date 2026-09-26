@@ -22,6 +22,7 @@ import java.util.Optional;
 import com.nimbusds.jwt.JWTClaimsSet;
 
 import cloud.imagey.domain.token.TokenService.TokenType;
+import cloud.imagey.domain.user.DeviceId;
 
 public record DecodedToken(JWTClaimsSet jwt) {
 
@@ -37,6 +38,18 @@ public record DecodedToken(JWTClaimsSet jwt) {
     /** Whether this token is of the expected {@link TokenType}. */
     public boolean isOfType(TokenType expected) {
         return type().filter(expected::equals).isPresent();
+    }
+
+    /**
+     * The device this session is bound to (ADR 0018), or empty for a session that comes from an
+     * emailed link. A missing or non-string claim counts as unbound.
+     */
+    public Optional<DeviceId> device() {
+        try {
+            return Optional.ofNullable(jwt.getStringClaim(TokenService.DEVICE_CLAIM)).map(DeviceId::new);
+        } catch (ParseException e) {
+            return Optional.empty();
+        }
     }
 
     /**

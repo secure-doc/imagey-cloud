@@ -85,6 +85,6 @@ public class AuthenticationTokenRefreshFilter implements ContainerResponseFilter
         }
         User user = new User(new UserId(decoded.get().jwt().getSubject()));
         LOG.info("Refreshing trusted authentication cookie");
-        responseContext.getHeaders().add("Set-Cookie", tokenService.authenticationCookie(user, true));
+        responseContext.getHeaders().add("Set-Cookie", tokenService.authenticationCookie(user, true, decoded.get().device()));
     }
 }

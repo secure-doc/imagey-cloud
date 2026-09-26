@@ -77,6 +77,10 @@ test("create folder", async ({ page }) => {
 
     const addMenuButton = page.locator("*[aria-label='add-menu']");
     await expect(addMenuButton).toBeVisible();
+    // Until the folder is loaded the button is a plain "create folder" one
+    // without menu (see useFolderActionIcons); clicking it then never opens the
+    // menu, so wait for the menu to be rendered.
+    await expect(page.locator("text='Upload Document'")).toBeAttached();
     await addMenuButton.click();
 
     const createFolderButton = page.locator("text='Create Folder'");
@@ -246,6 +250,10 @@ test("navigating into a freshly created folder shows its empty state, not a stuc
 
     const addMenuButton = page.locator("*[aria-label='add-menu']");
     await expect(addMenuButton).toBeVisible();
+    // Until the folder is loaded the button is a plain "create folder" one
+    // without menu (see useFolderActionIcons); clicking it then never opens the
+    // menu, so wait for the menu to be rendered.
+    await expect(page.locator("text='Upload Document'")).toBeAttached();
     await addMenuButton.click();
     await page.locator("text='Create Folder'").click();
     await page.getByRole("textbox").fill("My Vacation");

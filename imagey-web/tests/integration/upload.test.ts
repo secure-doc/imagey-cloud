@@ -43,6 +43,10 @@ test("upload image", async ({ page }) => {
 
     const addMenuButton = page.locator("*[aria-label='add-menu']");
     await expect(addMenuButton).toBeVisible();
+    // Until the folder is loaded the button is a plain "create folder" one
+    // without menu (see useFolderActionIcons); clicking it then never opens the
+    // menu, so wait for the menu to be rendered.
+    await expect(page.locator("text='Upload Document'")).toBeAttached();
     await addMenuButton.click();
 
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -86,6 +90,10 @@ test("upload portrait", async ({ page }) => {
 
     const addMenuButton = page.locator("*[aria-label='add-menu']");
     await expect(addMenuButton).toBeVisible();
+    // Until the folder is loaded the button is a plain "create folder" one
+    // without menu (see useFolderActionIcons); clicking it then never opens the
+    // menu, so wait for the menu to be rendered.
+    await expect(page.locator("text='Upload Document'")).toBeAttached();
     await addMenuButton.click();
 
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -129,6 +137,10 @@ test("upload small image", async ({ page }) => {
 
     const addMenuButton = page.locator("*[aria-label='add-menu']");
     await expect(addMenuButton).toBeVisible();
+    // Until the folder is loaded the button is a plain "create folder" one
+    // without menu (see useFolderActionIcons); clicking it then never opens the
+    // menu, so wait for the menu to be rendered.
+    await expect(page.locator("text='Upload Document'")).toBeAttached();
     await addMenuButton.click();
 
     const fileChooserPromise = page.waitForEvent("filechooser");
