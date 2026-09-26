@@ -2,6 +2,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useObjectUrl } from "../hooks/useObjectUrl";
 
+// A fixed square: BeerCSS's `responsive` would stretch the width to the
+// container while keeping a fixed height, squashing the circle into an oval.
+const PICTURE_SIZE = { inlineSize: "8rem", blockSize: "8rem" };
+
 export default function ProfilePicturePanel({
   picture,
   onPictureChange,
@@ -30,10 +34,14 @@ export default function ProfilePicturePanel({
           <img
             src={pictureUrl}
             alt="Avatar"
-            className="circle responsive small"
+            className="circle"
+            style={PICTURE_SIZE}
           />
         ) : (
-          <div className="circle surface center-align middle-align responsive small">
+          <div
+            className="circle surface center-align middle-align"
+            style={{ ...PICTURE_SIZE, margin: "0 auto" }}
+          >
             <i className="extra">person</i>
           </div>
         )}
