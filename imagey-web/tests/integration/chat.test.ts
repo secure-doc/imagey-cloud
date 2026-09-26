@@ -865,9 +865,9 @@ test("view chat shows the contact's display name and avatar", async ({
     await lauraContact.click();
 
     // The chat header now shows Laura's display name, not her raw userId
-    // (heading appears twice: the app bar title and the in-panel header).
+    // (shown in the app bar together with the avatar).
     await expect(
-      page.getByRole("heading", { name: "Laura Doe" }).first(),
+      page.getByRole("heading", { name: "Laura Doe" }),
     ).toBeVisible();
     await expect(page.getByRole("img", { name: "Laura Doe" })).toBeVisible();
 

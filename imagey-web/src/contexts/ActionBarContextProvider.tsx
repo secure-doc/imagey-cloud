@@ -9,6 +9,7 @@ export function ActionBarContextProvider({
   const [actionIcons, setActionIcons] = useState<JSX.Element[]>([]);
   const [backButtonVisible, setBackButtonVisible] = useState<boolean>(false);
   const [title, setTitle] = useState<string | undefined>();
+  const [titleAvatar, setTitleAvatar] = useState<string | undefined>();
 
   // Memoized so that a re-render of App (e.g. from an unrelated FolderContext
   // update) doesn't hand every ActionBarContext consumer a brand-new value
@@ -21,8 +22,10 @@ export function ActionBarContextProvider({
       setBackButtonVisible,
       title,
       setTitle,
+      titleAvatar,
+      setTitleAvatar,
     }),
-    [actionIcons, backButtonVisible, title],
+    [actionIcons, backButtonVisible, title, titleAvatar],
   );
 
   return (
