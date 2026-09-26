@@ -1963,11 +1963,12 @@ export async function prepareMarysDevices() {
 
 // A newly registered device of mary stores its (encrypted) info right after
 // its public key; its id is generated in the browser, hence the regex. The
-// server only accepts it for a registered device, hence the state.
+// server only accepts it for a registered device that has no info yet (ADR 0018:
+// this is the one write an unbound email session may make), hence the state.
 export function prepareMarysNewDeviceInfo() {
   provider
     .addInteraction()
-    .given("marys second device registered")
+    .given("marys second device registered without info")
     .uponReceiving("a request of mary to store info of new device")
     .withRequest(
       "PUT",
@@ -1981,6 +1982,65 @@ export function prepareMarysNewDeviceInfo() {
           .jsonBody(Matchers.string(TestData.mary.devices[1].encryptedInfo!)),
     )
     .willRespondWith(200);
+}
+
+// A write that needs a device-bound session (ADR 0018) was rejected with 403:
+// the frontend answers a challenge of Mary's first device (this device) to bind
+// its session and retries. Binding must not touch the recovery key, so there is
+// deliberately no such interaction - the mock server would fail on the request.
+export function prepareMarysSessionBinding() {
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving("a request for a challenge to bind the session")
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/challenges`,
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({ "Content-Type": "application/json" }).jsonBody({
+        ephemeralPublicKey: Matchers.like({
+          crv: TestData.mary.publicMainKey.crv,
+          kty: TestData.mary.publicMainKey.kty,
+          x: TestData.mary.publicMainKey.x,
+          y: TestData.mary.publicMainKey.y,
+        }),
+        nonce: Matchers.like("some-random-nonce"),
+      }),
+    );
+  provider
+    .addInteraction()
+    .given("marys second device registered")
+    .uponReceiving("a request to bind the session with a challenge signature")
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/devices/${TestData.mary.devices[0].deviceId}/authentications`,
+      (r) =>
+        r
+          .query({ rebind: "true" })
+          .headers({ "Content-Type": "application/json" })
+          .jsonBody({ signature: Matchers.string("any-signature") }),
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({
+        "Set-Cookie": Matchers.string("Authorization=test-token; Path=/"),
+      }),
+    );
+}
+
+// Rejects the first request matching the URL pattern with 403 - as the server
+// does for a session that is not bound to a device yet - and lets every later
+// one through to the mock server. Registered after setupMockServer, so it takes
+// precedence over its catch-all proxy route.
+export async function rejectOnceAsUnbound(page: Page, urlPattern: string) {
+  let rejected = false;
+  await page.route(urlPattern, (route) => {
+    if (rejected) {
+      return route.fallback();
+    }
+    rejected = true;
+    return route.fulfill({ status: 403 });
+  });
 }
 
 // Mary's device list with her second device registered but not activated yet.

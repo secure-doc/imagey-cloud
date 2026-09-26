@@ -44,6 +44,8 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 import jakarta.inject.Inject;
+import jakarta.ws.rs.client.Invocation;
+import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
@@ -60,6 +62,11 @@ import com.nimbusds.jose.jwk.ECKey;
 import cloud.imagey.domain.authentication.ChallengeService;
 import cloud.imagey.domain.authentication.ChallengeService.ChallengeResponse;
 import cloud.imagey.domain.authentication.ChallengeSignature;
+import cloud.imagey.domain.token.Token;
+import cloud.imagey.domain.token.TokenService;
+import cloud.imagey.domain.user.DeviceId;
+import cloud.imagey.domain.user.User;
+import cloud.imagey.domain.user.UserId;
 
 @MonoMeecrowaveConfig
 public class ChallengeResourceTest {
@@ -73,6 +80,8 @@ public class ChallengeResourceTest {
 
     @Inject
     private ChallengeService challengeService;
+    @Inject
+    private TokenService tokenService;
 
     private KeyPair clientKeyPair;
     private String clientJwkString;
@@ -356,7 +365,12 @@ public class ChallengeResourceTest {
             .header("Origin", "https://secure-doc.store")
             .post(json(new ChallengeSignature(signatureBase64)))) {
             assertThat(verifyResponse.getStatus()).isEqualTo(OK.getStatusCode());
-            assertThat(verifyResponse.getHeaderString("Set-Cookie")).contains("token=");
+            String cookie = verifyResponse.getHeaderString("Set-Cookie");
+            assertThat(cookie).contains("token=");
+            // The session is bound to the device whose challenge was answered (ADR 0018).
+            String token = cookie.substring("token=".length(), cookie.indexOf(';'));
+            assertThat(tokenService.decode(new Token(token)).orElseThrow().device())
+                .contains(new DeviceId("known-device"));
         }
     }
 
@@ -412,5 +426,73 @@ public class ChallengeResourceTest {
             assertThat(verifyResponse.getHeaderString("Set-Cookie")).contains("token=");
             assertThat(verifyResponse.getHeaderString("Set-Cookie")).contains("Max-Age=2592000");
         }
+    }
+
+    @Test
+    @DisplayName("Re-binding keeps the trusted state of the current session")
+    void rebindKeepsTrustedStateOfCurrentSession() throws Exception {
+        User mary = new User(new UserId("mary@imagey.cloud"));
+        Cookie trusted = sessionCookie(mary, true);
+        Cookie untrusted = sessionCookie(mary, false);
+        Cookie foreign = sessionCookie(new User(new UserId("joe@imagey.cloud")), true);
+
+        assertThat(rebind(trusted)).contains("Max-Age=2592000");
+        assertThat(rebind(untrusted)).doesNotContain("Max-Age");
+        assertThat(rebind(null)).doesNotContain("Max-Age");
+        assertThat(rebind(foreign)).doesNotContain("Max-Age");
+    }
+
+    private Cookie sessionCookie(User user, boolean trusted) {
+        return new Cookie.Builder("token")
+            .value(tokenService.generateAuthenticationToken(user, TokenService.ONE_HOUR, trusted).token())
+            .build();
+    }
+
+    private String rebind(Cookie session) throws Exception {
+        String signature = signChallenge();
+        Invocation.Builder request = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/authentications")
+            .queryParam("rebind", true)
+            .request()
+            .header("Origin", "https://secure-doc.store");
+        if (session != null) {
+            request = request.cookie(session);
+        }
+        try (Response response = request.post(json(new ChallengeSignature(signature)))) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+            String cookie = response.getHeaderString("Set-Cookie");
+            String token = cookie.substring("token=".length(), cookie.indexOf(';'));
+            assertThat(tokenService.decode(new Token(token)).orElseThrow().device())
+                .contains(new DeviceId("known-device"));
+            return cookie;
+        }
+    }
+
+    private String signChallenge() throws Exception {
+        ChallengeResponse challenge;
+        try (Response createResponse = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/mary@imagey.cloud/devices/known-device/challenges")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(json(""))) {
+            assertThat(createResponse.getStatus()).isEqualTo(CREATED.getStatusCode());
+            challenge = createResponse.readEntity(ChallengeResponse.class);
+        }
+        PublicKey serverPubKey = ECKey.parse(challenge.ephemeralPublicKey()).toPublicKey();
+        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
+        ka.init(clientKeyPair.getPrivate());
+        ka.doPhase(serverPubKey, true);
+        SecretKey aesKey = new SecretKeySpec(Arrays.copyOf(ka.generateSecret(), 32), "AES");
+        byte[] iv = new byte[12];
+        new SecureRandom().nextBytes(iv);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(128, iv));
+        byte[] ciphertext = cipher.doFinal(challenge.nonce().getBytes(StandardCharsets.UTF_8));
+        byte[] combined = new byte[iv.length + ciphertext.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+        return Base64.getEncoder().encodeToString(combined);
     }
 }

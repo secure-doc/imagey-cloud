@@ -169,6 +169,17 @@ test("send empty message does not submit", async ({ page }) => {
     await page.getByRole("link", { name: "Chats" }).first().click();
     const aliceContact = page.getByText("Alice", { exact: true }).first();
     await expect(aliceContact).toBeVisible();
+    // The heading renders before the messages are requested; without waiting
+    // for that request the test can end (and the mock server go away) before
+    // it is made - see runningPactRequests race.
+    const messages = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .endsWith(
+            "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages",
+          ) && response.request().method() === "GET",
+    );
     await aliceContact.click();
 
     await expect(
@@ -177,6 +188,7 @@ test("send empty message does not submit", async ({ page }) => {
         exact: true,
       }),
     ).toBeVisible();
+    await messages;
 
     const input = page.getByLabel("Type a message");
 
