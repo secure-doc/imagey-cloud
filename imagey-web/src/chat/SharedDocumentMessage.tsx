@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useContext } from "react";
 import { useNavigate } from "react-router";
-import { ImageContext } from "../contexts/ImageContext";
+import { DetailContext } from "../contexts/DetailContext";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import ImageComponent from "../components/ImageComponent";
+import FileComponent from "../components/FileComponent";
+import { useOpenDocument } from "../hooks/useOpenDocument";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useDocumentsId } from "../contexts/SettingsContext";
 import {
@@ -13,6 +15,7 @@ import {
   useAccessPath,
   useKey,
 } from "../contexts/FolderContext";
+import { isPlayableMedia } from "../document/mediaTypes";
 
 interface SharedDocumentMessageProps {
   documentId: string;
@@ -37,7 +40,7 @@ export function SharedDocumentMessage({
   contactUserId,
   group,
 }: SharedDocumentMessageProps) {
-  const { registerImage } = useContext(ImageContext);
+  const { registerDetail } = useContext(DetailContext);
   const navigate = useNavigate();
   const { t } = useTranslation();
   const authentication = useAuthentication();
@@ -83,6 +86,7 @@ export function SharedDocumentMessage({
 
   const [document, setDocument] = useState<Document>();
   const [error, setError] = useState(false);
+  const { open: openFile, element: openFileElement } = useOpenDocument();
 
   useEffect(() => {
     if (user && parentId && parentKey) {
@@ -111,7 +115,8 @@ export function SharedDocumentMessage({
   const openImage =
     document.type === "image" && contactUserId
       ? () => {
-          registerImage({
+          registerDetail({
+            kind: "image",
             documentId: document.documentId,
             name: document.name,
             owner: document.owner,
@@ -119,6 +124,7 @@ export function SharedDocumentMessage({
             mediumImageId: document.mediumImageId,
             smallImageId: document.smallImageId,
             mimeType: document.mimeType,
+            contentId: document.contentId,
             accessPath,
           });
           navigate(
@@ -128,6 +134,50 @@ export function SharedDocumentMessage({
           );
         }
       : undefined;
+
+  if (document.type === "file") {
+    const doc = document;
+    // Audio/video in a 1:1 chat gets the in-app detail page, like images -
+    // a group's own conversation doesn't support detail pages yet (ADR
+    // 0019), so it falls through to download/share like any other file.
+    const openMedia =
+      isPlayableMedia(doc.mimeType) && contactUserId
+        ? () => {
+            registerDetail({
+              kind: "media",
+              documentId: doc.documentId,
+              name: doc.name,
+              owner: doc.owner,
+              documentKey: doc.key,
+              mimeType: doc.mimeType,
+              contentId: doc.contentId,
+              size: doc.size,
+              accessPath,
+            });
+            navigate(
+              `/media/${doc.documentId}?chat=${encodeURIComponent(
+                contactUserId,
+              )}&owner=${encodeURIComponent(doc.owner)}`,
+            );
+          }
+        : undefined;
+    return (
+      <div className="shared-document">
+        <FileComponent
+          name={doc.name}
+          mimeType={doc.mimeType}
+          onClick={
+            openMedia ??
+            (() =>
+              openFile(doc.name, doc.mimeType, () =>
+                documentService.loadContent(doc, doc.contentId, accessPath),
+              ))
+          }
+        />
+        {openFileElement}
+      </div>
+    );
+  }
 
   return (
     <div className="shared-document">

@@ -1,43 +1,38 @@
-import { useContext, useEffect, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useSearchParams } from "react-router";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
-import { useUser } from "../contexts/AuthenticationContext";
-import {
-  FolderContext,
-  useAccessPath,
-  useKey,
-} from "../contexts/FolderContext";
-import { ImageInfo, useImageInfo } from "../contexts/ImageContext";
-import { useDocumentsId } from "../contexts/SettingsContext";
+import { ImageInfo, useDetailInfo } from "../contexts/DetailContext";
+import Document from "../document/Document";
 import { documentService } from "../document/DocumentService";
-import { useChatKey } from "../hooks/useChatKey";
+import { useDownloadAction } from "../hooks/useDownloadAction";
 import { useImageBlob } from "../hooks/useImageBlob";
+import {
+  useDetailBackPath,
+  useResolvedDetail,
+} from "../hooks/useResolvedDetail";
 
 // The detail view of one image (the medium image, not the original). The
-// caller registers what it already knows in the ImageContext; after a reload
-// or deep link the registry is empty and the document is resolved again from
-// the `folder` or `chat` (+ `owner`) query parameter, which only carry ids.
+// caller registers what it already knows in the DetailContext; after a
+// reload or deep link the registry is empty and the document is resolved
+// again from the `folder` or `chat` (+ `owner`) query parameter, which only
+// carry ids.
 export default function Image() {
   const { t } = useTranslation();
   const { id = "" } = useParams();
   const [params] = useSearchParams();
   const folder = params.get("folder");
   const chat = params.get("chat");
-  const backPath = folder
-    ? `/documents/${folder}`
-    : chat
-      ? `/chats/${chat}`
-      : undefined;
-  useBackButton(backPath);
+  useBackButton(useDetailBackPath(folder, chat));
 
-  const registered = useImageInfo(id);
-  const { info, failed } = useResolvedImage(
+  const registered = useDetailInfo(id, "image");
+  const { info, failed } = useResolvedDetail(
     id,
     registered,
     folder,
     chat,
     params.get("owner"),
+    toImageInfo,
   );
   useTitle(info?.name);
 
@@ -55,86 +50,25 @@ export default function Image() {
   );
 }
 
-function useResolvedImage(
-  id: string,
-  registered: ImageInfo | undefined,
-  folder: string | null,
-  chat: string | null,
-  ownerParam: string | null,
-): { info?: ImageInfo; failed: boolean } {
-  const user = useUser();
-  const documentsId = useDocumentsId();
-  const needsResolving = !registered;
-  // After a reload only the root folder's parent is known again (App.tsx); the
-  // key of a sub-folder can't be derived, so its images can't be resolved.
-  const { folders } = useContext(FolderContext);
-  const folderUnresolvable =
-    !!folder && folder !== documentsId && !folders[folder]?.parentId;
-
-  const owner = folder ? user : (ownerParam ?? "");
-  const isOwner = owner === user;
-
-  // Both keys are resolved unconditionally (rules of hooks) and the one that
-  // matches the entry point is used. Only a non-owner needs the chat key: the
-  // owner reaches the document through their own root folder.
-  const folderKey = useKey(folder ?? "");
-  const rootFolderKey = useKey(documentsId);
-  const { key: chatKey, failed: chatKeyFailed } = useChatKey(
-    needsResolving && !isOwner ? chat : null,
-  );
-
-  const parentId = folder ? folder : isOwner ? documentsId : user;
-  const parentKey = folder ? folderKey : isOwner ? rootFolderKey : chatKey;
-  const accessPath = useAccessPath(id, owner);
-
-  const [loaded, setLoaded] = useState<{ id: string; info?: ImageInfo }>();
-
-  const canResolve =
-    needsResolving && !folderUnresolvable && !!(folder || (chat && ownerParam));
-  useEffect(() => {
-    if (!canResolve || !parentKey) {
-      return;
-    }
-    let cancelled = false;
-    documentService
-      .loadDocument(owner, id, parentId, parentKey, undefined, accessPath)
-      .then((doc) => {
-        if (cancelled) {
-          return;
-        }
-        setLoaded({
-          id,
-          info:
-            doc.type === "image"
-              ? {
-                  documentId: doc.documentId,
-                  name: doc.name,
-                  owner: doc.owner,
-                  documentKey: doc.key,
-                  mediumImageId: doc.mediumImageId,
-                  smallImageId: chat ? doc.smallImageId : undefined,
-                  mimeType: doc.mimeType,
-                  accessPath,
-                }
-              : undefined,
-        });
-      })
-      .catch(() => !cancelled && setLoaded({ id }));
-    return () => {
-      cancelled = true;
-    };
-  }, [canResolve, owner, id, parentId, parentKey, accessPath, chat]);
-
-  if (registered) {
-    return { info: registered, failed: false };
-  }
-  if (loaded?.id === id && loaded.info) {
-    return { info: loaded.info, failed: false };
-  }
-  return {
-    failed: !canResolve || loaded?.id === id || (!!chat && chatKeyFailed),
-  };
-}
+const toImageInfo = (
+  doc: Document,
+  accessPath: string | undefined,
+  fromChat: boolean,
+): ImageInfo | undefined =>
+  doc.type === "image"
+    ? {
+        kind: "image",
+        documentId: doc.documentId,
+        name: doc.name,
+        owner: doc.owner,
+        documentKey: doc.key,
+        mediumImageId: doc.mediumImageId,
+        smallImageId: fromChat ? doc.smallImageId : undefined,
+        mimeType: doc.mimeType,
+        contentId: doc.contentId,
+        accessPath,
+      }
+    : undefined;
 
 const imageStyle = {
   objectFit: "contain",
@@ -157,15 +91,55 @@ function useFileBlob(info: ImageInfo, fileId: string) {
   );
 }
 
+// Loads the original's contentId when it isn't already known (opened from a
+// folder, whose FolderEntry carries no contentId) - decrypts with the
+// document key already in hand, so this costs one metadata request and no
+// key request.
+async function loadContentId(info: ImageInfo): Promise<string> {
+  const doc = await documentService.loadDocumentWithKey(
+    info.owner,
+    info.documentId,
+    info.documentKey,
+    info.accessPath,
+  );
+  if (doc.type !== "image") {
+    throw new Error(`Expected an image document, got ${doc.type}`);
+  }
+  return doc.contentId;
+}
+
 function ImageView({ info }: { info: ImageInfo }) {
   const { t } = useTranslation();
   const { objectUrl, error } = useFileBlob(info, info.mediumImageId);
+
+  // The download action loads the ORIGINAL (not the displayed medium
+  // preview) only once clicked - it's a multiple of the preview's size and
+  // rarely needed, so it's never pre-loaded.
+  const downloadTarget = useMemo(
+    () => ({
+      name: info.name,
+      mimeType: info.mimeType,
+      load: async () => {
+        const contentId = info.contentId ?? (await loadContentId(info));
+        return documentService.loadFileContent(
+          info.owner,
+          info.documentId,
+          contentId,
+          info.documentKey,
+          info.accessPath,
+        );
+      },
+    }),
+    [info],
+  );
+  const downloadElement = useDownloadAction(downloadTarget);
 
   return (
     <main
       className="center-align middle-align"
       style={{ background: "black", padding: 0 }}
     >
+      {downloadElement}
       {objectUrl ? (
         <img src={objectUrl} alt={info.name} style={imageStyle} />
       ) : error ? (

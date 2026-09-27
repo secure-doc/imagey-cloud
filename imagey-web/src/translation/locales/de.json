@@ -1,6 +1,9 @@
 {
   "translation": {
     "{{browser}} on {{os}}": "{{browser}} auf {{os}}",
+    "{{name}} cannot be played in the browser": "{{name}} kann im Browser nicht abgespielt werden",
+    "{{name}} is ready": "{{name}} ist bereit",
+    "{{name}} is too large to play": "{{name}} ist zu groß für die Wiedergabe",
     "{{user}} whants to connect with you.": "{{user}} möchte sich mit dir verbinden.",
     "Activate device?": "Gerät freischalten?",
     "Add": "Hinzufügen",
@@ -23,6 +26,7 @@
     "Could not load your chats. Retrying...": "Deine Chats konnten nicht geladen werden. Neuer Versuch...",
     "Could not load your images. Retrying...": "Deine Bilder konnten nicht geladen werden. Neuer Versuch...",
     "Could not load your profile. Retrying...": "Dein Profil konnte nicht geladen werden. Neuer Versuch...",
+    "Could not open {{name}}": "{{name}} konnte nicht geöffnet werden",
     "Create": "Anlegen",
     "Create Folder": "Ordner anlegen",
     "Create Group": "Gruppe erstellen",
@@ -33,6 +37,7 @@
     "Device registered, you can now activate it with another device": "Dieses Gerät ist jetzt registriert. Es kann nun mit einem anderen Gerät freigeschaltet werden.",
     "Devices": "Geräte",
     "Do you want to activate the device {{device}}?": "Möchtest du das Gerät „{{device}}“ freischalten?",
+    "Download": "Herunterladen",
     "Email": "Email",
     "Email Addresses": "E-Mail-Adressen",
     "Error activating device": "Fehler beim Aktivieren des Geräts",
@@ -63,6 +68,7 @@
     "Name": "Name",
     "No contacts yet?": "Noch keine Kontakte?",
     "No documents available": "Keine Dokumente vorhanden",
+    "No file found": "Keine Datei gefunden",
     "No image found": "Bild nicht vorhanden",
     "Not you?": "Nicht du?",
     "OK": "OK",

@@ -2,6 +2,7 @@ import { Page } from "@playwright/test";
 import * as fs from "fs";
 import { test, expect } from "./fixtures";
 import {
+  aesGcmDecrypt,
   aesGcmEncrypt,
   clearLocalStorage,
   encryptKeyEnvelope,
@@ -9,6 +10,7 @@ import {
   inputMarysPassword,
   routeMarysAuth,
   setupMarysDevice,
+  stubMobile,
   TestData,
 } from "./setup";
 
@@ -371,4 +373,248 @@ test("an image in a sub-folder cannot be resolved after a reload", async ({
   await login(page, `/images/${BEACH_ID}?folder=${FOLDER_ID}`);
 
   await expect(page.getByText("No image found")).toBeVisible();
+});
+
+// Part C (docs/plans/open-documents.md): the download action on the image
+// detail page delivers the ORIGINAL (not the displayed medium preview),
+// with the original filename, via the same download/share path as
+// non-image files (openDocument.ts). The beach fixture's original is
+// contentId 6e0835c4-... - a real, already-checked-in encrypted file
+// (routeBeachImage's wildcard files/[^/]+ route serves it); its plaintext
+// is NOT the same bytes as tests/images/beach-1836467_1920.jpg (a
+// differently-sized, unrelated file that only happens to share a name), so
+// the expected bytes are decrypted from the fixture itself, not read from
+// that file.
+const BEACH_CONTENT_ID = "6e0835c4-ea9a-4259-a5ab-ce2fe88f2b0b";
+async function decryptedBeachOriginal(): Promise<Buffer> {
+  return aesGcmDecrypt(
+    BEACH_KEY,
+    fs.readFileSync(
+      `tests/images/encrypted/${BEACH_ID}/files/${BEACH_CONTENT_ID}`,
+    ),
+  );
+}
+
+test("download action from a folder: lazy contentId, exactly one extra metadata request", async ({
+  page,
+}) => {
+  await routeBeachImage(page);
+  await routeDocument(
+    page,
+    ROOT_ID,
+    await encrypted(ROOT_KEY, {
+      type: "folder",
+      name: "Documents",
+      documents: [
+        {
+          documentId: BEACH_ID,
+          name: BEACH_NAME,
+          type: "image",
+          mimeType: "image/jpeg",
+          mediumImageId: BEACH_MEDIUM_ID,
+          sharedKey: {
+            sharedKey: await encryptKeyEnvelope(BEACH_KEY, ROOT_KEY),
+          },
+        },
+      ],
+    }),
+    MARY,
+    await encryptKeyEnvelope(ROOT_KEY, TestData.mary.settingsKey!),
+  );
+
+  // Folder.tsx's handleImageClick registers the detail info without a
+  // contentId (a FolderEntry carries none) - counted here to prove the
+  // metadata request only happens once the download action is clicked.
+  // (The landing page ("/") itself scans the root folder for the activity
+  // feed, which already fetches BEACH_ID's metadata once - the baseline
+  // below is taken after that, right before the click.)
+  let metadataRequests = 0;
+  await page.route(`**/users/${MARY}/documents/${BEACH_ID}`, (route) => {
+    metadataRequests++;
+    route.fallback();
+  });
+
+  await login(page, "/");
+  await page.getByRole("link", { name: "Images" }).first().click();
+  await page.getByAltText(BEACH_NAME).click();
+  await expect(page).toHaveURL(`/images/${BEACH_ID}?folder=${ROOT_ID}`);
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible();
+  const requestsBeforeDownload = metadataRequests;
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByLabel("download").click(),
+  ]);
+  expect(download.suggestedFilename()).toBe(BEACH_NAME);
+  expect(metadataRequests).toBe(requestsBeforeDownload + 1);
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) {
+    chunks.push(chunk as Buffer);
+  }
+  expect(
+    Buffer.compare(Buffer.concat(chunks), await decryptedBeachOriginal()),
+  ).toBe(0);
+  // The displayed (medium) image stays put - only the original downloaded.
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible();
+});
+
+test("download action from a chat: contentId already registered, no metadata request", async ({
+  page,
+}) => {
+  await routeBeachImage(page);
+  await routeChatSharingBeachImage(page);
+
+  let metadataRequests = 0;
+  await page.route(`**/users/${MARY}/documents/${BEACH_ID}`, (route) => {
+    metadataRequests++;
+    route.fallback();
+  });
+
+  await login(page, "/");
+  await page.getByRole("link", { name: "Chats" }).first().click();
+  await page.getByText("Laura", { exact: true }).first().click();
+  await page.locator(".shared-document img").click();
+  await expect(page).toHaveURL(
+    `/images/${BEACH_ID}?chat=${LAURA}&owner=${MARY}`,
+  );
+
+  // SharedDocumentMessage's own load already made one metadata request -
+  // clicking the download action must not add a second one.
+  const requestsBeforeDownload = metadataRequests;
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByLabel("download").click(),
+  ]);
+  expect(download.suggestedFilename()).toBe(BEACH_NAME);
+  expect(metadataRequests).toBe(requestsBeforeDownload);
+});
+
+test("download action after a reload: contentId from the resolve itself, no extra request", async ({
+  page,
+}) => {
+  await routeBeachImage(page);
+  await routeChatSharingBeachImage(page);
+
+  let metadataRequests = 0;
+  await page.route(`**/users/${MARY}/documents/${BEACH_ID}`, (route) => {
+    metadataRequests++;
+    route.fallback();
+  });
+
+  await login(page, `/images/${BEACH_ID}?chat=${LAURA}&owner=${MARY}`);
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible({
+    timeout: 10_000,
+  });
+
+  const requestsBeforeDownload = metadataRequests;
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByLabel("download").click(),
+  ]);
+  expect(download.suggestedFilename()).toBe(BEACH_NAME);
+  expect(metadataRequests).toBe(requestsBeforeDownload);
+});
+
+test("download action on mobile shares the original instead of downloading", async ({
+  page,
+}) => {
+  await stubMobile(page, { coarse: true, share: "ok" });
+  await routeBeachImage(page);
+  await routeChatSharingBeachImage(page);
+
+  await login(page, "/");
+  await page.getByRole("link", { name: "Chats" }).first().click();
+  await page.getByText("Laura", { exact: true }).first().click();
+  await page.locator(".shared-document img").click();
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible();
+
+  await page.getByLabel("download").click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __shared?: { name: string; type: string }[] })
+            .__shared,
+      ),
+    )
+    .toEqual([{ name: BEACH_NAME, type: "image/jpeg" }]);
+});
+
+test("download action error shows a snackbar and leaves the displayed image alone", async ({
+  page,
+}) => {
+  await routeBeachImage(page);
+  await routeChatSharingBeachImage(page);
+  await page.route(
+    `**/users/${MARY}/documents/${BEACH_ID}/files/${BEACH_CONTENT_ID}`,
+    (route) => route.fulfill({ status: 404 }),
+  );
+
+  await login(page, "/");
+  await page.getByRole("link", { name: "Chats" }).first().click();
+  await page.getByText("Laura", { exact: true }).first().click();
+  await page.locator(".shared-document img").click();
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible();
+
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  await page.getByLabel("download").click();
+
+  await expect(page.getByText(`Could not open ${BEACH_NAME}`)).toBeVisible();
+  expect(downloads).toBe(0);
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible();
+});
+
+test("a wrong document type behind the download action shows an error", async ({
+  page,
+}) => {
+  await routeBeachImage(page);
+  await routeDocument(
+    page,
+    ROOT_ID,
+    await encrypted(ROOT_KEY, {
+      type: "folder",
+      name: "Documents",
+      documents: [
+        {
+          documentId: BEACH_ID,
+          name: BEACH_NAME,
+          type: "image",
+          mimeType: "image/jpeg",
+          mediumImageId: BEACH_MEDIUM_ID,
+          sharedKey: {
+            sharedKey: await encryptKeyEnvelope(BEACH_KEY, ROOT_KEY),
+          },
+        },
+      ],
+    }),
+    MARY,
+    await encryptKeyEnvelope(ROOT_KEY, TestData.mary.settingsKey!),
+  );
+  // Overrides routeBeachImage's own document route (registered after it, so
+  // it wins) - the folder click itself never fetches this (FolderEntry has
+  // everything ImageView needs), only the download action's lazy
+  // loadContentId does.
+  await routeDocument(
+    page,
+    BEACH_ID,
+    await encrypted(BEACH_KEY, {
+      type: "file",
+      name: BEACH_NAME,
+      mimeType: "image/jpeg",
+      size: 1,
+      contentId: BEACH_CONTENT_ID,
+    }),
+    ROOT_ID,
+    await encryptKeyEnvelope(BEACH_KEY, ROOT_KEY),
+  );
+
+  await login(page, "/");
+  await page.getByRole("link", { name: "Images" }).first().click();
+  await page.getByAltText(BEACH_NAME).click();
+  await expect(page.getByAltText(BEACH_NAME)).toBeVisible();
+
+  await page.getByLabel("download").click();
+  await expect(page.getByText(`Could not open ${BEACH_NAME}`)).toBeVisible();
 });
