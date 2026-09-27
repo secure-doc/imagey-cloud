@@ -401,6 +401,45 @@ test("share a document in chat", async ({ page }) => {
       ),
     );
 
+  // Opening the shared image in the detail view loads the medium image, and
+  // the small one once more as placeholder while it loads.
+  provider
+    .addInteraction()
+    .uponReceiving("a request to get the small image content as placeholder")
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/${documentId}`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${documentId}/files/${documentId}`,
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request to get the medium image content of a shared image",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      (r) =>
+        r.headers({
+          Accept: "application/octet-stream",
+        }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      ),
+    );
+
   // Interaction to post the message
   const builder = provider
     .addInteraction()
@@ -462,6 +501,24 @@ test("share a document in chat", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.locator(".shared-document")).toBeVisible();
+
+    // A click on the shared image opens it large in the detail view
+    const mediumLoaded = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(
+          `/documents/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+        ),
+    );
+    await page.locator(".shared-document img").click();
+    await expect(page).toHaveURL(
+      `/images/${documentId}?chat=7f53a4ea-58b7-4bbf-b94d-f2038752d5b6&owner=d20cf443-4f96-418f-a957-c8cbef8677c3`,
+    );
+    await mediumLoaded;
+    await expect(page.locator(".shared-document")).toBeHidden();
+    await expect(page.locator("main img")).toHaveCount(1);
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
 
@@ -562,6 +619,41 @@ test("view shared document from another user", async ({ page }) => {
       ),
     );
 
+  // Opening the shared image in the detail view: the medium image, plus the
+  // small one once more as placeholder while it loads.
+  builder
+    .addInteraction()
+    .given("Mary has shared a document with alice")
+    .uponReceiving("a request to get the shared document file as recipient")
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/${documentId}`,
+      (r) => r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${documentId}/files/${documentId}`,
+      ),
+    );
+  builder
+    .addInteraction()
+    .given("Mary has shared a document with alice")
+    .uponReceiving(
+      "a request to get the shared document medium image as recipient",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      (r) => r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      ),
+    );
+
   // Interaction to load the file. Chat renders the small image, not the
   // medium one - bb66aba3's smallImageId is its own documentId (see
   // scripts/encryptMarysDocuments.ts).
@@ -601,6 +693,24 @@ test("view shared document from another user", async ({ page }) => {
       // note as in "share a document in chat" above - bumped to 10s.
       const sharedDocImage = page.locator(".shared-document img").first();
       await expect(sharedDocImage).toBeVisible({ timeout: 10_000 });
+
+      // The recipient opens it large as well (the medium image is reachable
+      // through the same chat key entry as the small one)
+      const mediumLoaded = page.waitForResponse((response) =>
+        response
+          .url()
+          .includes(
+            `/documents/${documentId}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+          ),
+      );
+      await sharedDocImage.click();
+      await expect(page).toHaveURL(
+        `/images/${documentId}?chat=d20cf443-4f96-418f-a957-c8cbef8677c3&owner=d20cf443-4f96-418f-a957-c8cbef8677c3`,
+      );
+      await mediumLoaded;
+      await expect(page.locator(".shared-document")).toBeHidden();
+      await expect(page.locator("main img")).toHaveCount(1);
+      await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible();
 
       await page.unrouteAll({ behavior: "ignoreErrors" });
     });

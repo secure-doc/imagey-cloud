@@ -8,6 +8,7 @@ interface ImageListProps {
   folderKey: JsonWebKey;
   accessPath?: string;
   onFolderClick?: (entry: FolderEntry) => void;
+  onImageClick?: (entry: FolderEntry) => void;
 }
 
 export default function ImageList({
@@ -16,6 +17,7 @@ export default function ImageList({
   folderKey,
   accessPath,
   onFolderClick,
+  onImageClick,
 }: ImageListProps) {
   return (
     <div className="column">
@@ -33,6 +35,11 @@ export default function ImageList({
               folderOwner={folderOwner}
               folderKey={folderKey}
               accessPath={accessPath}
+              onClick={
+                entry.type === "image" && onImageClick
+                  ? () => onImageClick(entry)
+                  : undefined
+              }
             />
           </div>
         ),

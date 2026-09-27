@@ -14,11 +14,13 @@ export default function ImageComponent({
   contentId,
   accessPath,
   className = "small-width small-height",
+  onClick,
 }: {
   image: NewDocumentMetadata;
   contentId?: string;
   accessPath?: string;
   className?: string;
+  onClick?: () => void;
 }) {
   const mimeType = "mimeType" in image ? image.mimeType : undefined;
   const { objectUrl, error } = useImageBlob(
@@ -34,6 +36,7 @@ export default function ImageComponent({
       objectUrl={objectUrl}
       error={error}
       className={className}
+      onClick={onClick}
     />
   );
 }

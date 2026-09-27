@@ -477,6 +477,22 @@ export const documentService = {
       accessPath,
     );
   },
+  // Fetches and decrypts one file of a document whose key is already known
+  // (no metadata request) - used by the image detail page.
+  loadFileContent: (
+    owner: string,
+    documentId: string,
+    fileId: string,
+    documentKey: JsonWebKey,
+    accessPath?: string,
+  ): Promise<ArrayBuffer> =>
+    fetchAndDecryptContent(owner, documentId, fileId, documentKey, accessPath),
+  // Unwraps a FolderEntry's document key locally from its folder's key.
+  loadFolderEntryKey: (
+    entry: FolderEntry,
+    folderKey: JsonWebKey,
+  ): Promise<JsonWebKey> =>
+    cryptoService.decryptKey(entry.sharedKey.sharedKey, folderKey),
   // Fetches and decrypts one FolderEntry's own content (its medium/preview
   // image) directly off the entry embedded in the parent folder - unwraps
   // the entry's own key locally from the folder's key (no network round
@@ -490,8 +506,8 @@ export const documentService = {
     if (!entry.mediumImageId) {
       throw new Error(`Folder entry ${entry.documentId} has no medium image`);
     }
-    const documentKey = await cryptoService.decryptKey(
-      entry.sharedKey.sharedKey,
+    const documentKey = await documentService.loadFolderEntryKey(
+      entry,
       folderKey,
     );
     return fetchAndDecryptContent(

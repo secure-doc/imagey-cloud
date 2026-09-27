@@ -14,9 +14,10 @@ import {
 import { useNavigate } from "react-router";
 import CreateFolderDialog from "../components/CreateFolderDialog";
 import Document from "../document/Document";
-import { FolderMetadata } from "../document/DocumentMetadata";
+import { FolderEntry, FolderMetadata } from "../document/DocumentMetadata";
 import Panel from "../components/Panel";
 import UploadButton from "../components/UploadButton";
+import { ImageContext } from "../contexts/ImageContext";
 
 export default function Folder({ id }: { id: string }) {
   const { t } = useTranslation();
@@ -40,6 +41,7 @@ export default function Folder({ id }: { id: string }) {
   const parentKey = useKey(parentId);
   const key = useKey(id);
   const { registerParentFolder, registerKey } = useContext(FolderContext);
+  const { registerImage } = useContext(ImageContext);
   const navigate = useNavigate();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const accessPath = useAccessPath(id, folder?.owner ?? "");
@@ -64,6 +66,35 @@ export default function Folder({ id }: { id: string }) {
     );
   }, []);
   const handleCreateFolder = useCallback(() => setShowCreateFolder(true), []);
+
+  const handleImageClick = useCallback(
+    async (entry: FolderEntry) => {
+      if (!folder || !entry.mediumImageId) {
+        return;
+      }
+      let documentKey: JsonWebKey;
+      try {
+        documentKey = await documentService.loadFolderEntryKey(
+          entry,
+          folder.key,
+        );
+      } catch (e) {
+        console.error(`Could not open image ${entry.documentId}`, e);
+        return;
+      }
+      registerImage({
+        documentId: entry.documentId,
+        name: entry.name,
+        owner: folder.owner,
+        documentKey,
+        mediumImageId: entry.mediumImageId,
+        mimeType: entry.mimeType,
+        accessPath,
+      });
+      navigate(`/images/${entry.documentId}?folder=${id}`);
+    },
+    [folder, accessPath, registerImage, navigate, id],
+  );
 
   useFolderIcons(id, folder, handleCreateFolder, handleChildAdded);
 
@@ -159,6 +190,7 @@ export default function Folder({ id }: { id: string }) {
           folderOwner={folder.owner}
           folderKey={folder.key}
           accessPath={accessPath}
+          onImageClick={handleImageClick}
           onFolderClick={(entry) => {
             registerParentFolder(entry.documentId, id);
             navigate("/documents/" + entry.documentId);

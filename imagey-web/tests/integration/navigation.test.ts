@@ -6,6 +6,7 @@ import {
   prepareMarysChatsDocument,
   prepareMarysContactRequests,
   prepareMarysDevices,
+  prepareMarysBeachImage,
   prepareMarysDocuments,
   prepareMarysLogin,
   provider,
@@ -185,6 +186,35 @@ test("navigate to image details", async ({ page }) => {
 
     // Then
     await expect(page.getByText(/No image found/)).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("open an image detail view directly after a reload", async ({ page }) => {
+  // Given
+  await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
+  await prepareMarysDocuments();
+  const provider = await prepareMarysBeachImage();
+
+  await provider.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+    await expect(page.locator("main img")).toHaveCount(2, {
+      timeout: 10_000,
+    });
+
+    // When: the in-memory image registry is gone, only the URL is left
+    await page.goto(
+      "/images/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3?folder=68980188-577d-4d2f-9e36-a6b32b25cd3a",
+    );
+    await inputMarysPassword(page);
+
+    // Then
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(/No image found/)).toBeHidden();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

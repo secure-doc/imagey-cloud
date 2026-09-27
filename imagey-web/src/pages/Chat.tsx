@@ -282,6 +282,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
                             documentId={payload.documentId}
                             owner={payload.owner}
                             chatKey={sharedKey}
+                            contactUserId={contactUserId}
                           />
                         );
                       } catch {

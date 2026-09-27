@@ -28,6 +28,7 @@ import { documentService } from "./document/DocumentService";
 import Folder from "./folder/Folder";
 import { FolderContext, FolderInfo } from "./contexts/FolderContext";
 import DocumentsPage from "./pages/DocumentsPage";
+import { ImageContext, ImageInfo } from "./contexts/ImageContext";
 
 function DocumentRoute() {
   const { documentId } = useParams();
@@ -56,6 +57,12 @@ function App() {
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
   const [settings, setSettings] = useState<SettingsType | undefined>();
   const [folders, setFolders] = useState<Record<string, FolderInfo>>({});
+
+  const [images, setImages] = useState<Record<string, ImageInfo>>({});
+
+  const registerImage = useCallback((info: ImageInfo) => {
+    setImages((prev) => ({ ...prev, [info.documentId]: info }));
+  }, []);
 
   const registerParentFolder = useCallback((id: string, parentId: string) => {
     setFolders((prev) => {
@@ -140,37 +147,42 @@ function App() {
             registerKey,
           }}
         >
-          <ActionBarContextProvider>
-            <BrowserRouter>
-              <AppBar />
-              <Navigation className="left max l" />
-              <Navigation className="left m" />
-              <Routes>
-                <Route element={<BottomNavLayout />}>
-                  <Route path="/" element={<Activities />} />
-                  <Route path="images">
-                    <Route index element={<DocumentsPage />} />
-                    <Route path=":id" element={<Image />} />
-                  </Route>
-                  <Route path="documents">
-                    <Route index element={<DocumentsPage />} />
-                    <Route path=":documentId" element={<DocumentRoute />} />
-                  </Route>
-                  <Route path="chats" element={<Chats id={settings.chats} />} />
-                  <Route path="settings">
-                    <Route index element={<Settings />} />
+          <ImageContext.Provider value={{ images, registerImage }}>
+            <ActionBarContextProvider>
+              <BrowserRouter>
+                <AppBar />
+                <Navigation className="left max l" />
+                <Navigation className="left m" />
+                <Routes>
+                  <Route element={<BottomNavLayout />}>
+                    <Route path="/" element={<Activities />} />
+                    <Route path="images">
+                      <Route index element={<DocumentsPage />} />
+                    </Route>
+                    <Route path="documents">
+                      <Route index element={<DocumentsPage />} />
+                      <Route path=":documentId" element={<DocumentRoute />} />
+                    </Route>
                     <Route
-                      path="profile"
-                      element={user && <Profile id={settings.profile} />}
+                      path="chats"
+                      element={<Chats id={settings.chats} />}
                     />
-                    <Route path="devices" element={user && <Devices />} />
+                    <Route path="settings">
+                      <Route index element={<Settings />} />
+                      <Route
+                        path="profile"
+                        element={user && <Profile id={settings.profile} />}
+                      />
+                      <Route path="devices" element={user && <Devices />} />
+                    </Route>
                   </Route>
-                </Route>
-                <Route path="chats/:contactUserId" element={<ChatRoute />} />
-              </Routes>
-              <aside></aside>
-            </BrowserRouter>
-          </ActionBarContextProvider>
+                  <Route path="chats/:contactUserId" element={<ChatRoute />} />
+                  <Route path="images/:id" element={<Image />} />
+                </Routes>
+                <aside></aside>
+              </BrowserRouter>
+            </ActionBarContextProvider>
+          </ImageContext.Provider>
         </FolderContext.Provider>
       </SettingsContext.Provider>
     </AuthenticationContext.Provider>

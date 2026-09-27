@@ -13,12 +13,14 @@ export default function FolderEntryImageComponent({
   folderKey,
   accessPath,
   className = "small-width small-height",
+  onClick,
 }: {
   entry: FolderEntry;
   folderOwner: string;
   folderKey: JsonWebKey;
   accessPath?: string;
   className?: string;
+  onClick?: () => void;
 }) {
   const { objectUrl, error } = useImageBlob(
     () =>
@@ -39,6 +41,7 @@ export default function FolderEntryImageComponent({
       objectUrl={objectUrl}
       error={error}
       className={className}
+      onClick={onClick}
     />
   );
 }
