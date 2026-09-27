@@ -526,11 +526,20 @@ export const documentService = {
   // their own copy the same way they'd find a folder-shared one, and as the
   // issuer so the entry grants them the "member" role on this document -
   // they can still decrypt it, as they hold the same chat key.
+  //
+  // Sharing into a GROUP (ADR 0019 decision 4) reuses the exact same call
+  // with two overrides instead of one entry per member: `issuerOverride` is
+  // the group's owner (so the single entry grants the "member" role via the
+  // group, not the individual contact) and `kidOverride` is the group's own
+  // documentId (so any member can find it, wrapped with the group key
+  // instead of a 1:1 chat key) - see GroupService.shareDocumentIntoGroup.
   shareDocument: async (
     user: string,
     document: Pick<BaseMetadata, "documentId" | "key">,
     contactUserId: string,
     chatKey: JsonWebKey,
+    issuerOverride?: string,
+    kidOverride?: string,
   ): Promise<void> => {
     // `key` is required at the type level, but this can still be reached
     // with a missing key across a boundary TypeScript doesn't check (e.g.
@@ -542,8 +551,8 @@ export const documentService = {
     }
     const encryptedKey = await cryptoService.encryptKey(document.key, chatKey);
     await documentRepository.storeSharedKey(user, document.documentId, {
-      issuer: contactUserId,
-      kid: contactUserId,
+      issuer: issuerOverride ?? contactUserId,
+      kid: kidOverride ?? contactUserId,
       sharedKey: encryptedKey,
     });
   },
@@ -627,11 +636,19 @@ export async function decryptDocument(
         ...base,
         type: "chatList",
         contacts: payload.contacts,
+        groups: payload.groups,
       };
     case "chat":
       return {
         ...base,
         type: "chat",
+        publicProfiles: payload.publicProfiles,
+      };
+    case "group":
+      return {
+        ...base,
+        type: "group",
+        members: payload.members,
         publicProfiles: payload.publicProfiles,
       };
     case "folder":

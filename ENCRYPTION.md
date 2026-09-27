@@ -72,7 +72,8 @@ folder and the profile) whose decrypted content is a
 `contacts: { userId, chatId, owner, pending? }[]` array instead of a
 dedicated `/users/{id}/contacts` listing endpoint. `owner` is the party that
 owns the chat Document - always the **inviter** (ADR 0015) - and is needed to
-know where to find it and its key later (step 4).
+know where to find it and its key later (step 4). Next to `contacts` it holds
+an optional `groups` array for group chats (see §6).
 
 A **chat's key is derived, never transported** (ADR 0015). Both parties
 compute it independently from their main key pairs:
@@ -164,10 +165,63 @@ they are not the durable contact list; once the handshake completes
 5. **Decline:** `DELETE /users/{B}/contact-requests/{A}` marks the request
    `DENIED` (from any status, which also ends a provisional membership).
 
+## 6. Chat Groups
+
+A group chat (ADR 0019) is a Document of type `group` owned by its
+**creator**, a child of the creator's "chats" Document, with the decrypted
+content `{ type: "group", name, owner, members, publicProfiles }`. Its
+messages live at `/users/{owner}/documents/{groupId}/messages`. Only the
+creator changes the group (metadata `PUT`, key entries), and only the
+creator's own contacts can be added.
+
+A **group key is random and transported** - an ECDH-derived key like a 1:1
+chat's only exists for a pair of key pairs. The creator generates an
+**AES-GCM-256** key; it is the group Document's own Document key. The creator
+files it for themselves like any child of the "chats" Document (self-issued
+entry wrapped under the "chats" Document's key), and for every member over the
+**1:1 chat** they share:
+
+1. **Create:** The creator uploads the group Document together with the
+   updated "chats" list (a new `groups` entry) in one atomic
+   `POST /users/{owner}/documents`.
+2. **Add a member:** For contact `M` the creator loads the 1:1 chat key
+   (§5 step 4), adds `M` to `members` / `publicProfiles` (`PUT` guarded by the
+   ETag), files `{ issuer: M, kid: M, sharedKey: wrap(groupKey, pairChatKey) }`
+   under the group Document (`POST .../documents/{groupId}/keys`) and then
+   posts `{ "type": "group-invitation", groupId, owner, name }` as a message
+   into the 1:1 chat with `M`. The key entry both carries the group key -
+   only the two parties of that 1:1 chat can unwrap it - and is a direct grant
+   (witness `(M, M)`) that makes `M` a `member` of the group Document and its
+   messages.
+3. **Join:** `M` opens the invitation, loads the group Document from the
+   creator's tree with their own key entry (unwrapping it with the 1:1 chat
+   key), and appends `{ groupId, owner, name, groupKey }` to their own "chats"
+   Document's `groups` - so later opens need no detour through the 1:1 chat.
+   `M` then shares their public profile into the group (step 5). An invited
+   contact who never joins can technically still read the group, since their
+   key entry stays in place.
+4. **Messages** are encrypted with the group key, exactly like 1:1 chat
+   messages; the server-stamped `sender` identifies the author.
+5. **Sharing into a group** (an image, or a member's public profile) files
+   **one** key entry on the shared document, in the sharer's tree:
+   `{ issuer: groupOwner, kid: groupId, sharedKey: wrap(documentKey, groupKey) }`
+   instead of one entry per recipient. Other members read it with the
+   `Access-Path` chain `[{ doc, owner: sharer, wrappedBy: groupId }, { doc: groupId,
+   owner: groupOwner, wrappedBy: groupId }]` (self-referential terminus hop),
+   which ends in their direct grant on the group (or in
+   the creator owning it). Members who join later can therefore read documents
+   shared before they joined, like the message history.
+
+The server sees no difference between a group and a 1:1 chat; no additional
+endpoints or roles exist. Removing members and leaving a group are not
+supported yet: they need deletable key entries, invalidation of the
+membership cache and a group key rotation (future ADR).
+
 ## Cryptographic Primitives Summary
 
 - **Asymmetric Cryptography:** ECDH (Elliptic Curve Diffie-Hellman) with curve `P-256`.
 - **Symmetric Cryptography:** AES-GCM with 256-bit keys and 12-byte random IVs.
 - **Key Derivation (Password):** PBKDF2 with HMAC-SHA-256, 250,000 iterations.
 - **Key Derivation (Chat):** ECDH (`P-256`) + HKDF-SHA-256 bound to chat id and both UserIds (ADR 0015).
+- **Group Key:** random AES-GCM-256, wrapped per member with the 1:1 chat key (ADR 0019).
 - **Key Formatting:** JSON Web Key (JWK).

@@ -7,13 +7,14 @@ import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
 import { contactService } from "../contact/ContactService";
-import { ContactEntry } from "../document/DocumentMetadata";
+import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
 import { ContactRequest } from "../contact/ContactRequest";
 import { contactDisplayName } from "../contact/contactDisplayName";
 import { useInvitationInfo } from "../hooks/useInvitationInfo";
 import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
+import CreateGroupDialog from "../components/CreateGroupDialog";
 import { documentService } from "../document/DocumentService";
 import { publicProfileService } from "../profile/publicProfileService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
@@ -32,19 +33,25 @@ export function ChatsList({
   id,
   className,
   activeContactUserId,
+  activeGroupId,
   onLoaded,
   onLoadError,
+  registerUpdate,
 }: {
   id: string;
   className?: string;
   activeContactUserId?: string;
+  activeGroupId?: string;
   // Reports the loaded "chats" document back to the caller, once known - lets
-  // Chat.tsx reuse this fetch instead of loading the same document a second
-  // time itself: `key` resolves a chat's Document key via
-  // contactService.loadChatKey, `name`/`revision` are needed to write back a
-  // refreshed contact snapshot via contactService.updateContactProfileSnapshot.
+  // Chat.tsx/GroupChat.tsx reuse this fetch instead of loading the same
+  // document a second time themselves: `key` resolves a chat's Document key
+  // via contactService.loadChatKey, `name`/`revision` are needed to write
+  // back a refreshed contact snapshot via
+  // contactService.updateContactProfileSnapshot, `groups` lets GroupChat.tsx
+  // find its own GroupEntry.
   onLoaded?: (chatsDocument: {
     contacts: ContactEntry[];
+    groups: GroupEntry[];
     key: JsonWebKey;
     name: string;
     revision: string;
@@ -52,6 +59,19 @@ export function ChatsList({
   // Reports whether the "chats" document failed to load, so a caller waiting
   // on onLoaded (Chat.tsx) can show an error instead of an eternal spinner.
   onLoadError?: (failed: boolean) => void;
+  // Hands the caller a function that writes a change (e.g. a newly joined
+  // group) back into this list's own "chats" document state, once it exists.
+  // A caller that instead kept its own copy of the document (from onLoaded)
+  // and patched only that copy would fork the two: this list's next
+  // unrelated state change (a contact request being picked up, a profile
+  // sync) re-publishes via onLoaded and overwrites the caller's patch with
+  // this list's older state.
+  registerUpdate?: (
+    update: (
+      list: { contacts: ContactEntry[]; groups: GroupEntry[] },
+      revision: string | null,
+    ) => void,
+  ) => void;
 }) {
   const { i18n } = useTranslation();
   const authentication = useAuthentication();
@@ -59,9 +79,11 @@ export function ChatsList({
   const mainKeyPair = authentication.keyPairs?.mainKeyPair;
   const settings = authentication.settings;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>();
   const [chatsDocument, setChatsDocument] = useState<{
     contacts: ContactEntry[];
+    groups: GroupEntry[];
     key: JsonWebKey;
     name: string;
     revision: string;
@@ -84,6 +106,13 @@ export function ChatsList({
         onClick={() => setIsDialogOpen(true)}
       >
         <i>add</i>
+      </button>,
+      <button
+        key="new-group"
+        className="circle transparent"
+        onClick={() => setIsGroupDialogOpen(true)}
+      >
+        <i>group_add</i>
       </button>,
     ],
     [],
@@ -115,6 +144,7 @@ export function ChatsList({
       onLoadError?.(false);
       setChatsDocument({
         contacts: loaded.contacts,
+        groups: loaded.groups ?? [],
         key: loaded.key,
         name: loaded.name,
         revision: loaded.revision,
@@ -136,6 +166,21 @@ export function ChatsList({
       onLoaded?.(chatsDocument);
     }
   }, [chatsDocument, onLoaded]);
+
+  useEffect(() => {
+    registerUpdate?.((list, revision) =>
+      setChatsDocument((prev) =>
+        prev
+          ? {
+              ...prev,
+              contacts: list.contacts,
+              groups: list.groups,
+              revision: revision ?? prev.revision,
+            }
+          : prev,
+      ),
+    );
+  }, [registerUpdate]);
 
   // The inviter's side of the handshake (leg 3, ADR 0015): once the invitee
   // has ACCEPTED the request, derive the chat key, create the chat Document
@@ -224,8 +269,29 @@ export function ChatsList({
         </div>
       )}
       {(chatsDocument?.contacts && chatsDocument.contacts.length > 0) ||
+      (chatsDocument?.groups && chatsDocument.groups.length > 0) ||
       openInvitations.length > 0 ? (
         <ul className="list border">
+          {chatsDocument?.groups &&
+            chatsDocument.groups.map((group) => (
+              <li key={`group-${group.groupId}`}>
+                <NavLink
+                  to={`/chats/groups/${group.groupId}`}
+                  className={({ isActive }) =>
+                    isActive || group.groupId === activeGroupId
+                      ? "active surface-variant"
+                      : ""
+                  }
+                >
+                  <button className="circle transparent">
+                    <i>group</i>
+                  </button>
+                  <div className="max">
+                    <h6 className="small">{group.name}</h6>
+                  </div>
+                </NavLink>
+              </li>
+            ))}
           {openInvitations.map((contactRequest, index) => (
             <InvitationListItem
               key={index}
@@ -306,6 +372,31 @@ export function ChatsList({
         <DisplayNamePrompt
           onConfirm={confirmDisplayName}
           onCancel={cancelDisplayName}
+        />
+      )}
+      {isGroupDialogOpen && chatsDocument && (
+        <CreateGroupDialog
+          contacts={chatsDocument.contacts}
+          chatsDocument={{
+            documentId: id,
+            name: chatsDocument.name,
+            key: chatsDocument.key,
+            revision: chatsDocument.revision,
+            contacts: chatsDocument.contacts,
+            groups: chatsDocument.groups,
+          }}
+          chatsId={id}
+          onClose={() => setIsGroupDialogOpen(false)}
+          onCreated={(list, revision) =>
+            // The dialog only renders while chatsDocument is set (see the
+            // guard above), so it's always defined here too.
+            setChatsDocument((prev) => ({
+              ...prev!,
+              contacts: list.contacts,
+              groups: list.groups,
+              revision: revision ?? prev!.revision,
+            }))
+          }
         />
       )}
     </section>

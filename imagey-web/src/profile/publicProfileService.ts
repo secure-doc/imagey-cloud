@@ -141,14 +141,20 @@ export const publicProfileService = {
   },
 
   // Loads a contact's public profile (name + avatar + revision) as reachable via a chat that
-  // shares it (§3.4). Never rejects: a missing/inaccessible profile - no public-profile yet, or
-  // the sharing key entry not filed for us yet - resolves to `undefined` so callers fall back to
-  // their own display (initials).
+  // shares it (§3.4), or via a group's Access-Path when `accessPath`/`kidOverride` are given (ADR
+  // 0019 decision 4 - a group shares each member's profile with ONE key entry, filed under
+  // `kid: groupId` rather than the reader's own id, since every member reads the same entry).
+  // Never rejects: a missing/inaccessible profile - no public-profile yet, or the sharing key
+  // entry not filed for us yet - resolves to `undefined` so callers fall back to their own display
+  // (initials). The Access-Path must be sent on the avatar fetch too, not just the metadata load -
+  // it is a separate request under the same two-hop grant.
   loadContactProfile: async (
     userId: UserId,
     contactUserId: UserId,
     publicProfileId: string,
     chatKey: JsonWebKey,
+    accessPath?: string,
+    kidOverride?: string,
   ): Promise<
     | {
         name?: string;
@@ -162,8 +168,10 @@ export const publicProfileService = {
       const document = await documentService.loadDocument(
         contactUserId,
         publicProfileId,
-        userId,
+        kidOverride ?? userId,
         chatKey,
+        undefined,
+        accessPath,
       );
       if (document.type !== "publicProfile") {
         return undefined;
@@ -174,6 +182,7 @@ export const publicProfileService = {
           const content = await documentService.loadContent(
             document,
             document.avatarId,
+            accessPath,
           );
           avatarBlob = new Blob([content]);
         } catch (e) {

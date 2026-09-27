@@ -181,11 +181,26 @@ test("navigate to image details", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
+
+    // Loading image "5" after the reload re-fetches the root folder's own
+    // key as part of resolving it, and that key GET is the load's last
+    // request. See "navigate to chats" above for the same race: wait for it
+    // explicitly, otherwise runningPactRequests can transiently read 0
+    // between this load's own requests and the poll below tears the mock
+    // server down mid-request (route.fetch -> ECONNREFUSED, flaky in CI).
+    const rootKeyResponse = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.documents}/keys/`,
+        ),
+    );
     await page.goto("/images/5");
     await inputMarysPassword(page);
 
     // Then
     await expect(page.getByText(/No image found/)).toBeVisible();
+    await rootKeyResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
@@ -204,7 +219,20 @@ test("open an image detail view directly after a reload", async ({ page }) => {
       timeout: 10_000,
     });
 
-    // When: the in-memory image registry is gone, only the URL is left
+    // When: the in-memory image registry is gone, only the URL is left.
+    // Resolving the image this way re-fetches the root folder's own key
+    // (prepareMarysBeachImage), and that key GET is the load's last request.
+    // See "navigate to chats" above for the same race: wait for it explicitly,
+    // otherwise runningPactRequests can transiently read 0 between this
+    // load's own requests and the poll below tears the mock server down
+    // mid-request (route.fetch -> ECONNREFUSED, flaky in CI).
+    const rootKeyResponse = page.waitForResponse((response) =>
+      response
+        .url()
+        .includes(
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.documents}/keys/`,
+        ),
+    );
     await page.goto(
       "/images/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3?folder=68980188-577d-4d2f-9e36-a6b32b25cd3a",
     );
@@ -215,6 +243,7 @@ test("open an image detail view directly after a reload", async ({ page }) => {
       timeout: 10_000,
     });
     await expect(page.getByText(/No image found/)).toBeHidden();
+    await rootKeyResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

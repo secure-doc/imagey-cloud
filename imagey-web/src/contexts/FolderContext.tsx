@@ -58,8 +58,40 @@ export function buildAccessPath(
     return undefined;
   }
   hops.push({ doc: cur, owner, wrappedBy: cur });
+  return encodeAccessPath(hops);
+}
+
+function encodeAccessPath(
+  hops: { doc: string; owner: string; wrappedBy: string }[],
+): string {
   const json = JSON.stringify({ chain: hops });
   return btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Builds the {@code Access-Path} header for a document shared INTO a group
+ * (ADR 0019 decision 4): a two-hop chain from the shared document (in
+ * {@code sharerId}'s tree, wrapped by the group) to the group Document itself
+ * (in {@code groupOwnerId}'s tree, self-referential terminus) - the same
+ * shape {@code buildAccessPath} emits for a folder share, just built directly
+ * instead of walked off the folder registry (groups are not folders, so they
+ * are not registered there). Returns {@code undefined} - "send no header" -
+ * when {@code sharerId} is the caller (their own document, no share to prove).
+ */
+export function buildGroupAccessPath(
+  userId: string,
+  documentId: string,
+  sharerId: string,
+  groupId: string,
+  groupOwnerId: string,
+): string | undefined {
+  if (!sharerId || sharerId === userId) {
+    return undefined;
+  }
+  return encodeAccessPath([
+    { doc: documentId, owner: sharerId, wrappedBy: groupId },
+    { doc: groupId, owner: groupOwnerId, wrappedBy: groupId },
+  ]);
 }
 
 export function useAccessPath(

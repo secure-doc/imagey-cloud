@@ -15,6 +15,9 @@ export function useContactProfile(
   contactUserId: string | undefined,
   publicProfileId: string | undefined,
   chatKey: JsonWebKey | undefined,
+  // Set for a group member's profile (ADR 0019 decision 4) - undefined for a
+  // 1:1 chat's direct grant, where no header is needed.
+  accessPath?: string,
 ): { name?: string; avatarUrl?: string; avatarId?: string; revision?: string } {
   const [profile, setProfile] = useState<{
     name?: string;
@@ -31,7 +34,13 @@ export function useContactProfile(
     }
     let cancelled = false;
     publicProfileService
-      .loadContactProfile(user, contactUserId, publicProfileId, chatKey)
+      .loadContactProfile(
+        user,
+        contactUserId,
+        publicProfileId,
+        chatKey,
+        accessPath,
+      )
       .then((loaded) => {
         if (!cancelled) {
           setProfile(loaded);
@@ -41,7 +50,7 @@ export function useContactProfile(
     return () => {
       cancelled = true;
     };
-  }, [user, contactUserId, publicProfileId, chatKey]);
+  }, [user, contactUserId, publicProfileId, chatKey, accessPath]);
 
   // Treat a blank/whitespace-only name as "no name" so callers fall back to
   // the cached name/address instead of rendering an empty label.

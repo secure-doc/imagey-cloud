@@ -15,9 +15,20 @@ import {
   encryptKeyEnvelopeEcdh,
   generateAesGcmKeyJwk,
   encryptInvitationContactInfo,
+  prepareMarysLogin,
+  loginAsMary,
+  prepareMarysEmptyDocumentsFolder,
+  prepareMarysChat,
+  prepareMarysNamedPublicProfile,
+  prepareMarysChatsDocument,
+  prepareMarysGroupCreation,
+  prepareMarysGroupOwnProfileShare,
+  prepareMarysGroupMetadataPut,
+  LAURA_ID,
 } from "./setup";
 import type { deviceService } from "../../src/device/DeviceService";
 import type { contactService } from "../../src/contact/ContactService";
+import type { groupService } from "../../src/contact/GroupService";
 import type { documentService } from "../../src/document/DocumentService";
 import type { publicProfileService } from "../../src/profile/publicProfileService";
 
@@ -25,6 +36,7 @@ declare global {
   interface Window {
     deviceService: typeof deviceService;
     contactService: typeof contactService;
+    groupService: typeof groupService;
     documentService: typeof documentService;
     publicProfileService: typeof publicProfileService;
   }
@@ -2484,4 +2496,680 @@ test.describe("image detail view error paths", () => {
 
     await expect(page.getByText("No image found")).toBeVisible();
   });
+});
+
+// --- ADR 0019 group chats: retry sequences not expressible as Pact contracts ---
+// Two *different* responses to the *same* method+path in sequence (412 then
+// success) can't be modeled as two Pact interactions - the mock server can't
+// tell them apart by request shape alone (see the "storeDocument's
+// concurrent-change retry" test above for the established page.route pattern
+// this follows).
+
+test("addMember's group-metadata retry carries through after a concurrent-modification 412", async ({
+  page,
+}) => {
+  const owner = "d20cf443-4f96-418f-a957-c8cbef8677c3"; // mary
+  const member = "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6"; // laura
+  const groupId = "retry-group-metadata";
+  const groupKey = await generateAesGcmKeyJwk();
+  const reloadedContent = await aesGcmEncrypt(
+    groupKey,
+    new TextEncoder().encode(
+      JSON.stringify({
+        documentId: groupId,
+        name: "Team",
+        type: "group",
+        members: [owner],
+        publicProfiles: { [owner]: "pp-mary" },
+      }),
+    ),
+  );
+
+  let putAttempts = 0;
+  await page.route(`**/users/${owner}/documents/${groupId}`, (route) => {
+    if (route.request().method() === "PUT") {
+      putAttempts += 1;
+      return putAttempts === 1
+        ? route.fulfill({ status: 412 })
+        : route.fulfill({ status: 204, headers: { ETag: '"group-etag-2"' } });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/octet-stream",
+      headers: { ETag: '"group-etag-reloaded"' },
+      body: Buffer.from(reloadedContent),
+    });
+  });
+  await page.route(`**/users/${owner}/documents/${groupId}/keys`, (route) =>
+    route.fulfill({ status: 200 }),
+  );
+  await page.route(`**/users/${owner}/documents/chat-laura/messages`, (route) =>
+    route.fulfill({
+      status: 201,
+      headers: {
+        Location: `/users/${owner}/documents/chat-laura/messages/msg-1`,
+      },
+    }),
+  );
+  await page.goto("/");
+
+  const result = await page.evaluate(
+    async ({ owner, member, groupId, groupKey }) => {
+      return window.groupService.addMember(
+        owner,
+        {
+          documentId: groupId,
+          key: groupKey as JsonWebKey,
+          revision: '"group-etag-stale"',
+          name: "Team",
+          members: [owner],
+          publicProfiles: {},
+        },
+        {
+          userId: member,
+          publicProfileId: "pp-laura",
+          chatOwnerId: owner,
+          chatId: "chat-laura",
+          pairChatKey: groupKey as JsonWebKey,
+        },
+      );
+    },
+    { owner, member, groupId, groupKey },
+  );
+
+  expect(putAttempts).toBe(2);
+  expect(result.members.sort()).toEqual([member, owner].sort());
+  expect(result.publicProfiles).toEqual({
+    [owner]: "pp-mary",
+    [member]: "pp-laura",
+  });
+});
+
+test("createGroup's atomic-upload retry carries through after a concurrent-modification 412", async ({
+  page,
+}) => {
+  const owner = "d20cf443-4f96-418f-a957-c8cbef8677c3"; // mary
+  const chatsId = TestData.mary.settings!.chats;
+  const publicProfileId = "retry-group-public-profile";
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const publicProfileKey = await generateAesGcmKeyJwk();
+  const reloadedChatsContent = await aesGcmEncrypt(
+    chatsDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({ name: "Chats", type: "chatList", contacts: [] }),
+    ),
+  );
+
+  let postAttempts = 0;
+  await page.route(`**/users/${owner}/documents`, (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    postAttempts += 1;
+    return postAttempts === 1
+      ? route.fulfill({ status: 412 })
+      : route.fulfill({
+          status: 201,
+          headers: {
+            Location: `/users/${owner}/documents/new-group-id`,
+            ETag: '"chats-etag-2"',
+          },
+        });
+  });
+  await page.route(`**/users/${owner}/documents/${chatsId}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/octet-stream",
+      headers: { ETag: '"chats-etag-reloaded"' },
+      body: Buffer.from(reloadedChatsContent),
+    }),
+  );
+  await page.route(
+    `**/users/${owner}/documents/${publicProfileId}/keys`,
+    (route) => route.fulfill({ status: 200 }),
+  );
+  await page.goto("/");
+
+  const result = await page.evaluate(
+    async ({
+      owner,
+      chatsId,
+      chatsDocumentKey,
+      publicProfileId,
+      publicProfileKey,
+    }) => {
+      return window.groupService.createGroup(
+        owner,
+        "Team",
+        {
+          documentId: chatsId,
+          name: "Chats",
+          key: chatsDocumentKey as JsonWebKey,
+          revision: '"chats-etag-stale"',
+          contacts: [],
+          groups: [],
+        },
+        {
+          documentId: publicProfileId,
+          name: "Mary",
+          owner,
+          revision: '"pp-1"',
+          key: publicProfileKey as JsonWebKey,
+          type: "publicProfile",
+        },
+      );
+    },
+    { owner, chatsId, chatsDocumentKey, publicProfileId, publicProfileKey },
+  );
+
+  expect(postAttempts).toBe(2);
+  expect(result.groupId).toBeTruthy();
+  expect(result.list.groups).toHaveLength(1);
+  expect(result.list.groups[0].name).toBe("Team");
+});
+
+test("CreateGroupDialog shows a failure message when creating a group fails", async ({
+  page,
+}) => {
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysNamedPublicProfile("Mary");
+  // No contacts needed - the group-creation upload itself fails, before any
+  // selected member would ever be added.
+  await prepareMarysChatsDocument([]);
+  const builder = provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get contact requests before a failed group creation",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    // Registered after setupMockServer's catch-all, so it wins for the
+    // group-creation upload without disturbing the Pact-mocked GETs above.
+    await page.route(
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      (route) =>
+        route.request().method() === "POST"
+          ? route.fulfill({ status: 500 })
+          : route.fallback(),
+    );
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    await page.getByRole("button", { name: "group_add", exact: true }).click();
+    await page.getByPlaceholder("Group Name").fill("Team");
+    await page.getByRole("button", { name: "Create" }).click();
+
+    await expect(page.getByText("Failed to create group")).toBeVisible();
+  });
+});
+
+test("CreateGroupDialog keeps the group and shows a separate message when adding a member fails", async ({
+  page,
+}) => {
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysChat(LAURA_ID);
+  const { publicProfileId } = await prepareMarysNamedPublicProfile("Mary");
+  const builder = await prepareMarysGroupCreation();
+  prepareMarysGroupOwnProfileShare(publicProfileId);
+  prepareMarysGroupMetadataPut();
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    // The group itself (createGroup, above) and its metadata update (the
+    // first half of addMember) both succeed - only filing laura's own key
+    // entry (the second half of addMember) fails, after the group already
+    // exists on the server. The group's id is client-generated, so this
+    // matches by body (like prepareMarysGroupMemberKeyShare does) instead of
+    // by path; registered after setupMockServer's catch-all, so it wins for
+    // this one request without disturbing the Pact-mocked calls above,
+    // including mary's own profile share into the group (a POST to the same
+    // `/keys` shape, but with her public-profile id in the path and the
+    // group's id, not laura's, as `kid`).
+    await page.route(
+      "**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/*/keys",
+      async (route) => {
+        const request = route.request();
+        if (request.method() !== "POST") {
+          return route.fallback();
+        }
+        const body = JSON.parse(request.postData() ?? "{}");
+        return body.kid === LAURA_ID
+          ? route.fulfill({ status: 500 })
+          : route.fallback();
+      },
+    );
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    await page.getByRole("button", { name: "group_add", exact: true }).click();
+    await page.getByPlaceholder("Group Name").fill("Team");
+    await page.getByRole("checkbox", { name: "Laura", exact: true }).check();
+    await page.getByRole("button", { name: "Create" }).click();
+
+    // The group is kept (it already exists on the server) and shown in the
+    // sidebar - only the member add is reported as failed, separately from
+    // "Failed to create group".
+    await expect(
+      page.getByText("Group created, but not all members could be added"),
+    ).toBeVisible();
+    const closeButton = page.getByRole("button", { name: "Close" });
+    await expect(closeButton).toBeVisible();
+    await closeButton.click();
+    await expect(page.getByText("Team", { exact: true })).toBeVisible();
+  });
+});
+
+test("AddGroupMemberDialog shows a failure message when adding a member fails", async ({
+  page,
+}) => {
+  const groupId = "error-group-add-member";
+  const chatsId = TestData.mary.settings!.chats;
+  const groupKey = await generateAesGcmKeyJwk();
+  const chatKey = await generateAesGcmKeyJwk();
+
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+  const chatsDocumentKey = await prepareMarysChatsDocument(
+    [
+      {
+        userId: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+        chatId: "chat-laura",
+        owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      },
+    ],
+    undefined,
+    undefined,
+    [
+      {
+        groupId,
+        owner: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+        name: "Team",
+      },
+    ],
+  );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get contact requests before a failed add-member",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  const groupContent = await aesGcmEncrypt(
+    groupKey,
+    new TextEncoder().encode(
+      JSON.stringify({
+        documentId: groupId,
+        name: "Team",
+        type: "group",
+        members: ["d20cf443-4f96-418f-a957-c8cbef8677c3"],
+        publicProfiles: {},
+      }),
+    ),
+  );
+  const groupExistsParams = {
+    ownerId: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+    documentId: groupId,
+    kid: chatsId,
+    issuer: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+  };
+  provider
+    .addInteraction()
+    .given("a document exists", groupExistsParams)
+    .uponReceiving(
+      "a request of mary to get her group before a failed add-member",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${groupId}`,
+      (r) => r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", groupContent),
+    );
+  const wrappedGroupKey = await encryptKeyEnvelope(groupKey, chatsDocumentKey);
+  provider
+    .addInteraction()
+    .given("a document exists", groupExistsParams)
+    .uponReceiving(
+      "a request of mary to get her group's key before a failed add-member",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${groupId}/keys/${chatsId}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedGroupKey) }),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to receive messages before a failed add-member",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${groupId}/messages`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  const chatContent = await aesGcmEncrypt(
+    chatKey,
+    new TextEncoder().encode(
+      JSON.stringify({
+        documentId: "chat-laura",
+        name: "Chat",
+        type: "chat",
+        publicProfiles: {},
+      }),
+    ),
+  );
+  provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get her chat with laura (failed add-member)",
+    )
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura",
+      (r) => r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.body("application/octet-stream", chatContent),
+    );
+  const wrappedChatKey = await encryptKeyEnvelope(chatKey, chatsDocumentKey);
+  const builder = provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to get her chat with laura's key (failed add-member)",
+    )
+    .withRequest(
+      "GET",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/keys/${chatsId}`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody({ sharedKey: MatchersV3.string(wrappedChatKey) }),
+    );
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    // Registered after setupMockServer's catch-all, so it wins for the group
+    // metadata PUT without disturbing the Pact-mocked GETs above.
+    await page.route(
+      `**/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${groupId}`,
+      (route) =>
+        route.request().method() === "PUT"
+          ? route.fulfill({ status: 500 })
+          : route.fallback(),
+    );
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    await page.getByText("Team", { exact: true }).first().click();
+    await page.getByRole("button", { name: "person_add", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Laura", exact: true }).check();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+
+    await expect(page.getByText("Failed to add member")).toBeVisible();
+  });
+});
+
+test("GroupInvitationMessage's Join button shows Retry after a failed join", async ({
+  page,
+}) => {
+  const groupId = "error-group-join";
+  const owner = "10ad1cce-816b-4e12-b94d-7ef824c0d162"; // alice
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+  const KNOWN_CHAT_KEY: JsonWebKey = {
+    key_ops: ["encrypt", "decrypt"],
+    ext: true,
+    alg: "A256GCM",
+    kty: "oct",
+    k: "rHlLiQjRuBoEcZCWwG6VuYbgcuiJGN4mmohJn5MHpAU",
+  };
+  const messageContent = await aesGcmEncrypt(
+    KNOWN_CHAT_KEY,
+    new TextEncoder().encode(
+      JSON.stringify({
+        type: "group-invitation",
+        groupId,
+        owner,
+        name: "Team",
+      }),
+    ),
+  );
+
+  await prepareMarysNamedPublicProfile("Mary");
+  const builder = await prepareMarysChat(owner);
+  provider
+    .addInteraction()
+    .given("Mary has an invitation to alice's group in her chat with alice")
+    .uponReceiving(
+      "a request to receive a group invitation before a failed join",
+    )
+    .withRequest("GET", `/users/${owner}/documents/chat-mary/messages`, (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          id: MatchersV3.string("msg-invite-fail"),
+          sender: owner,
+          content: MatchersV3.string(messageContent.toString("base64")),
+        },
+      ]),
+    );
+  provider
+    .addInteraction()
+    .given("Mary has an invitation to alice's group in her chat with alice")
+    .uponReceiving(
+      "a request to receive more messages after a failed-join invitation",
+    )
+    .withRequest("GET", `/users/${owner}/documents/chat-mary/messages`, (r) => {
+      r.query({ sinceId: "msg-invite-fail" });
+      r.headers({ Prefer: "wait=30" });
+    })
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    // Registered after setupMockServer's catch-all, so it wins for the
+    // group Document load without disturbing the Pact-mocked GETs above.
+    await page.route(`**/users/${owner}/documents/${groupId}`, (route) =>
+      route.fulfill({ status: 500 }),
+    );
+    await loginAsMary(page);
+
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    await page.getByText("Alice", { exact: true }).first().click();
+
+    const joinButton = page.getByRole("button", { name: "Join" });
+    await expect(joinButton).toBeVisible();
+    await joinButton.click();
+
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  });
+});
+
+test("GroupChat shows an error when the group isn't in mary's chats list", async ({
+  page,
+}) => {
+  const chatsId = TestData.mary.settings!.chats;
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const chatsContent = await aesGcmEncrypt(
+    chatsDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({ name: "Chats", type: "chatList", contacts: [] }),
+    ),
+  );
+  const wrappedChatsKey = await encryptKeyEnvelope(
+    chatsDocumentKey,
+    TestData.mary.settingsKey!,
+  );
+
+  await loginMary(page, async (p) => {
+    await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+      route.fulfill({ status: 200, json: [] }),
+    );
+    await p.route(`**/users/${MARY}/documents/${chatsId}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: Buffer.from(chatsContent),
+      }),
+    );
+    await p.route(
+      `**/users/${MARY}/documents/${chatsId}/keys/${MARY}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedChatsKey } }),
+    );
+  });
+
+  // A full navigation reloads the app (unlike client-side routing), which
+  // drops the in-memory decrypted keys - re-entering the password is what
+  // navigation.test.ts's "navigate to image details" does for the same
+  // reason.
+  await page.goto("/chats/groups/some-group-mary-does-not-know-about");
+  await inputMarysPassword(page);
+
+  await expect(page.getByText("Error loading this group")).toBeVisible();
+});
+
+test("Chat.tsx shows a chats-load error when the chats document fails to load", async ({
+  page,
+}) => {
+  const chatsId = TestData.mary.settings!.chats;
+
+  await loginMary(page, async (p) => {
+    await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+      route.fulfill({ status: 200, json: [] }),
+    );
+    // ChatsList's own load rejects, which Chat.tsx surfaces as a retry
+    // message instead of an eternal spinner (there is no chat to show).
+    await p.route(`**/users/${MARY}/documents/${chatsId}`, (route) =>
+      route.fulfill({ status: 500 }),
+    );
+  });
+
+  await page.goto("/chats/7f53a4ea-58b7-4bbf-b94d-f2038752d5b6");
+  await inputMarysPassword(page);
+
+  await expect(
+    page.getByText("Could not load your chats right now. Retrying..."),
+  ).toBeVisible();
+});
+
+test("Chat.tsx shows a decryption error for a contact that isn't in mary's chats list", async ({
+  page,
+}) => {
+  const chatsId = TestData.mary.settings!.chats;
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const chatsContent = await aesGcmEncrypt(
+    chatsDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({ name: "Chats", type: "chatList", contacts: [] }),
+    ),
+  );
+  const wrappedChatsKey = await encryptKeyEnvelope(
+    chatsDocumentKey,
+    TestData.mary.settingsKey!,
+  );
+
+  await loginMary(page, async (p) => {
+    await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+      route.fulfill({ status: 200, json: [] }),
+    );
+    await p.route(`**/users/${MARY}/documents/${chatsId}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: Buffer.from(chatsContent),
+      }),
+    );
+    await p.route(
+      `**/users/${MARY}/documents/${chatsId}/keys/${MARY}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedChatsKey } }),
+    );
+  });
+
+  // A stale/bookmarked link to a contact mary's "chats" document no longer
+  // (or never did) list - Chat.tsx's `!contact` guard, distinct from a
+  // load failure (the chats document itself loads fine here).
+  await page.goto("/chats/7f53a4ea-58b7-4bbf-b94d-f2038752d5b6");
+  await inputMarysPassword(page);
+
+  await expect(
+    page.getByText(
+      "There was an error decrypting the messages. This may be because the keys have changed.",
+    ),
+  ).toBeVisible();
+});
+
+test("the chats list still renders when fetching contact requests fails", async ({
+  page,
+}) => {
+  const chatsId = TestData.mary.settings!.chats;
+  const chatsDocumentKey = await generateAesGcmKeyJwk();
+  const chatsContent = await aesGcmEncrypt(
+    chatsDocumentKey,
+    new TextEncoder().encode(
+      JSON.stringify({
+        name: "Chats",
+        type: "chatList",
+        contacts: [
+          {
+            userId: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+            chatId: "chat-laura",
+            owner: MARY,
+            name: "Laura",
+            profileRevision: "0",
+          },
+        ],
+      }),
+    ),
+  );
+  const wrappedChatsKey = await encryptKeyEnvelope(
+    chatsDocumentKey,
+    TestData.mary.settingsKey!,
+  );
+
+  // getContactRequests is fire-and-forget (ChatsList doesn't block its own
+  // render on it) - a genuine 500 belongs here (page.route), not in a Pact
+  // contract (see the retry-sequence tests above for the same reasoning).
+  await loginMary(page, async (p) => {
+    await p.route(`**/users/${MARY}/contact-requests`, (route) =>
+      route.fulfill({ status: 500 }),
+    );
+    await p.route(`**/users/${MARY}/documents/${chatsId}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: Buffer.from(chatsContent),
+      }),
+    );
+    await p.route(
+      `**/users/${MARY}/documents/${chatsId}/keys/${MARY}`,
+      (route) =>
+        route.fulfill({ status: 200, json: { sharedKey: wrappedChatsKey } }),
+    );
+  });
+
+  await page.getByRole("link", { name: "Chats" }).first().click();
+
+  await expect(page.getByText("Laura", { exact: true })).toBeVisible();
 });

@@ -1,21 +1,30 @@
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { contactService } from "../contact/ContactService";
+import { groupService } from "../contact/GroupService";
+import { publicProfileService } from "../profile/publicProfileService";
 import { contactDisplayName } from "../contact/contactDisplayName";
-import { ContactEntry } from "../document/DocumentMetadata";
-import { SendMessageForm } from "../chat/SendMessageForm";
+import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
+import { documentService } from "../document/DocumentService";
+import { ConversationView } from "../chat/ConversationView";
+import { GroupInvitationMessage } from "../chat/GroupInvitationMessage";
 import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
-import { SharedDocumentMessage } from "../chat/SharedDocumentMessage";
 import { useChatsId } from "../contexts/SettingsContext";
 import { useContactProfile } from "../hooks/useContactProfile";
+
+type ChatsListUpdate = (
+  list: { contacts: ContactEntry[]; groups: GroupEntry[] },
+  revision: string | null,
+) => void;
 
 export default function Chat({ contactUserId }: { contactUserId: string }) {
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  const settings = authentication.settings;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
   const chatsId = useChatsId();
 
@@ -34,6 +43,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   // Chats.tsx's ChatsList onLoaded prop).
   const [chatsDocumentInfo, setChatsDocumentInfo] = useState<{
     contacts: ContactEntry[];
+    groups: GroupEntry[];
     chatsDocumentKey: JsonWebKey;
     name: string;
     revision: string;
@@ -44,8 +54,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     chat?.chatId,
     sharedKey,
   );
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const {
     name: contactName,
@@ -64,18 +72,30 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const handleChatsListLoaded = useCallback(
     (chatsDocument: {
       contacts: ContactEntry[];
+      groups: GroupEntry[];
       key: JsonWebKey;
       name: string;
       revision: string;
     }) =>
       setChatsDocumentInfo({
         contacts: chatsDocument.contacts,
+        groups: chatsDocument.groups,
         chatsDocumentKey: chatsDocument.key,
         name: chatsDocument.name,
         revision: chatsDocument.revision,
       }),
     [],
   );
+
+  // ChatsList owns the canonical "chats" document state; this ref is how
+  // handleJoinGroup writes a change back into it instead of only patching the
+  // local chatsDocumentInfo copy below, which ChatsList's own onLoaded
+  // republish (e.g. from an unrelated contact-request pickup) would otherwise
+  // overwrite with its older state.
+  const updateChatsListRef = useRef<ChatsListUpdate>(undefined);
+  const registerChatsListUpdate = useCallback((update: ChatsListUpdate) => {
+    updateChatsListRef.current = update;
+  }, []);
 
   // The chat list's own ContactEntry.name/avatarId is a snapshot taken at
   // accept/receive time - refresh it in the "chats" document whenever the
@@ -99,6 +119,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           key: chatsDocumentInfo.chatsDocumentKey,
           revision: chatsDocumentInfo.revision,
           contacts: chatsDocumentInfo.contacts,
+          groups: chatsDocumentInfo.groups,
         },
         contactUserId,
         {
@@ -128,7 +149,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   ]);
 
   // Once the chat Document itself has loaded (the inviter created it and the
-  // server filed our key entry, ADR 0015), the contact's `pending` chat key is
+  // server has filed our key entry, ADR 0015), the contact's `pending` chat key is
   // no longer needed - remove it from the "chats" document.
   const hasPendingChatKey = !!chatsDocumentInfo?.contacts.find(
     (c) => c.userId === contactUserId,
@@ -146,6 +167,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           key: chatsDocumentInfo.chatsDocumentKey,
           revision: chatsDocumentInfo.revision,
           contacts: chatsDocumentInfo.contacts,
+          groups: chatsDocumentInfo.groups,
         },
         contactUserId,
       )
@@ -218,9 +240,42 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     privateKey,
   ]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // Joins a group from an invitation posted in this 1:1 chat (ADR 0019
+  // decision 3): resolves our own public profile (get-or-create, like
+  // AcceptInvitationButton), then hands off to GroupService.joinGroup, which
+  // loads the group Document (via the 1:1 chat key = `sharedKey`), records a
+  // GroupEntry and shares our profile into the group. Updates the local
+  // chatsDocumentInfo so the sidebar and this message's "Open" state refresh
+  // immediately, without a full reload.
+  const handleJoinGroup = useCallback(
+    async (invitation: { groupId: string; owner: string }) => {
+      if (!chatsDocumentInfo || !sharedKey) {
+        return;
+      }
+      const { publicProfile } =
+        await publicProfileService.loadProfileAndEnsurePublicProfile(
+          user,
+          settings,
+        );
+      const { list, revision } = await groupService.joinGroup(
+        user,
+        invitation.owner,
+        invitation.groupId,
+        sharedKey,
+        {
+          documentId: chatsId,
+          name: chatsDocumentInfo.name,
+          key: chatsDocumentInfo.chatsDocumentKey,
+          revision: chatsDocumentInfo.revision,
+          contacts: chatsDocumentInfo.contacts,
+          groups: chatsDocumentInfo.groups,
+        },
+        publicProfile,
+      );
+      updateChatsListRef.current?.(list, revision);
+    },
+    [chatsDocumentInfo, sharedKey, user, settings, chatsId],
+  );
 
   return (
     <main className="grid no-margin no-space no-padding">
@@ -230,6 +285,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         activeContactUserId={contactUserId}
         onLoaded={handleChatsListLoaded}
         onLoadError={setChatsLoadFailed}
+        registerUpdate={registerChatsListUpdate}
       />
       <div
         className="col s12 m8 l8 vertical"
@@ -251,66 +307,41 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
             <progress className="circle"></progress>
           </div>
         ) : (
-          <>
-            <div
-              className="scroll padding vertical"
-              style={{
-                flexGrow: 1,
-                gap: "0.5rem",
-              }}
-            >
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`padding elevate ${
-                    m.sender === user
-                      ? "primary top-round left-round"
-                      : "surface-container top-round right-round"
-                  }`}
-                  style={{
-                    alignSelf: m.sender === user ? "flex-end" : "flex-start",
-                    maxWidth: "80%",
-                    wordWrap: "break-word",
-                  }}
-                >
-                  {(() => {
-                    if (m.content.startsWith('{"type":"shared-document"')) {
-                      try {
-                        const payload = JSON.parse(m.content);
-                        return (
-                          <SharedDocumentMessage
-                            documentId={payload.documentId}
-                            owner={payload.owner}
-                            chatKey={sharedKey}
-                            contactUserId={contactUserId}
-                          />
-                        );
-                      } catch {
-                        return m.content;
-                      }
-                    }
-                    return m.content;
-                  })()}
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-            {user && contactUserId && chat && (
-              <>
-                <hr className="divider" />
-                <SendMessageForm
-                  userId={user}
-                  contactUserId={contactUserId}
-                  ownerId={chat.ownerId}
-                  chatId={chat.chatId}
-                  sharedKey={sharedKey}
-                  onMessageSent={(newMessage) =>
-                    setMessages((prev) => [...(prev ?? []), newMessage])
+          user &&
+          contactUserId &&
+          chat && (
+            <ConversationView
+              userId={user}
+              ownerId={chat.ownerId}
+              chatId={chat.chatId}
+              sharedKey={sharedKey}
+              contactUserId={contactUserId}
+              messages={messages}
+              onMessageSent={(newMessage) =>
+                setMessages((prev) => [...(prev ?? []), newMessage])
+              }
+              share={(document) =>
+                documentService.shareDocument(
+                  user,
+                  document,
+                  contactUserId,
+                  sharedKey,
+                )
+              }
+              renderInvitation={(invitation) => (
+                <GroupInvitationMessage
+                  groupId={invitation.groupId}
+                  name={invitation.name}
+                  alreadyJoined={
+                    chatsDocumentInfo?.groups.some(
+                      (g) => g.groupId === invitation.groupId,
+                    ) ?? false
                   }
+                  onJoin={() => handleJoinGroup(invitation)}
                 />
-              </>
-            )}
-          </>
+              )}
+            />
+          )
         )}
       </div>
     </main>

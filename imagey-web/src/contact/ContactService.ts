@@ -2,7 +2,7 @@ import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { PublicProfile } from "../profile/PublicProfile";
-import { ContactEntry } from "../document/DocumentMetadata";
+import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
 import { ContactInfo, ContactRequest } from "./ContactRequest";
 import { contactRepository } from "./ContactRepository";
 import {
@@ -22,15 +22,22 @@ import {
 // retry loop.
 const MAX_CHATS_UPDATE_RETRIES = 3;
 
+// The "chats" document's list content - both `contacts` and `groups` need to
+// survive every read-modify-write of this document (see updateChatList
+// below), not just whichever one a particular caller is patching.
+export type ChatList = { contacts: ContactEntry[]; groups: GroupEntry[] };
+
 // Re-fetches and decrypts the "chats" document with a key we already hold,
-// returning just what updateContact needs to re-apply its
-// change after a concurrent-modification 412: the current contacts list and
-// the current revision.
-async function reloadChatsContacts(
+// returning just what updateChatList needs to re-apply its change after a
+// concurrent-modification 412: the current list and the current revision.
+// Exported for GroupService.createGroup's own atomic-upload retry (it can't
+// go through updateChatList/updateDocumentMetadata since the group Document
+// and the "chats" list are created together in one multipart upload).
+export async function reloadChatList(
   userId: UserId,
   chatsDocumentId: string,
   chatsDocumentKey: JsonWebKey,
-): Promise<{ contacts: ContactEntry[]; revision: string | null }> {
+): Promise<{ list: ChatList; revision: string | null }> {
   const { content, etag } = await documentRepository.loadDocument(
     userId,
     chatsDocumentId,
@@ -40,7 +47,10 @@ async function reloadChatsContacts(
     content,
   );
   const payload = JSON.parse(new TextDecoder().decode(decrypted));
-  return { contacts: payload.contacts ?? [], revision: etag };
+  return {
+    list: { contacts: payload.contacts ?? [], groups: payload.groups ?? [] },
+    revision: etag,
+  };
 }
 
 // Appends a contact to the "chats" document's list, replacing any existing
@@ -144,32 +154,38 @@ async function decryptContactInfo(
 }
 
 // What the chat view keeps of the "chats" document to write it back.
-type ChatsDocumentState = {
+export type ChatsDocumentState = {
   documentId: string;
   name: string;
   key: JsonWebKey;
   revision: string | null;
-  contacts: ContactEntry[];
-};
+} & ChatList;
 
-// Applies `patch` to one contact of the "chats" document and writes it back -
-// a read-modify-write that re-reads the document and re-applies the patch if
-// the server rejects the write because it changed concurrently (e.g. the same
-// chat open in two tabs, a contact-request accept/receive, or the chat view's
-// own profile-snapshot and pending-key updates racing each other) - same
-// reasoning as DocumentService.storeDocument's own retry loop.
-async function updateContact(
+// Applies `patch` to the "chats" document's whole list (contacts and groups)
+// and writes it back - a read-modify-write that re-reads the document and
+// re-applies the patch if the server rejects the write because it changed
+// concurrently (e.g. the same chat open in two tabs, a contact-request
+// accept/receive, a group being created/joined, or the chat view's own
+// profile-snapshot and pending-key updates racing each other) - same
+// reasoning as DocumentService.storeDocument's own retry loop. Generalized
+// over the whole list (not just `contacts`) so a write from either side
+// (contacts or groups) never drops the other's entries.
+export async function updateChatList(
   userId: UserId,
-  chatsDocument: ChatsDocumentState,
-  contactUserId: string,
-  patch: (contact: ContactEntry) => ContactEntry,
-): Promise<{ contacts: ContactEntry[]; revision: string | null }> {
-  let currentContacts = chatsDocument.contacts;
+  chatsDocument: Pick<
+    ChatsDocumentState,
+    "documentId" | "name" | "key" | "revision"
+  > &
+    ChatList,
+  patch: (list: ChatList) => ChatList,
+): Promise<{ list: ChatList; revision: string | null }> {
+  let currentList: ChatList = {
+    contacts: chatsDocument.contacts,
+    groups: chatsDocument.groups,
+  };
   let currentRevision = chatsDocument.revision;
   for (let attempt = 1; attempt <= MAX_CHATS_UPDATE_RETRIES; attempt++) {
-    const updatedContacts = currentContacts.map((contact) =>
-      contact.userId === contactUserId ? patch(contact) : contact,
-    );
+    const updatedList = patch(currentList);
     try {
       const newRevision = await documentService.updateDocumentMetadata(
         userId,
@@ -178,11 +194,12 @@ async function updateContact(
         {
           name: chatsDocument.name,
           type: "chatList",
-          contacts: updatedContacts,
+          contacts: updatedList.contacts,
+          groups: updatedList.groups,
         },
         currentRevision,
       );
-      return { contacts: updatedContacts, revision: newRevision };
+      return { list: updatedList, revision: newRevision };
     } catch (e) {
       if (
         !(e instanceof PreconditionFailedError) ||
@@ -190,17 +207,39 @@ async function updateContact(
       ) {
         throw e;
       }
-      const reloaded = await reloadChatsContacts(
+      const reloaded = await reloadChatList(
         userId,
         chatsDocument.documentId,
         chatsDocument.key,
       );
-      currentContacts = reloaded.contacts;
+      currentList = reloaded.list;
       currentRevision = reloaded.revision;
     }
   }
   // Unreachable: the final iteration either returns or rethrows.
   throw new PreconditionFailedError("Chats document update retries exhausted");
+}
+
+// Applies `patch` to one contact of the "chats" document, leaving `groups`
+// untouched - a thin wrapper around updateChatList for the contact-only
+// callers below.
+async function updateContact(
+  userId: UserId,
+  chatsDocument: ChatsDocumentState,
+  contactUserId: string,
+  patch: (contact: ContactEntry) => ContactEntry,
+): Promise<{ contacts: ContactEntry[]; revision: string | null }> {
+  const { list, revision } = await updateChatList(
+    userId,
+    chatsDocument,
+    (current) => ({
+      ...current,
+      contacts: current.contacts.map((contact) =>
+        contact.userId === contactUserId ? patch(contact) : contact,
+      ),
+    }),
+  );
+  return { contacts: list.contacts, revision };
 }
 
 export const contactService = {
@@ -306,6 +345,7 @@ export const contactService = {
           name: chatsDocument.name,
           type: chatsDocument.type,
           contacts: appendContact(chatsDocument.contacts, contact),
+          groups: chatsDocument.groups,
         },
         // Reject (rather than silently clobber) if the "chats" document changed
         // since we loaded it - another accepted request would otherwise be lost.
@@ -422,6 +462,7 @@ export const contactService = {
               name: chatsDocument.name,
               type: chatsDocument.type,
               contacts: appendContact(chatsDocument.contacts, contact),
+              groups: chatsDocument.groups,
             }),
           ).buffer,
         ],
