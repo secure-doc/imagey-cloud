@@ -84,7 +84,7 @@ export async function encryptKnownChatMessage(
   return encrypted.toString("base64");
 }
 
-async function aesGcmDecrypt(
+export async function aesGcmDecrypt(
   key: JsonWebKey,
   payload: Buffer,
 ): Promise<Buffer> {
@@ -3333,5 +3333,142 @@ export async function routeMarysAuth(page: Page) {
       status: 200,
       path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0.json",
     }),
+  );
+}
+
+// --- Generated-fixture document tests (document.test.ts, media.test.ts, the
+// Part C additions to image.test.ts) ----------------------------------------
+// These tests don't need new Pact contracts (loading a folder/document/shared
+// document is already covered elsewhere) - they only exercise client
+// behavior against locally-generated fixtures served via page.route, the way
+// image.test.ts already did before this helper existed.
+
+// Encrypts a document's plaintext JSON payload - the common first step of
+// building a page.route fixture for a document.
+export function encryptedDocument(
+  key: JsonWebKey,
+  content: object,
+): Promise<Buffer> {
+  return aesGcmEncrypt(key, new TextEncoder().encode(JSON.stringify(content)));
+}
+
+// Serves one document's encrypted content and its key envelope (under
+// `keyId`, wrapped by whatever key `wrappedKey` was produced with) - the two
+// requests documentService.loadDocument makes for any document.
+export async function routeGeneratedDocument(
+  page: Page,
+  id: string,
+  content: Buffer,
+  keyId: string,
+  wrappedKey: string,
+  owner: string = MARY_ID,
+) {
+  await page.route(`**/users/${owner}/documents/${id}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/octet-stream",
+      body: content,
+    }),
+  );
+  await page.route(`**/users/${owner}/documents/${id}/keys/${keyId}`, (route) =>
+    route.fulfill({ status: 200, json: { sharedKey: wrappedKey } }),
+  );
+}
+
+// Logs Mary in via her device password and lands on `path` - the common tail
+// of every generated-fixture test that needs a real, authenticated session.
+export async function loginAsMaryAt(page: Page, path: string) {
+  await setupMarysDevice(page);
+  await routeMarysAuth(page);
+  await page.goto(path);
+  await inputMarysPassword(page);
+}
+
+// The outcome navigator.share() should produce under stubMobile: "ok"
+// resolves and records the shared file in window.__shared; "AbortError" and
+// "NotAllowedError" reject with that DOMException name (openDocument.ts
+// treats them specially); "NotAllowedOnce" rejects with NotAllowedError only
+// on the FIRST call, then succeeds (simulates the gesture-refresh dialog's
+// retry); "TypeError" rejects with a generic error (an unexpected failure,
+// not one openDocument special-cases); "none" removes navigator.canShare
+// entirely (Safari macOS/older browsers).
+export type ShareOutcome =
+  | "ok"
+  | "AbortError"
+  | "NotAllowedError"
+  | "NotAllowedOnce"
+  | "TypeError"
+  | "none";
+
+// Stubs the two browser APIs openDocument()/OpenFileDialog depend on:
+// matchMedia("(pointer: coarse)") (desktop vs. mobile) and
+// navigator.share/canShare (the share outcome). Must run via addInitScript,
+// which injects it before the page's own scripts - registering it AFTER
+// page.goto would be too late.
+export async function stubMobile(
+  page: Page,
+  {
+    coarse = true,
+    share = "ok",
+  }: { coarse?: boolean; share?: ShareOutcome } = {},
+) {
+  await page.addInitScript(
+    ({ coarse, share }) => {
+      const originalMatchMedia = window.matchMedia?.bind(window);
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: (query: string) => {
+          if (query === "(pointer: coarse)") {
+            return {
+              matches: coarse,
+              media: query,
+              onchange: null,
+              addListener: () => {},
+              removeListener: () => {},
+              addEventListener: () => {},
+              removeEventListener: () => {},
+              dispatchEvent: () => false,
+            } as MediaQueryList;
+          }
+          return originalMatchMedia(query);
+        },
+      });
+
+      if (share === "none") {
+        Object.defineProperty(navigator, "canShare", {
+          configurable: true,
+          value: undefined,
+        });
+        return;
+      }
+      Object.defineProperty(navigator, "canShare", {
+        configurable: true,
+        value: () => true,
+      });
+      let attempted = false;
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: (data: { files: File[] }) => {
+          if (share === "NotAllowedOnce" && !attempted) {
+            attempted = true;
+            return Promise.reject(
+              new DOMException("blocked", "NotAllowedError"),
+            );
+          }
+          if (share === "ok" || share === "NotAllowedOnce") {
+            const file = data.files[0];
+            const w = window as unknown as { __shared?: unknown[] };
+            w.__shared = w.__shared || [];
+            w.__shared.push({ name: file.name, type: file.type });
+            return Promise.resolve();
+          }
+          if (share === "TypeError") {
+            return Promise.reject(new TypeError("share not supported"));
+          }
+          return Promise.reject(new DOMException("blocked", share));
+        },
+      });
+    },
+    { coarse, share },
   );
 }

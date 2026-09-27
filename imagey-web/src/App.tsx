@@ -7,6 +7,7 @@ import { ActionBarContextProvider } from "./contexts/ActionBarContextProvider";
 import { BrowserRouter, Route, Routes, Outlet } from "react-router";
 import Navigation from "./components/Navigation";
 import Image from "./pages/Image";
+import Media from "./pages/Media";
 import Chats from "./pages/Chats";
 import Chat from "./pages/Chat";
 import GroupChat from "./pages/GroupChat";
@@ -29,7 +30,7 @@ import { documentService } from "./document/DocumentService";
 import Folder from "./folder/Folder";
 import { FolderContext, FolderInfo } from "./contexts/FolderContext";
 import DocumentsPage from "./pages/DocumentsPage";
-import { ImageContext, ImageInfo } from "./contexts/ImageContext";
+import { DetailContext, DetailInfo } from "./contexts/DetailContext";
 
 function DocumentRoute() {
   const { documentId } = useParams();
@@ -64,10 +65,10 @@ function App() {
   const [settings, setSettings] = useState<SettingsType | undefined>();
   const [folders, setFolders] = useState<Record<string, FolderInfo>>({});
 
-  const [images, setImages] = useState<Record<string, ImageInfo>>({});
+  const [details, setDetails] = useState<Record<string, DetailInfo>>({});
 
-  const registerImage = useCallback((info: ImageInfo) => {
-    setImages((prev) => ({ ...prev, [info.documentId]: info }));
+  const registerDetail = useCallback((info: DetailInfo) => {
+    setDetails((prev) => ({ ...prev, [info.documentId]: info }));
   }, []);
 
   const registerParentFolder = useCallback((id: string, parentId: string) => {
@@ -153,7 +154,7 @@ function App() {
             registerKey,
           }}
         >
-          <ImageContext.Provider value={{ images, registerImage }}>
+          <DetailContext.Provider value={{ details, registerDetail }}>
             <ActionBarContextProvider>
               <BrowserRouter>
                 <AppBar />
@@ -188,11 +189,12 @@ function App() {
                     element={<GroupChatRoute />}
                   />
                   <Route path="images/:id" element={<Image />} />
+                  <Route path="media/:id" element={<Media />} />
                 </Routes>
                 <aside></aside>
               </BrowserRouter>
             </ActionBarContextProvider>
-          </ImageContext.Provider>
+          </DetailContext.Provider>
         </FolderContext.Provider>
       </SettingsContext.Provider>
     </AuthenticationContext.Provider>

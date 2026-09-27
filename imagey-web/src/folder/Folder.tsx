@@ -17,7 +17,9 @@ import Document from "../document/Document";
 import { FolderEntry, FolderMetadata } from "../document/DocumentMetadata";
 import Panel from "../components/Panel";
 import UploadButton from "../components/UploadButton";
-import { ImageContext } from "../contexts/ImageContext";
+import { DetailContext } from "../contexts/DetailContext";
+import { useOpenDocument } from "../hooks/useOpenDocument";
+import { isPlayableMedia } from "../pages/Media";
 
 export default function Folder({ id }: { id: string }) {
   const { t } = useTranslation();
@@ -41,7 +43,7 @@ export default function Folder({ id }: { id: string }) {
   const parentKey = useKey(parentId);
   const key = useKey(id);
   const { registerParentFolder, registerKey } = useContext(FolderContext);
-  const { registerImage } = useContext(ImageContext);
+  const { registerDetail } = useContext(DetailContext);
   const navigate = useNavigate();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const accessPath = useAccessPath(id, folder?.owner ?? "");
@@ -82,7 +84,8 @@ export default function Folder({ id }: { id: string }) {
         console.error(`Could not open image ${entry.documentId}`, e);
         return;
       }
-      registerImage({
+      registerDetail({
+        kind: "image",
         documentId: entry.documentId,
         name: entry.name,
         owner: folder.owner,
@@ -93,7 +96,41 @@ export default function Folder({ id }: { id: string }) {
       });
       navigate(`/images/${entry.documentId}?folder=${id}`);
     },
-    [folder, accessPath, registerImage, navigate, id],
+    [folder, accessPath, registerDetail, navigate, id],
+  );
+
+  const { open: openFile, element: openFileElement } = useOpenDocument();
+  const handleFileClick = useCallback(
+    async (entry: FolderEntry) => {
+      if (!folder) {
+        return;
+      }
+      if (isPlayableMedia(entry.mimeType)) {
+        navigate(`/media/${entry.documentId}?folder=${id}`);
+        return;
+      }
+      await openFile(entry.name, entry.mimeType, async () => {
+        const doc = await documentService.loadDocument(
+          folder.owner,
+          entry.documentId,
+          id,
+          folder.key,
+          undefined,
+          accessPath,
+        );
+        if (doc.type !== "file") {
+          throw new Error(`Expected a file document, got ${doc.type}`);
+        }
+        return documentService.loadFileContent(
+          doc.owner,
+          doc.documentId,
+          doc.contentId,
+          doc.key,
+          accessPath,
+        );
+      });
+    },
+    [folder, id, accessPath, openFile, navigate],
   );
 
   useFolderIcons(id, folder, handleCreateFolder, handleChildAdded);
@@ -184,6 +221,7 @@ export default function Folder({ id }: { id: string }) {
           onCreated={handleChildAdded}
         />
       )}
+      {openFileElement}
       <div className="column scroll">
         <ImageList
           entries={folder.documents}
@@ -191,6 +229,7 @@ export default function Folder({ id }: { id: string }) {
           folderKey={folder.key}
           accessPath={accessPath}
           onImageClick={handleImageClick}
+          onFileClick={handleFileClick}
           onFolderClick={(entry) => {
             registerParentFolder(entry.documentId, id);
             navigate("/documents/" + entry.documentId);

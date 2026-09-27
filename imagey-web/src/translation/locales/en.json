@@ -1,6 +1,9 @@
 {
   "translation": {
     "{{browser}} on {{os}}": "{{browser}} on {{os}}",
+    "{{name}} cannot be played in the browser": "{{name}} cannot be played in the browser",
+    "{{name}} is ready": "{{name}} is ready",
+    "{{name}} is too large to play": "{{name}} is too large to play",
     "{{user}} whants to connect with you.": "{{user}} whants to connect with you.",
     "Activate device?": "Activate device?",
     "Add": "Add",
@@ -23,6 +26,7 @@
     "Could not load your chats. Retrying...": "Could not load your chats. Retrying...",
     "Could not load your images. Retrying...": "Could not load your images. Retrying...",
     "Could not load your profile. Retrying...": "Could not load your profile. Retrying...",
+    "Could not open {{name}}": "Could not open {{name}}",
     "Create": "Create",
     "Create Folder": "Create Folder",
     "Create Group": "Create Group",
@@ -33,6 +37,7 @@
     "Device registered, you can now activate it with another device": "Device registered, you can now activate it with another device",
     "Devices": "Devices",
     "Do you want to activate the device {{device}}?": "Do you want to activate the device {{device}}?",
+    "Download": "Download",
     "Email": "Email",
     "Email Addresses": "Email Addresses",
     "Error activating device": "Error activating device",
@@ -63,6 +68,7 @@
     "Name": "Name",
     "No contacts yet?": "No contacts yet?",
     "No documents available": "No documents available",
+    "No file found": "No file found",
     "No image found": "No image found",
     "Not you?": "Not you?",
     "OK": "OK",
