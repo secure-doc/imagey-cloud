@@ -407,6 +407,34 @@ export const documentService = {
       throw new DocumentLoadError(documentId, e);
     }
   },
+  // Loads a document's metadata when its key is ALREADY known - skips the
+  // key request loadDocument would otherwise make (e.g. the image detail
+  // page already holds the document key, and only needs the original's
+  // contentId from the metadata to offer a download).
+  loadDocumentWithKey: async (
+    owner: string,
+    documentId: string,
+    documentKey: JsonWebKey,
+    accessPath?: string,
+  ): Promise<DocumentMetadata> => {
+    try {
+      const { content, etag } = await documentRepository.loadDocument(
+        owner,
+        documentId,
+        accessPath,
+      );
+      return await decryptDocument(
+        documentId,
+        content,
+        documentKey,
+        owner,
+        etag ?? "",
+      );
+    } catch (e) {
+      console.error("loadDocumentWithKey failed for " + documentId, e);
+      throw new DocumentLoadError(documentId, e);
+    }
+  },
   // Loads a folder document and then every non-folder child it references, in
   // parallel, dropping folders and children that failed to load. Returns `[]`
   // if the folder itself failed to load. Used wherever a page needs "the

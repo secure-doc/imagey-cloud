@@ -1,4 +1,5 @@
 import { FolderEntry } from "../document/DocumentMetadata";
+import FileComponent from "./FileComponent";
 import FolderEntryImageComponent from "./FolderEntryImageComponent";
 import FolderImageComponent from "./FolderImageComponent";
 
@@ -9,6 +10,7 @@ interface ImageListProps {
   accessPath?: string;
   onFolderClick?: (entry: FolderEntry) => void;
   onImageClick?: (entry: FolderEntry) => void;
+  onFileClick: (entry: FolderEntry) => void | Promise<void>;
 }
 
 export default function ImageList({
@@ -18,6 +20,7 @@ export default function ImageList({
   accessPath,
   onFolderClick,
   onImageClick,
+  onFileClick,
 }: ImageListProps) {
   return (
     <div className="column">
@@ -28,6 +31,14 @@ export default function ImageList({
             folder={entry}
             onClick={() => onFolderClick?.(entry)}
           />
+        ) : entry.type === "file" ? (
+          <div key={entry.documentId}>
+            <FileComponent
+              name={entry.name}
+              mimeType={entry.mimeType}
+              onClick={() => onFileClick(entry)}
+            />
+          </div>
         ) : (
           <div key={entry.documentId}>
             <FolderEntryImageComponent
@@ -35,11 +46,7 @@ export default function ImageList({
               folderOwner={folderOwner}
               folderKey={folderKey}
               accessPath={accessPath}
-              onClick={
-                entry.type === "image" && onImageClick
-                  ? () => onImageClick(entry)
-                  : undefined
-              }
+              onClick={onImageClick ? () => onImageClick(entry) : undefined}
             />
           </div>
         ),
