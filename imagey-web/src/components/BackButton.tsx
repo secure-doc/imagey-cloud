@@ -3,7 +3,7 @@ import { ActionBarContext } from "../contexts/ActionBarContext";
 import { useLocation, useNavigate } from "react-router";
 
 export default function BackButton() {
-  const { setBackButtonVisible } = useContext(ActionBarContext);
+  const { setBackButtonVisible, backPath } = useContext(ActionBarContext);
   const navigate = useNavigate();
   const location = useLocation();
   const parentPath = useMemo(() => {
@@ -16,7 +16,10 @@ export default function BackButton() {
       setBackButtonVisible(false);
     }
   }, [location, setBackButtonVisible]);
-  const back = useCallback(() => navigate(parentPath), [parentPath, navigate]);
+  const back = useCallback(
+    () => navigate(backPath ?? parentPath),
+    [backPath, parentPath, navigate],
+  );
 
   return (
     <button

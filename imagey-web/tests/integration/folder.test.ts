@@ -7,6 +7,7 @@ import {
   loginAsMary,
   prepareDocumentUpload,
   prepareMarysContactRequests,
+  prepareMarysDocuments,
   prepareMarysDocumentsWithFolder,
   prepareMarysEmptyDocumentsFolder,
   prepareMarysFolderCreation,
@@ -336,6 +337,69 @@ test("navigate into folder and upload image", async ({ page }) => {
         .getByAltText("beach-1836467_1920.jpg")
         .or(page.locator(`text=Error loading beach-1836467_1920.jpg`)),
     ).toBeVisible();
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+const ROOT_ID = "68980188-577d-4d2f-9e36-a6b32b25cd3a";
+const BEACH_ID = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3";
+
+test("open an image from the folder in the detail view and go back", async ({
+  page,
+}) => {
+  // The back button is only shown on small screens
+  await page.setViewportSize({ width: 412, height: 915 });
+  // Given: the activity page, the grid, the detail view and the grid again
+  // each load the medium images, so every interaction is registered once per
+  // load.
+  await prepareMarysLogin(page);
+  await prepareMarysContactRequests();
+  await prepareMarysDocuments();
+  await prepareMarysDocuments();
+  await prepareMarysDocuments();
+  const provider = await prepareMarysDocuments();
+
+  await provider.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+
+    await expect(page.locator("main img")).toHaveCount(2, {
+      timeout: 10_000,
+    });
+    await page.getByRole("link", { name: "Images" }).first().click();
+    const gridImage = page.getByAltText("beach-1836467_1920.jpg");
+    await expect(gridImage).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("main img")).toHaveCount(2);
+
+    // When
+    const mediumLoaded = page.waitForResponse((r) =>
+      new URL(r.url()).pathname.endsWith(
+        `/documents/${BEACH_ID}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      ),
+    );
+    await gridImage.click();
+
+    // Then: the detail view shows the (only) image large, with the file name
+    // as title, and has no bottom navigation
+    await expect(page).toHaveURL(`/images/${BEACH_ID}?folder=${ROOT_ID}`);
+    await mediumLoaded;
+    await expect(page.locator("main img")).toHaveCount(1);
+    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible();
+    await expect(page.locator("nav.bottom")).toBeHidden();
+    await expect(
+      page.getByRole("heading", { name: "beach-1836467_1920.jpg" }),
+    ).toBeVisible();
+
+    // And: back leads to the folder the image was opened from
+    const gridReloaded = page.waitForResponse((r) =>
+      new URL(r.url()).pathname.endsWith(
+        `/documents/${BEACH_ID}/files/7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0`,
+      ),
+    );
+    await page.getByLabel("back-button").click();
+    await expect(page).toHaveURL(`/documents/${ROOT_ID}`);
+    await gridReloaded;
+    await expect(page.locator("main img")).toHaveCount(2);
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

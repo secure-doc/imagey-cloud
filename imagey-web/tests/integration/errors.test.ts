@@ -3,6 +3,7 @@ import { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
 import {
   clearLocalStorage,
+  routeMarysAuth,
   setupMarysDevice,
   inputMarysPassword,
   setupMockServer,
@@ -69,48 +70,6 @@ async function messageFromBrowser<A = undefined>(
 }
 
 const MARY = "d20cf443-4f96-418f-a957-c8cbef8677c3";
-
-// The minimum set of endpoints App.tsx hits to decrypt Mary's keys and load
-// her settings document (getSettings). Enough to render the logged-in shell;
-// page-specific fetches are left to the caller.
-async function routeMarysAuth(page: Page) {
-  const deviceId = TestData.mary.devices[0].deviceId;
-  await page.route(`**/users/${MARY}/public-keys/0`, (route) =>
-    route.fulfill({ status: 200, json: TestData.mary.publicMainKey }),
-  );
-  await page.route(
-    `**/users/${MARY}/devices/${deviceId}/private-keys/0`,
-    (route) =>
-      route.fulfill({
-        status: 200,
-        json: {
-          kid: "0",
-          encryptingDeviceId: deviceId,
-          key: TestData.mary.devices[0].encryptedPrivateMainKey,
-        },
-      }),
-  );
-  await page.route(
-    `**/users/${MARY}/devices/${deviceId}/public-keys/0`,
-    (route) =>
-      route.fulfill({
-        status: 200,
-        json: TestData.mary.devices[0].publicDeviceKey,
-      }),
-  );
-  await page.route(`**/users/${MARY}/documents/${MARY}`, (route) =>
-    route.fulfill({
-      status: 200,
-      path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/document.enc",
-    }),
-  );
-  await page.route(`**/users/${MARY}/documents/${MARY}/keys/0`, (route) =>
-    route.fulfill({
-      status: 200,
-      path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0.json",
-    }),
-  );
-}
 
 async function loginMary(
   page: Page,
@@ -2406,4 +2365,123 @@ test("decryption error shows an error message when a chat key entry is missing",
   });
 
   await expectDecryptionErrorShown(page);
+});
+
+// -------------------------------------------------------------------------
+// Image detail view (/images/:id) - loading failures.
+// -------------------------------------------------------------------------
+
+const ROOT_FOLDER = "68980188-577d-4d2f-9e36-a6b32b25cd3a";
+const BEACH_IMAGE = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3";
+const BEACH_MEDIUM = "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0";
+const SUB_FOLDER = "90838b2c-cea8-4d0c-85eb-9937cda788fc";
+
+async function routeRootFolderKey(page: Page) {
+  await page.route(
+    `**/users/${MARY}/documents/${ROOT_FOLDER}/keys/${MARY}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        path: `tests/images/encrypted/${ROOT_FOLDER}/keys/${MARY}.json`,
+      }),
+  );
+}
+
+async function routeBeachImage(page: Page) {
+  await routeRootFolderKey(page);
+  await page.route(`**/users/${MARY}/documents/${BEACH_IMAGE}`, (route) =>
+    route.fulfill({
+      status: 200,
+      path: `tests/images/encrypted/${BEACH_IMAGE}/document.enc`,
+    }),
+  );
+  await page.route(
+    `**/users/${MARY}/documents/${BEACH_IMAGE}/keys/${ROOT_FOLDER}`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        path: `tests/images/encrypted/${BEACH_IMAGE}/keys/${ROOT_FOLDER}.json`,
+      }),
+  );
+}
+
+test.describe("image detail view error paths", () => {
+  test("a server error while loading the medium image shows the error box", async ({
+    page,
+  }) => {
+    await setupMarysDevice(page);
+    await routeMarysAuth(page);
+    await routeBeachImage(page);
+    await page.route(
+      `**/users/${MARY}/documents/${BEACH_IMAGE}/files/${BEACH_MEDIUM}`,
+      (route) => route.fulfill({ status: 500 }),
+    );
+
+    await page.goto(`/images/${BEACH_IMAGE}?folder=${ROOT_FOLDER}`);
+    await inputMarysPassword(page);
+
+    await expect(
+      page.getByText("Error loading beach-1836467_1920.jpg"),
+    ).toBeVisible();
+    await expect(page.getByText("No image found")).toBeHidden();
+  });
+
+  test("an image document that cannot be loaded shows 'No image found'", async ({
+    page,
+  }) => {
+    await setupMarysDevice(page);
+    await routeMarysAuth(page);
+    await routeRootFolderKey(page);
+    await page.route(`**/users/${MARY}/documents/${BEACH_IMAGE}`, (route) =>
+      route.fulfill({ status: 500 }),
+    );
+    await page.route(
+      `**/users/${MARY}/documents/${BEACH_IMAGE}/keys/${ROOT_FOLDER}`,
+      (route) => route.fulfill({ status: 500 }),
+    );
+
+    await page.goto(`/images/${BEACH_IMAGE}?folder=${ROOT_FOLDER}`);
+    await inputMarysPassword(page);
+
+    await expect(page.getByText("No image found")).toBeVisible();
+  });
+
+  test("a document that is not an image shows 'No image found'", async ({
+    page,
+  }) => {
+    await setupMarysDevice(page);
+    await routeMarysAuth(page);
+    await routeRootFolderKey(page);
+    await page.route(`**/users/${MARY}/documents/${SUB_FOLDER}`, (route) =>
+      route.fulfill({
+        status: 200,
+        path: `tests/images/encrypted/${SUB_FOLDER}/document.enc`,
+      }),
+    );
+    await page.route(
+      `**/users/${MARY}/documents/${SUB_FOLDER}/keys/${ROOT_FOLDER}`,
+      (route) =>
+        route.fulfill({
+          status: 200,
+          path: `tests/images/encrypted/${SUB_FOLDER}/keys/${ROOT_FOLDER}.json`,
+        }),
+    );
+
+    await page.goto(`/images/${SUB_FOLDER}?folder=${ROOT_FOLDER}`);
+    await inputMarysPassword(page);
+
+    await expect(page.getByText("No image found")).toBeVisible();
+  });
+
+  test("a chat image without an owner parameter cannot be resolved", async ({
+    page,
+  }) => {
+    await setupMarysDevice(page);
+    await routeMarysAuth(page);
+
+    await page.goto(`/images/${BEACH_IMAGE}?chat=some-contact`);
+    await inputMarysPassword(page);
+
+    await expect(page.getByText("No image found")).toBeVisible();
+  });
 });

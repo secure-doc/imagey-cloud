@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 // The shared img/error-box/progress presentation for a loaded (or loading,
@@ -10,12 +11,16 @@ export function ImageThumbnail({
   objectUrl,
   error,
   className = "small-width small-height",
+  onClick,
 }: {
   documentId: string;
   name: string;
   objectUrl: string | undefined;
   error: boolean;
   className?: string;
+  // Only applied to a loaded image - a loading/failed thumbnail is not
+  // clickable.
+  onClick?: () => void;
 }) {
   const { t } = useTranslation();
 
@@ -27,7 +32,21 @@ export function ImageThumbnail({
         alt={name}
         loading="lazy"
         className={className}
-        style={{ objectFit: "cover" }}
+        style={{
+          objectFit: "cover",
+          cursor: onClick ? "pointer" : undefined,
+        }}
+        {...(onClick && {
+          role: "button",
+          tabIndex: 0,
+          onClick,
+          onKeyDown: (e: KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClick();
+            }
+          },
+        })}
       />
     );
   } else if (error) {

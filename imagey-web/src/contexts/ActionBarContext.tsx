@@ -5,6 +5,9 @@ interface ActionIconsState {
   setActionIcons: (icons: JSX.Element[]) => void;
   backButtonVisible: boolean;
   setBackButtonVisible: (backButtonVisible: boolean) => void;
+  // Overrides the default "parent path" target of the back button.
+  backPath?: string;
+  setBackPath: (backPath?: string) => void;
   title?: string;
   setTitle: (title?: string) => void;
   // undefined = no avatar, "" = initial letter of the title, else image URL
@@ -16,6 +19,8 @@ export const ActionBarContext = createContext<ActionIconsState>({
   setActionIcons: () => {},
   backButtonVisible: false,
   setBackButtonVisible: () => {},
+  backPath: undefined,
+  setBackPath: () => {},
   title: undefined,
   setTitle: () => {},
   titleAvatar: undefined,
@@ -24,15 +29,24 @@ export const ActionBarContext = createContext<ActionIconsState>({
 
 export function useActionIcons(icons: JSX.Element[]) {
   const { setActionIcons } = useContext(ActionBarContext);
-  useEffect(() => setActionIcons(icons), [setActionIcons, icons]);
+  // Cleared on unmount so a page's icons (e.g. a folder's upload menu and back
+  // button) don't linger on the next page.
+  useEffect(() => {
+    setActionIcons(icons);
+    return () => setActionIcons([]);
+  }, [setActionIcons, icons]);
 }
 
-export function useBackButton() {
-  const { setBackButtonVisible } = useContext(ActionBarContext);
+export function useBackButton(backPath?: string) {
+  const { setBackButtonVisible, setBackPath } = useContext(ActionBarContext);
   useEffect(() => {
     setBackButtonVisible(true);
-    return () => setBackButtonVisible(false);
-  }, [setBackButtonVisible]);
+    setBackPath(backPath);
+    return () => {
+      setBackButtonVisible(false);
+      setBackPath(undefined);
+    };
+  }, [setBackButtonVisible, setBackPath, backPath]);
 }
 
 export function useTitle(title?: string, titleAvatar?: string) {

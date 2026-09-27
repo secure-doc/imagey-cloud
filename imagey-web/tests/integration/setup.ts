@@ -1222,6 +1222,68 @@ export async function prepareMarysDocuments() {
     );
 }
 
+// Only what opening Mary's beach image by URL (image detail view after a
+// reload) requests: the root folder's key, the image document with its key and
+// its medium image file.
+export async function prepareMarysBeachImage() {
+  const rootId = "68980188-577d-4d2f-9e36-a6b32b25cd3a";
+  const beachId = "bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3";
+  const mediumId = "7468168e-b3a6-49bf-9d1d-4f3f7e1bfef0";
+  const base = "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents";
+  provider
+    .addInteraction()
+    .uponReceiving("a request of mary to get document root key")
+    .withRequest(
+      "GET",
+      `${base}/${rootId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3`,
+      (r) => r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${rootId}/keys/d20cf443-4f96-418f-a957-c8cbef8677c3.json`,
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving(`a request of mary to get document ${beachId}`)
+    .withRequest("GET", `${base}/${beachId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${beachId}/document.enc`,
+      ),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving(`a request of mary to get document key for ${beachId}`)
+    .withRequest("GET", `${base}/${beachId}/keys/${rootId}`, (r) =>
+      r.headers({ Accept: "application/json" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/json",
+        `tests/images/encrypted/${beachId}/keys/${rootId}.json`,
+      ),
+    );
+  return provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to get content ${mediumId} of document ${beachId}`,
+    )
+    .withRequest("GET", `${base}/${beachId}/files/${mediumId}`, (r) =>
+      r.headers({ Accept: "application/octet-stream" }),
+    )
+    .willRespondWith(200, (r) =>
+      r.binaryFile(
+        "application/octet-stream",
+        `tests/images/encrypted/${beachId}/files/${mediumId}`,
+      ),
+    );
+}
+
 // A root folder variant that contains a single sub-folder ("My Vacation")
 // instead of the two regular images from prepareMarysDocuments(). The
 // sub-folder's own key is wrapped with the root folder's (existing, unchanged)
@@ -3072,4 +3134,46 @@ export async function prepareFreshUserSettings(email: string) {
     );
 
   return { settingsKeyJwk, documentListId, chatListId, profileId };
+}
+
+// The minimum set of endpoints App.tsx hits to decrypt Mary's keys and load
+// her settings document (getSettings). Enough to render the logged-in shell;
+// page-specific fetches are left to the caller.
+export async function routeMarysAuth(page: Page) {
+  const deviceId = TestData.mary.devices[0].deviceId;
+  await page.route(`**/users/${MARY_ID}/public-keys/0`, (route) =>
+    route.fulfill({ status: 200, json: TestData.mary.publicMainKey }),
+  );
+  await page.route(
+    `**/users/${MARY_ID}/devices/${deviceId}/private-keys/0`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        json: {
+          kid: "0",
+          encryptingDeviceId: deviceId,
+          key: TestData.mary.devices[0].encryptedPrivateMainKey,
+        },
+      }),
+  );
+  await page.route(
+    `**/users/${MARY_ID}/devices/${deviceId}/public-keys/0`,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        json: TestData.mary.devices[0].publicDeviceKey,
+      }),
+  );
+  await page.route(`**/users/${MARY_ID}/documents/${MARY_ID}`, (route) =>
+    route.fulfill({
+      status: 200,
+      path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/document.enc",
+    }),
+  );
+  await page.route(`**/users/${MARY_ID}/documents/${MARY_ID}/keys/0`, (route) =>
+    route.fulfill({
+      status: 200,
+      path: "tests/images/encrypted/d20cf443-4f96-418f-a957-c8cbef8677c3/keys/0.json",
+    }),
+  );
 }

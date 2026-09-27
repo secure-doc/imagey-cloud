@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useContext } from "react";
+import { useNavigate } from "react-router";
+import { ImageContext } from "../contexts/ImageContext";
 import { documentService } from "../document/DocumentService";
 import Document from "../document/Document";
 import ImageComponent from "../components/ImageComponent";
@@ -11,13 +14,17 @@ interface SharedDocumentMessageProps {
   documentId: string;
   owner: string;
   chatKey: JsonWebKey;
+  contactUserId: string;
 }
 
 export function SharedDocumentMessage({
   documentId,
   owner,
   chatKey,
+  contactUserId,
 }: SharedDocumentMessageProps) {
+  const { registerImage } = useContext(ImageContext);
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
@@ -70,6 +77,27 @@ export function SharedDocumentMessage({
     return <progress className="circle" />;
   }
 
+  const openImage =
+    document.type === "image"
+      ? () => {
+          registerImage({
+            documentId: document.documentId,
+            name: document.name,
+            owner: document.owner,
+            documentKey: document.key,
+            mediumImageId: document.mediumImageId,
+            smallImageId: document.smallImageId,
+            mimeType: document.mimeType,
+            accessPath,
+          });
+          navigate(
+            `/images/${document.documentId}?chat=${encodeURIComponent(
+              contactUserId,
+            )}&owner=${encodeURIComponent(document.owner)}`,
+          );
+        }
+      : undefined;
+
   return (
     <div className="shared-document">
       <ImageComponent
@@ -79,6 +107,7 @@ export function SharedDocumentMessage({
         }
         accessPath={accessPath}
         className="responsive max"
+        onClick={openImage}
       />
     </div>
   );
