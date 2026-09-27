@@ -5,6 +5,7 @@ import { getAppName, initAppName } from "./utils/appName.ts";
 import { registerServiceWorker } from "./serviceWorkerRegistration.ts";
 
 import { contactService } from "./contact/ContactService";
+import { groupService } from "./contact/GroupService";
 import { deviceService } from "./device/DeviceService";
 import { documentService } from "./document/DocumentService";
 import { cryptoService } from "./authentication/CryptoService";
@@ -13,6 +14,7 @@ import { publicProfileService } from "./profile/publicProfileService";
 declare global {
   interface Window {
     contactService: typeof contactService;
+    groupService: typeof groupService;
     deviceService: typeof deviceService;
     documentService: typeof documentService;
     cryptoService: typeof cryptoService;
@@ -22,6 +24,7 @@ declare global {
 
 if (import.meta.env.DEV) {
   window.contactService = contactService;
+  window.groupService = groupService;
   window.deviceService = deviceService;
   window.documentService = documentService;
   window.cryptoService = cryptoService;

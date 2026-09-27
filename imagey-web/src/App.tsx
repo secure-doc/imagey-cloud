@@ -9,6 +9,7 @@ import Navigation from "./components/Navigation";
 import Image from "./pages/Image";
 import Chats from "./pages/Chats";
 import Chat from "./pages/Chat";
+import GroupChat from "./pages/GroupChat";
 import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
 import Profile from "./pages/ProfilePage";
@@ -40,6 +41,11 @@ function ChatRoute() {
   return contactUserId ? (
     <Chat key={contactUserId} contactUserId={contactUserId} />
   ) : null;
+}
+
+function GroupChatRoute() {
+  const { groupId } = useParams();
+  return groupId ? <GroupChat key={groupId} groupId={groupId} /> : null;
 }
 
 function BottomNavLayout() {
@@ -177,6 +183,10 @@ function App() {
                     </Route>
                   </Route>
                   <Route path="chats/:contactUserId" element={<ChatRoute />} />
+                  <Route
+                    path="chats/groups/:groupId"
+                    element={<GroupChatRoute />}
+                  />
                   <Route path="images/:id" element={<Image />} />
                 </Routes>
                 <aside></aside>

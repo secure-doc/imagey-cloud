@@ -409,6 +409,15 @@ function getAlicesSettings(): Promise<{
 // (see prepareMarysEmptyProfile for the analogous profile case). Returns
 // the chats Document's own key so callers can reuse it - e.g. to wrap a
 // chat Document's key for its owner (see mockChatDocument below).
+// A "chats" document's GroupEntry fixture (ADR 0019) - see
+// DocumentMetadata.GroupEntry. `groupKey` is only set on a non-owner's entry.
+export interface TestGroupEntry {
+  groupId: string;
+  owner: string;
+  name: string;
+  groupKey?: JsonWebKey;
+}
+
 async function mockChatsDocument(
   email: string,
   chatsId: string,
@@ -425,6 +434,11 @@ async function mockChatsDocument(
   }[],
   given?: string | string[],
   chatsDocumentKey?: JsonWebKey,
+  // ADR 0019 - omitted entirely (rather than defaulting to `[]`) so existing
+  // callers keep producing the exact same "chats" payload they always have
+  // (no `groups` key at all), matching how a real pre-Phase-1 "chats"
+  // document looks on the wire.
+  groups?: TestGroupEntry[],
 ): Promise<JsonWebKey> {
   const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
   const key = chatsDocumentKey ?? (await generateAesGcmKeyJwk());
@@ -442,6 +456,7 @@ async function mockChatsDocument(
     new TextEncoder().encode(
       JSON.stringify({
         contacts: contactEntries,
+        ...(groups ? { groups } : {}),
         type: "chatList",
         name: "Chats",
       }),
@@ -484,6 +499,7 @@ export async function prepareMarysChatsDocument(
   }[] = [],
   given?: string | string[],
   chatsDocumentKey?: JsonWebKey,
+  groups?: TestGroupEntry[],
 ): Promise<JsonWebKey> {
   return mockChatsDocument(
     "d20cf443-4f96-418f-a957-c8cbef8677c3",
@@ -492,6 +508,7 @@ export async function prepareMarysChatsDocument(
     contacts,
     given,
     chatsDocumentKey,
+    groups,
   );
 }
 
@@ -753,6 +770,147 @@ export async function prepareMarysChatCreation(
         "Access-Control-Expose-Headers": "Location, ETag",
       }),
     );
+}
+
+// --- Group chat test helpers (ADR 0019) ------------------------------------
+
+// Mirrors FolderContext.buildGroupAccessPath exactly, so a test can assert
+// the precise Access-Path header value a group-context read sends - the
+// "exact header round-trip" scenario docs/plans/chat-groups-implementation.md
+// calls for, rather than merely asserting that some header was sent.
+export function buildGroupAccessPathForTest(
+  documentId: string,
+  sharerId: string,
+  groupId: string,
+  groupOwnerId: string,
+): string {
+  const json = JSON.stringify({
+    chain: [
+      { doc: documentId, owner: sharerId, wrappedBy: groupId },
+      { doc: groupId, owner: groupOwnerId, wrappedBy: groupId },
+    ],
+  });
+  return Buffer.from(json)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+// Registers the atomic multipart upload that creates a group (GroupService.
+// createGroup): a group Document plus the updated "chats" list, in one
+// request - structurally identical to prepareMarysChatCreation, just not
+// specific to a chat Document (the group's id is client-generated, so -
+// like that helper - only headers are asserted, not the multipart body).
+export async function prepareMarysGroupCreation(
+  description = "a request of mary to create a group",
+) {
+  return provider
+    .addInteraction()
+    .uponReceiving(description)
+    .withRequest(
+      "POST",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents",
+      (r) => {
+        r.headers({
+          "Content-Type": MatchersV3.regex(
+            "multipart/form-data.*",
+            "multipart/form-data; boundary=.*",
+          ),
+        });
+      },
+    )
+    .willRespondWith(201, (r) =>
+      r.headers({
+        Location: MatchersV3.string(
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-group-id",
+        ),
+        "Access-Control-Expose-Headers": "Location, ETag",
+        ETag: MatchersV3.string('"chats-etag-with-group"'),
+      }),
+    );
+}
+
+// Registers the PUT that adds a member to (or renames) a group mary owns
+// (GroupService.addMember/renameGroup's updateGroupMetadata) - the group's id
+// is client-generated at creation time, so - like
+// prepareMarysPublicProfileMetadataPut - this matches any PUT to one of
+// mary's own documents other than her known ones (profile/"chats").
+export function prepareMarysGroupMetadataPut(
+  descriptionSuffix: string = "",
+): void {
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to update a group's metadata${descriptionSuffix}`,
+    )
+    .withRequest(
+      "PUT",
+      Matchers.regex({
+        matcher: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!${TestData.mary.settings!.profile}|${TestData.mary.settings!.chats})[^/]+$`,
+        generate:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/33333333-3333-3333-3333-333333333333",
+      }),
+      (r) => r.headers({ "Content-Type": "application/octet-stream" }),
+    )
+    .willRespondWith(204, (r) =>
+      r.headers({ ETag: MatchersV3.string('"group-etag"') }),
+    );
+}
+
+// Registers the POST that files a new member's own direct-grant key entry
+// under a group mary owns (GroupService.addMember's shareDocument call,
+// `{issuer: kid: memberUserId}`) - the group id is client-generated, so this
+// matches by body instead, like prepareMarysPublicProfileShareForFreshProfile.
+export function prepareMarysGroupMemberKeyShare(memberUserId: string): void {
+  provider
+    .addInteraction()
+    .uponReceiving(
+      `a request of mary to share the group key with ${memberUserId}`,
+    )
+    .withRequest(
+      "POST",
+      Matchers.regex({
+        matcher: `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/(?!${TestData.mary.settings!.profile}|${TestData.mary.settings!.chats})[^/]+/keys$`,
+        generate:
+          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/33333333-3333-3333-3333-333333333333/keys",
+      }),
+      (r) => {
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          issuer: memberUserId,
+          kid: memberUserId,
+          sharedKey: MatchersV3.string("dummy-shared-key"),
+        });
+      },
+    )
+    .willRespondWith(200);
+}
+
+// Registers the POST that shares mary's own public profile into a group she
+// just created (GroupService.createGroup, `{issuer: groupOwner, kid:
+// groupId}` under her already-known public-profile document) - the path is
+// known (her public-profile id), but `kid` (the new group's id) isn't, so
+// only `issuer` is matched exactly.
+export function prepareMarysGroupOwnProfileShare(
+  publicProfileId: string,
+): ConfiguredInteraction {
+  return provider
+    .addInteraction()
+    .uponReceiving(
+      "a request of mary to share her public profile into her new group",
+    )
+    .withRequest(
+      "POST",
+      `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${publicProfileId}/keys`,
+      (r) => {
+        r.headers({ "Content-Type": "application/json" }).jsonBody({
+          issuer: MARY_ID,
+          kid: MatchersV3.string("some-group-id"),
+          sharedKey: MatchersV3.string("dummy-shared-key"),
+        });
+      },
+    )
+    .willRespondWith(200);
 }
 // --- end Chats-as-a-Document test helpers ----------------------------------
 

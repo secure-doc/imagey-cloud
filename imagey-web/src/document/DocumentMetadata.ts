@@ -21,6 +21,9 @@ export interface PublicProfileMetadata extends BaseMetadata {
 export interface ChatListMetadata extends BaseMetadata {
   type: "chatList";
   contacts: ContactEntry[];
+  // Groups the user owns or has joined (ADR 0019); optional so existing
+  // "chats" Documents stay valid without a migration (ADR 0008).
+  groups?: GroupEntry[];
 }
 
 export interface ChatMetadata extends BaseMetadata {
@@ -29,6 +32,32 @@ export interface ChatMetadata extends BaseMetadata {
   // docs/plans/chat-public-profile.md §3.3). Written once, by the chat's
   // creator, at accept time.
   publicProfiles: Record<string, string>;
+}
+
+// A group chat's own Document, a child of the owner's "chats" Document
+// (ADR 0019). `members` includes the owner (BaseMetadata.owner already
+// carries them - no separate `owner` field like the ADR's illustrative
+// snippet).
+export interface GroupMetadata extends BaseMetadata {
+  type: "group";
+  members: string[];
+  // Each member's "public-profile" Document id, keyed by their UserId - like
+  // ChatMetadata.publicProfiles, populated as members share their profile
+  // into the group.
+  publicProfiles: Record<string, string>;
+}
+
+// A chat-list entry for a group the user owns or has joined, with a
+// denormalized name snapshot so the chat list can render without a
+// per-group fetch - like ContactEntry.name.
+export interface GroupEntry {
+  groupId: string;
+  owner: string;
+  name: string;
+  // Only on a non-owner's side, cached once at join time (ContactService.pending
+  // is the closest analogue): the group's own Document key, so opening the
+  // group needs no detour through the 1:1 chat that carried the invitation.
+  groupKey?: JsonWebKey;
 }
 
 export interface FolderMetadata extends BaseMetadata {
@@ -98,6 +127,7 @@ type DocumentMetadata =
   | PublicProfileMetadata
   | ChatListMetadata
   | ChatMetadata
+  | GroupMetadata
   | FolderMetadata
   | FileMetadata
   | ImageMetadata;

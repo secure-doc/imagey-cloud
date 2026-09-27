@@ -10,20 +10,25 @@ import ImageComponent from "../components/ImageComponent";
 
 interface SendMessageFormProps {
   userId: string;
-  contactUserId: string;
   ownerId: string;
   chatId: string;
   sharedKey: JsonWebKey;
   onMessageSent: (message: Message) => void;
+  // Grants access to a document being shared into this conversation - a 1:1
+  // chat wraps its key for the contact (documentService.shareDocument);
+  // a group wraps it once for the whole group
+  // (groupService.shareDocumentIntoGroup, ADR 0019 decision 4). The message
+  // itself is always the same "shared-document" convention either way.
+  share: (document: DocumentMetadata) => Promise<void>;
 }
 
 export function SendMessageForm({
   userId,
-  contactUserId,
   ownerId,
   chatId,
   sharedKey,
   onMessageSent,
+  share,
 }: SendMessageFormProps) {
   const { t } = useTranslation();
   const documentsId = useDocumentsId();
@@ -53,7 +58,7 @@ export function SendMessageForm({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim() || !userId || !contactUserId || !sharedKey) return;
+    if (!inputMessage.trim() || !userId || !sharedKey) return;
 
     const messageText = inputMessage;
     setInputMessage("");
@@ -75,12 +80,7 @@ export function SendMessageForm({
   const handleShareDocument = async (document: DocumentMetadata) => {
     setShowDialog(false);
     try {
-      await documentService.shareDocument(
-        userId,
-        document,
-        contactUserId,
-        sharedKey,
-      );
+      await share(document);
 
       const payload = JSON.stringify({
         type: "shared-document",

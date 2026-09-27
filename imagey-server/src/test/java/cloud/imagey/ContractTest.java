@@ -532,6 +532,28 @@ public class ContractTest {
         }
     }
 
+    // Generic counterpart to "a document exists" for a document's messages sub-resource (ADR 0019
+    // group messages, or any other chat/group whose id is generated at test-run time) - the
+    // content is opaque to the server and not byte-compared, only its presence/count and `sender`
+    // matter to a consumer's matchers.
+    @State("a document has messages")
+    void aDocumentHasMessages(Map<String, Object> params) throws IOException {
+        String ownerId = (String) params.get("ownerId");
+        String documentId = (String) params.get("documentId");
+        String sender = (String) params.get("sender");
+        int count = ((Number) params.getOrDefault("count", 1)).intValue();
+        File messagesDir = new File(new File(new File(rootPath, ownerId), "documents/" + documentId), "messages");
+        deleteQuietly(messagesDir);
+        messagesDir.mkdirs();
+        for (int i = 1; i <= count; i++) {
+            String id = "msg-" + i;
+            writeStringToFile(new File(messagesDir, id + ".json"),
+                "{\"id\":\"" + id + "\",\"sender\":\"" + sender + "\",\"channel\":\""
+                + sender + ":" + ownerId + "\",\"content\":\"AAAA\"}",
+                UTF_8);
+        }
+    }
+
     @State("mary has no documents")
     void maryHasNoDocuments() throws IOException {
         File marysDocuments = getMarysDocuments();
@@ -664,6 +686,25 @@ public class ContractTest {
         writeStringToFile(messageFile,
             "{\"id\":\"msg-123\",\"sender\":\"" + MARY + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
             + "\"content\":\"HW8URzE9G7o/muIVmhdpPBTsmui7mlYyDmx5+d2l28tcQbJV2FXPf3e/jgZYP2Qpj70kqN7H\"}",
+            UTF_8);
+    }
+
+    // ADR 0019: a group-invitation message posted into the 1:1 chat mary already has with alice -
+    // exactly one message in chat-mary (unlike "Alice has a chat with mary", which also seeds
+    // msg-123), matching the Pact interactions verifying "a request to receive a group invitation
+    // message" (a list with a single element). The invitation payload's exact ciphertext is opaque
+    // to the server - a dummy body is enough, the consumer's own matchers only check its shape/type.
+    @State("Mary has an invitation to alice's group in her chat with alice")
+    void maryHasInvitationToAlicesGroupInChatWithAlice() throws IOException {
+        writeReceivedExchange(ALICE, MARY, "chat-mary", "aW52aXRlZS13cmFwcGVkLWNoYXQta2V5LW1hcnk=", MARYS_CONTACT_INFO);
+
+        File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
+        deleteQuietly(messagesDir);
+        messagesDir.mkdirs();
+        File messageFile = new File(messagesDir, "msg-invite-1.json");
+        writeStringToFile(messageFile,
+            "{\"id\":\"msg-invite-1\",\"sender\":\"" + ALICE + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
+            + "\"content\":\"AAAA\"}",
             UTF_8);
     }
 
