@@ -707,7 +707,9 @@ test("send/receive messages, view a shared image and the sender's name in a grou
     await page.getByText("Team", { exact: true }).first().click();
 
     await expect(
-      page.getByRole("heading", { name: "Team", exact: true }),
+      page
+        .getByRole("banner")
+        .getByRole("heading", { name: "Team", exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Hello group")).toBeVisible();
     // The shared image's message shows alice's name, resolved via the

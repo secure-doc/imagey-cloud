@@ -929,7 +929,10 @@ type MockServer = Parameters<
 export * from "./testdata";
 
 export const provider = new PactV4({
-  dir: process.env.PWD + "/target/test-classes", // prepare for maven packaging
+  // One directory per worker: workers sharing a pact file lose interactions to
+  // concurrent read-merge-write cycles. global-teardown.ts merges them into
+  // target/test-classes for maven packaging.
+  dir: `${process.env.PWD}/target/pacts-workers/${process.env.TEST_WORKER_INDEX ?? 0}`,
   consumer: "imagey-web",
   provider: "imagey-server",
 });
@@ -962,6 +965,11 @@ export async function clearLocalStorage(page: Page) {
   await page.evaluate(() =>
     localStorage.removeItem("imagey.devices[1234].key"),
   );
+  // The app reads its state from localStorage when it first renders, which on a
+  // slow machine can happen after the test has already set up its own device -
+  // and then it requests that user's keys before the test's routes/mock server
+  // exist. With nothing stored it asks for the email address: wait for that.
+  await expect(page.getByRole("heading", { name: "Email" })).toBeVisible();
 }
 
 export async function loginAsMary(page: Page) {
@@ -1863,13 +1871,20 @@ async function mockOwnedDocument(
 // call sidesteps that instead of relying on the description alone.
 let namedPublicProfileCallCount = 0;
 
+// The call counters are per worker process, but all workers' interactions end
+// up in one merged Pact file whose entries are keyed by description + provider
+// states (global-teardown.ts). Offsetting each worker's counter keeps the
+// indexes - and with them descriptions and ids - unique across workers, so the
+// merge can't collapse two different interactions into one.
+const CALL_INDEX_OFFSET = Number(process.env.TEST_WORKER_INDEX ?? 0) * 1000;
+
 export async function prepareMarysNamedPublicProfile(
   name: string = "Mary",
   given?: string | string[],
 ): Promise<{ publicProfileId: string; publicProfileKey: JsonWebKey }> {
   const profileId = TestData.mary.settings!.profile;
   const profileKey = TestData.mary.documents[5].key!;
-  const callIndex = ++namedPublicProfileCallCount;
+  const callIndex = CALL_INDEX_OFFSET + ++namedPublicProfileCallCount;
   const publicProfileId =
     "22222222-2222-2222-2222-" + String(callIndex).padStart(12, "0");
   const publicProfileKey = await generateAesGcmKeyJwk();
@@ -2679,7 +2694,7 @@ export async function prepareMarysChatWithContactProfile({
   // fall back gracefully instead of throwing).
   contactProfileUnavailable?: boolean;
 }): Promise<void> {
-  const callIndex = ++chatWithContactProfileCallCount;
+  const callIndex = CALL_INDEX_OFFSET + ++chatWithContactProfileCallCount;
   const callSuffix = ` #${callIndex}`;
   const chatId = "chat-" + shortName(contactUserId);
   const chatsDocumentKey = await prepareMarysChatsDocument([

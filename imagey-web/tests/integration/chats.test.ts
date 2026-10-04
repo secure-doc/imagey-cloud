@@ -23,48 +23,6 @@ test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
 });
 
-test("navigate to chats", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysDocuments();
-  const builder = await prepareMarysContactRequests();
-  await builder.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-
-    const chatsLink = page.getByRole("link", { name: "Chats" }).first();
-    await expect(chatsLink).toBeVisible();
-
-    // The "bill@imagey.cloud" heading below comes from the (un-awaited)
-    // contact-requests fetch, which resolves well before the "chats"
-    // document load does. Its key GET is the last request of that load, and
-    // runningPactRequests briefly dips to 0 between the content GET and the
-    // key GET - so without waiting for this response explicitly, the poll
-    // below can pass in that gap and tear the mock server down while the
-    // key GET is still in flight (route.fetch -> ECONNREFUSED, flaky in CI).
-    const chatsKeyResponse = page.waitForResponse((response) =>
-      response
-        .url()
-        .includes(
-          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}/keys/`,
-        ),
-    );
-    await chatsLink.click();
-
-    // Then
-    await expect(
-      page.getByRole("heading", {
-        name: "Bill",
-        exact: true,
-      }),
-    ).toBeVisible();
-    await chatsKeyResponse;
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
 test("accept open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);

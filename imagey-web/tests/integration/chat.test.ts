@@ -114,7 +114,7 @@ test("view chat and send message", async ({ page }) => {
 
     // Verify chat UI loaded
     await expect(
-      page.getByRole("heading", {
+      page.getByRole("banner").getByRole("heading", {
         name: "Laura",
         exact: true,
       }),
@@ -183,7 +183,7 @@ test("send empty message does not submit", async ({ page }) => {
     await aliceContact.click();
 
     await expect(
-      page.getByRole("heading", {
+      page.getByRole("banner").getByRole("heading", {
         name: "Alice",
         exact: true,
       }),
@@ -245,7 +245,7 @@ test("send message fails and restores input", async ({ page }) => {
     await aliceContact.click();
 
     await expect(
-      page.getByRole("heading", {
+      page.getByRole("banner").getByRole("heading", {
         name: "Alice",
         exact: true,
       }),
@@ -297,7 +297,7 @@ test("polling fails gracefully", async ({ page }) => {
     // Verify chat UI loaded, which means sharedKey was fetched
     // and polling attempted (which hits 500 error)
     await expect(
-      page.getByRole("heading", {
+      page.getByRole("banner").getByRole("heading", {
         name: "Alice",
         exact: true,
       }),
@@ -683,7 +683,7 @@ test("view shared document from another user", async ({ page }) => {
 
       // Verify chat UI loaded
       await expect(
-        page.getByRole("heading", {
+        page.getByRole("banner").getByRole("heading", {
           name: "Mary",
           exact: true,
         }),
@@ -777,7 +777,7 @@ test("view chat owned by another user (synced chat key)", async ({ page }) => {
     // messages fetch resolved, which is what actually forces this test to
     // wait for the ECDH round trip instead of racing ahead of it.
     await expect(
-      page.getByRole("heading", {
+      page.getByRole("banner").getByRole("heading", {
         name: "Alice",
         exact: true,
       }),

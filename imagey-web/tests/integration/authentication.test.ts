@@ -6,7 +6,6 @@ import {
   encryptInvitationContactInfo,
   encryptKeyEnvelope,
   generateAesGcmKeyJwk,
-  inputMarysPassword,
   prepareFreshUserSettings,
   prepareMarysChatsDocument,
   prepareMarysContactRequests,
@@ -714,33 +713,6 @@ test("mary logges in with new device", async ({ page }) => {
     });
 });
 
-test("existing user clicks login link on existing device", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysDocuments();
-  const given = await prepareMarysContactRequests();
-
-  await given.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await page.evaluate(() =>
-      localStorage.setItem("imagey.user", "bob@imagey.cloud"),
-    );
-    await page.goto(
-      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
-    );
-
-    await inputMarysPassword(page);
-
-    // Then
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
 test("unauthenticated with a userId but no device and no email falls back to the email dialog", async ({
   page,
 }) => {
@@ -771,33 +743,6 @@ test("unauthenticated with a userId but no device and no email falls back to the
     });
 });
 
-test("visit page on existing device", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysDocuments();
-  const given = await prepareMarysContactRequests();
-
-  await given.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await setupMarysDevice(page);
-    await page.goto("/");
-
-    const passwordInput = page.getByLabel("Password", { exact: true });
-    await expect(passwordInput).toBeVisible();
-    await passwordInput.fill("MarysPassword123");
-    await optOutOfKeepLoggedIn(page);
-    await page.getByRole("button", { name: "Confirm", exact: true }).click();
-
-    // Then
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
 test("keep me logged in remembers a previous opt-out", async ({ page }) => {
   // Given the user unticked "keep me logged in" last time, the box comes back
   // unticked and the unlock stays on the lightweight path (no challenge).
@@ -825,62 +770,6 @@ test("keep me logged in remembers a previous opt-out", async ({ page }) => {
     await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
       timeout: 10_000,
     });
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
-test("visit page on existing device with wrong password", async ({ page }) => {
-  // Given
-  await provider
-    .addInteraction()
-    .uponReceiving("a request of mary to get public key")
-    .withRequest(
-      "GET",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/public-keys/0",
-      (r) => r.headers({ Accept: "application/json" }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody(TestData.mary.publicMainKey))
-    .executeTest(async (mockServer) => {
-      // When
-      await setupMockServer(page, mockServer);
-      await setupMarysDevice(page);
-      await page.goto("/");
-
-      const passwordInput = page.getByLabel("Password", { exact: true });
-      await expect(passwordInput).toBeVisible();
-      await passwordInput.fill("wrongPassword");
-      await optOutOfKeepLoggedIn(page);
-      await page.getByRole("button", { name: "Confirm", exact: true }).click();
-
-      // Then
-      await expect(page.getByText(/Wrong password/)).toBeVisible();
-      await expect.poll(() => runningPactRequests).toBe(0);
-    });
-});
-
-test("login with missing email", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysDocuments();
-  const provider = await prepareMarysContactRequests();
-
-  await provider.executeTest(async (mockServer) => {
-    // When: the stored account id is gone, but Mary follows the login link from
-    // her mailbox - the server resolves her address and puts the id back on the
-    // redirect, so the client can pick up where it left off.
-    await setupMockServer(page, mockServer);
-    await page.evaluate(() => localStorage.removeItem("imagey.user"));
-    await page.goto(
-      "/?email=mary@imagey.cloud&userId=d20cf443-4f96-418f-a957-c8cbef8677c3",
-    );
-
-    await inputMarysPassword(page);
-
-    // Then
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

@@ -2,7 +2,7 @@ import { test as base } from "@playwright/test";
 import * as fs from "fs";
 
 export const test = base.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page }, use, testInfo) => {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -10,7 +10,7 @@ export const test = base.extend({
     if (coverage) {
       await fs.promises.mkdir(".nyc_output", { recursive: true });
       await fs.promises.writeFile(
-        `.nyc_output/coverage-${Date.now()}.json`,
+        `.nyc_output/coverage-${testInfo.testId}-${testInfo.retry}.json`,
         JSON.stringify(coverage),
       );
     }

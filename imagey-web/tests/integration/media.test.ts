@@ -500,7 +500,9 @@ test("a shared video in a group chat does not open the media page and downloads 
   await page.getByRole("link", { name: "Chats" }).first().click();
   await page.getByText("Team", { exact: true }).first().click();
   await expect(
-    page.getByRole("heading", { name: "Team", exact: true }),
+    page
+      .getByRole("banner")
+      .getByRole("heading", { name: "Team", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("clip.webm")).toBeVisible();
 

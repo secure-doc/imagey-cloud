@@ -1979,6 +1979,9 @@ test("NotificationBanner: 'Not now' dismisses it without subscribing", async ({
     // Then
     await expect(banner).not.toBeVisible();
     await page.reload();
+    // Without keys the reloaded page asks for the password once it has loaded
+    // Mary's public key - only then is "no banner" a statement about the page.
+    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
     await expect(banner).not.toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
@@ -2130,6 +2133,13 @@ test("Chat.tsx logs a warning when remembering a chat in an active but undecrypt
       }
     });
 
+    // The registered long-poll interaction must actually be requested before
+    // the mock server goes away, or Pact reports it as "expected but not received".
+    const pollResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes("/chat-laura/messages") &&
+        response.url().includes("sinceId=msg-123"),
+    );
     await loginAsMary(page);
     await setupBrokenActiveKeyring(page);
     await page.getByRole("link", { name: "Chats" }).first().click();
@@ -2137,7 +2147,9 @@ test("Chat.tsx logs a warning when remembering a chat in an active but undecrypt
     await expect(lauraContact).toBeVisible();
     await lauraContact.click();
     await expect(
-      page.getByRole("heading", { name: "Laura", exact: true }),
+      page
+        .getByRole("banner")
+        .getByRole("heading", { name: "Laura", exact: true }),
     ).toBeVisible();
 
     await expect
@@ -2147,6 +2159,8 @@ test("Chat.tsx logs a warning when remembering a chat in an active but undecrypt
         ),
       )
       .toBe(true);
+    await pollResponse;
+    await expect.poll(() => runningPactRequests).toBe(0);
     await page.unrouteAll({ behavior: "ignoreErrors" });
   });
 });

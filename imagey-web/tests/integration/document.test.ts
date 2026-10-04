@@ -408,7 +408,9 @@ test("a shared file in a group chat downloads via the two-hop Access-Path", asyn
   await page.getByRole("link", { name: "Chats" }).first().click();
   await page.getByText("Team", { exact: true }).first().click();
   await expect(
-    page.getByRole("heading", { name: "Team", exact: true }),
+    page
+      .getByRole("banner")
+      .getByRole("heading", { name: "Team", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("team-notes.txt")).toBeVisible();
 
