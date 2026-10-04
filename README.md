@@ -12,6 +12,26 @@ To test the application locally and complete the registration process, follow th
 6. Replace the domain part of the extracted link (`https://imagey.cloud`) with your local frontend address (`http://localhost:5173` or the respective port).
 7. Open the modified link in your browser to complete the registration by setting a password. You will then be logged in and can access features such as the user profile.
 
+## Push Notifications (Web Push)
+
+Push notifications (ADR 0020) need a VAPID key pair (RFC 8292) configured on the backend
+via `push.vapid.public-key`, `push.vapid.private-key` and `push.vapid.subject`
+(MicroProfile Config, so also settable as the env vars `PUSH_VAPID_PUBLIC_KEY`,
+`PUSH_VAPID_PRIVATE_KEY` and `PUSH_VAPID_SUBJECT`). Without both keys the feature is
+simply off - `GET /users/push/vapid-public-key` returns `404`, so enabling the
+"Notifications" toggle in Settings fails with an error message - and the app itself
+starts fine either way.
+
+- `docker compose up -d` already sets a throwaway test key pair (see the `meecrowave`
+  service's `MEECROWAVE_OPTS` in `docker-compose.yml`), enough to exercise the toggle and
+  the subscribe/unsubscribe flow locally. Real delivery to a push service (FCM, Mozilla's
+  autopush, ...) still requires a subscription created by an actual browser - it is not
+  something a docker-only backend can produce on its own.
+- For a real deployment, generate your own pair with `npx web-push generate-vapid-keys`
+  and set the three properties above the same way you already set
+  `user.mapping.secret`/`document.mapping.secret` and `authentication.secret` - as
+  deploy-environment secrets, never committed.
+
 ## Testing S3-Compatible Storage Locally
 
 By default `docker compose up -d` also starts a `minio` service, but the backend still stores

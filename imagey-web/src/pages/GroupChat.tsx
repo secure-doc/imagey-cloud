@@ -16,6 +16,7 @@ import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
 import { useGroupMemberProfiles } from "../hooks/useGroupMemberProfiles";
 import AddGroupMemberDialog from "../components/AddGroupMemberDialog";
 import { contactDisplayName } from "../contact/contactDisplayName";
+import { notificationKeyringService } from "../notification/NotificationKeyringService";
 
 // A group's own conversation (ADR 0019): structurally the 1:1 chat view
 // (Chat.tsx) with three differences - the group key comes from either the
@@ -151,6 +152,27 @@ export default function GroupChat({ groupId }: { groupId: string }) {
     };
   }, [chatsDocumentInfo, groupId, user, chatsId]);
 
+  // Remembers this group's key/route in the notification keyring (ADR 0020) -
+  // a no-op unless push is active on this device (see
+  // notificationKeyringService.isActive).
+  useEffect(() => {
+    if (!group || !authentication.keyPairs?.deviceKeyPair) {
+      return;
+    }
+    notificationKeyringService
+      .rememberChat(user, authentication.keyPairs.deviceKeyPair, {
+        owner: group.ownerId,
+        chatId: groupId,
+        key: group.key,
+        title: group.name,
+        route: `/chats/groups/${groupId}`,
+        group: true,
+      })
+      .catch((e) =>
+        console.warn("Failed to remember group for notifications", e),
+      );
+  }, [group, groupId, user, authentication.keyPairs?.deviceKeyPair]);
+
   useTitle(group?.name ?? "", "");
 
   const memberProfiles = useGroupMemberProfiles(
@@ -221,6 +243,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
             onMessageSent={(newMessage) =>
               setMessages((prev) => [...(prev ?? []), newMessage])
             }
+            notify={group.members.filter((member) => member !== user)}
             share={(document) =>
               groupService.shareDocumentIntoGroup(
                 user,

@@ -298,6 +298,7 @@ export const groupService = {
         name: updated.name,
       }),
       member.pairChatKey,
+      [member.userId],
     );
     return updated;
   },

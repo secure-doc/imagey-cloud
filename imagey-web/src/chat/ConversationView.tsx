@@ -12,6 +12,9 @@ export interface ConversationViewProps {
   sharedKey: JsonWebKey;
   messages: Message[];
   onMessageSent: (message: Message) => void;
+  // The other chat members to push-notify (ADR 0020), passed straight through
+  // to SendMessageForm.
+  notify: string[];
   share: (document: DocumentMetadata) => Promise<void>;
   // The 1:1 chat's counterpart - passed through to SharedDocumentMessage so
   // it can open the image detail view. Omitted for a group conversation.
@@ -47,6 +50,7 @@ export function ConversationView({
   sharedKey,
   messages,
   onMessageSent,
+  notify,
   share,
   contactUserId,
   group,
@@ -113,6 +117,7 @@ export function ConversationView({
         chatId={chatId}
         sharedKey={sharedKey}
         onMessageSent={onMessageSent}
+        notify={notify}
         share={share}
       />
     </>

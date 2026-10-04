@@ -117,4 +117,9 @@ public class AbstractFileRepository {
     protected ListResult list(String prefix) {
         return blobStore.list(prefix.isEmpty() ? "" : prefix + DELIMITER, DELIMITER);
     }
+
+    /** Removes {@code key}, if it exists. A no-op if it does not. */
+    protected void delete(String key) {
+        blobStore.delete(key);
+    }
 }

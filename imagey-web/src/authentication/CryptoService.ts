@@ -1,6 +1,5 @@
 import { MessageContent } from "../chat/Message.ts";
-import { Nonce } from "./AuthenticationService.ts";
-import { Password } from "./UserId.ts";
+import { Nonce, Password } from "./UserId.ts";
 
 export type EncryptedKey = string;
 export type EncryptedContent = string;
@@ -143,6 +142,23 @@ export const cryptoService = {
   ): Promise<JsonWebKey> =>
     deriveAgreedKey(ownPrivateKey, otherPublicKey, [
       "imagey-device-info",
+      userId,
+      deviceId,
+    ]),
+
+  // Derives the key the notification keyring is encrypted with (ADR 0020):
+  // self-ECDH of the device's own key pair, expanded with HKDF-SHA-256 and
+  // bound to the device, analogous to deriveDeviceInfoKey. Computable by the
+  // page and the service worker alike, from just the device key pair - no
+  // extra request.
+  deriveNotificationKeyringKey: async (
+    privateDeviceKey: JsonWebKey,
+    publicDeviceKey: JsonWebKey,
+    userId: string,
+    deviceId: string,
+  ): Promise<JsonWebKey> =>
+    deriveAgreedKey(privateDeviceKey, publicDeviceKey, [
+      "imagey-notification-keyring",
       userId,
       deviceId,
     ]),

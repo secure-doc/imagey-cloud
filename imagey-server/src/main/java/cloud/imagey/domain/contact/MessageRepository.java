@@ -43,6 +43,11 @@ public class MessageRepository extends AbstractUserFileRepository {
             .inChannel(new Channel(chatId.id()));
     }
 
+    public Optional<Message> fetchMessage(User owner, DocumentId chatId, MessageId messageId) {
+        String key = join(messagesPrefix(owner, chatId), messageId.value() + ".json");
+        return findString(key).map(json -> create().fromJson(json, Message.class).withId(messageId));
+    }
+
     public List<Message> fetchMessages(User owner, DocumentId chatId, Optional<MessageId> sinceId) {
         String prefix = messagesPrefix(owner, chatId);
         List<String> keys = list(prefix).keys().stream().filter(key -> key.endsWith(".json")).sorted().toList();

@@ -7,12 +7,12 @@ import { cryptoService } from "./CryptoService";
 import { ResponseError } from "./ResponseError";
 import { contactService } from "../contact/ContactService";
 import { contactRepository } from "../contact/ContactRepository";
-import { DeviceId, Password, UserId } from "./UserId";
+import { DeviceId, Nonce, Password, UserId } from "./UserId";
 import { documentService } from "../document/DocumentService";
 import { Profile } from "../profile/Profile";
 import { publicProfileService } from "../profile/publicProfileService";
 
-export type Nonce = string;
+export type { Nonce };
 export type EncryptedRecoveryKey = string;
 
 export enum RegistrationResult {

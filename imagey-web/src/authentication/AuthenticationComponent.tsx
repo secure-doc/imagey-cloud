@@ -14,6 +14,7 @@ import { Email, JsonWebKeyPairs } from "../contexts/AuthenticationContext";
 import { UserId } from "./UserId";
 
 import { authenticationService } from "./AuthenticationService";
+import { pushSubscriptionService } from "../notification/PushSubscriptionService";
 
 interface AuthenticationComponentProperties {
   onKeysDecrypted: (
@@ -108,6 +109,14 @@ export default function AuthenticationComponent({
   }, [userId]);
 
   const handleWrongUser = () => {
+    // Best-effort: there is no device-deletion endpoint yet (ADR 0020), so
+    // this is the only place a stale push subscription/notification record
+    // for this account gets cleaned up on this browser.
+    if (userId) {
+      pushSubscriptionService
+        .disable(userId, undefined)
+        .catch((e) => console.warn("Failed to disable notifications", e));
+    }
     deviceRepository.removeUser();
     setUserId(undefined);
     setEmail(undefined);

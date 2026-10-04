@@ -21,6 +21,7 @@ import static jakarta.ws.rs.client.Entity.json;
 import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
+import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static java.lang.Integer.MAX_VALUE;
 import static org.apache.commons.io.FileUtils.copyDirectory;
@@ -31,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -212,6 +214,57 @@ public class DeviceResourceTest {
 
         assertThat(requestBoundTo(FIRST_DEVICE, path).post(json("\"key\"")).getStatus()).isEqualTo(OK.getStatusCode());
         assertThat(recoveryKey).hasContent("\"key\"");
+    }
+
+    @Test
+    @DisplayName("Only a session bound to the device itself may store or delete its push subscription")
+    public void pushSubscriptionNeedsSessionOfTheDevice() {
+        String path = "/" + FIRST_DEVICE + "/push-subscription";
+        File subscriptionFile = new File(rootPath, MARY + "/devices/" + FIRST_DEVICE + "/push-subscription.json");
+
+        assertThat(request(path).put(json(subscriptionBody())).getStatus()).as("unbound").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(requestBoundTo(SECOND_DEVICE, path).put(json(subscriptionBody())).getStatus())
+            .as("bound to another device").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(subscriptionFile).doesNotExist();
+
+        assertThat(requestBoundTo(FIRST_DEVICE, path).put(json(subscriptionBody())).getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
+        assertThat(subscriptionFile).exists();
+
+        assertThat(request(path).delete().getStatus()).as("unbound delete").isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(requestBoundTo(FIRST_DEVICE, path).delete().getStatus()).isEqualTo(NO_CONTENT.getStatusCode());
+        assertThat(subscriptionFile).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("A push subscription on a disallowed host, wrong scheme or malformed key is rejected")
+    public void rejectsInvalidPushSubscription() {
+        String path = "/" + FIRST_DEVICE + "/push-subscription";
+
+        assertThat(requestBoundTo(FIRST_DEVICE, path)
+            .put(json(subscriptionBody("http://fcm.googleapis.com/x"))).getStatus())
+            .isEqualTo(BAD_REQUEST.getStatusCode());
+        assertThat(requestBoundTo(FIRST_DEVICE, path)
+            .put(json(subscriptionBody("https://evil.example.com/x"))).getStatus())
+            .isEqualTo(BAD_REQUEST.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A push subscription for an unregistered device is rejected")
+    public void pushSubscriptionOfUnregisteredDevice() {
+        Response response = requestBoundTo(FIRST_DEVICE, "/00000000-0000-0000-0000-000000000000/push-subscription")
+            .put(json(subscriptionBody()));
+
+        assertThat(response.getStatus()).isEqualTo(NOT_FOUND.getStatusCode());
+    }
+
+    private static String subscriptionBody() {
+        return subscriptionBody("https://fcm.googleapis.com/send/abc");
+    }
+
+    private static String subscriptionBody(String endpoint) {
+        String p256dh = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[65]);
+        String auth = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[16]);
+        return "{\"endpoint\":\"" + endpoint + "\",\"p256dh\":\"" + p256dh + "\",\"auth\":\"" + auth + "\"}";
     }
 
     private static String privateKey(String encryptingDeviceId) {

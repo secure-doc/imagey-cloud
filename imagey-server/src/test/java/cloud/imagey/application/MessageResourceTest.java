@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Future;
 
@@ -234,6 +235,126 @@ public class MessageResourceTest {
             .get();
 
         assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A single message is fetched by id, and a missing one is a 404")
+    void fetchSingleMessage() throws Exception {
+        Response sendResponse = contactClient.messages(null).post(text("encrypted-content"));
+        String location = sendResponse.getLocation().toString();
+        String messageId = location.substring(location.lastIndexOf('/') + 1);
+
+        Response response = newClient()
+            .register(RecordMessageBodyReader.class)
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages/" + messageId)
+            .request()
+            .cookie(ownerCookie)
+            .get();
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(response.readEntity(Message.class).content().value()).isEqualTo("encrypted-content");
+
+        Response missing = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages/no-such-message")
+            .request()
+            .cookie(ownerCookie)
+            .get();
+        assertThat(missing.getStatus()).isEqualTo(Response.Status.NOT_FOUND.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A Notify header naming a real chat member does not block sending")
+    void sendWithNotifyHeader() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages")
+            .request()
+            .cookie(contactCookie)
+            .header("Notify", "owner, " + contact.id().id())
+            .post(text("encrypted-content"));
+
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A Notify header naming someone with no access to the chat does not block sending")
+    void sendWithNotifyHeaderNamingAStranger() {
+        assertThat(notifyRequest("someone-with-no-access").getStatus()).isEqualTo(CREATED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A Notify header naming a member reached only through a direct grant (not owner/sender) does not block sending")
+    void sendWithNotifyHeaderNamingAMemberViaDirectGrant() {
+        // The owner sends, naming `contact` - who is reached only via the direct grant filed in
+        // initializeState(), not because they are the owner or the sender.
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages")
+            .request()
+            .cookie(ownerCookie)
+            .header("Notify", contact.id().id())
+            .post(text("encrypted-content"));
+
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A Notify header naming a provisional member (accepted, chat not yet created) does not block sending")
+    void sendWithNotifyHeaderNamingAProvisionalMember() {
+        String pendingChat = "pending-chat-notify";
+        User otherContact = new User(new UserId("other-contact"));
+        acceptedExchange(pendingChat, ContactStatus.ACCEPTED);
+        contactRepository.persist(new ContactExchange(
+            owner, otherContact, ContactStatus.ACCEPTED, null, new DocumentId(pendingChat),
+            new EncryptedSymmetricKey("d3JhcHBlZA=="), null, null));
+
+        // Sent by `contact` (themselves a provisional member, so the chat-existence guard passes) and
+        // notifies `otherContact` - reached only via their own, separate provisional membership of the
+        // same pending chat, not because they are the owner, the sender or direct-grant reachable.
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + pendingChat + "/messages")
+            .request()
+            .cookie(contactCookie)
+            .header("Notify", otherContact.id().id())
+            .post(text("encrypted-content"));
+
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A blank Notify header behaves exactly like no header")
+    void blankNotifyHeaderIsIgnored() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages")
+            .request()
+            .cookie(contactCookie)
+            .header("Notify", "")
+            .post(text("encrypted-content"));
+
+        assertThat(response.getStatus()).isEqualTo(CREATED.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A malformed Notify header (empty or path-like recipient, or too many) is rejected with 400")
+    void malformedNotifyHeaderIsRejected() {
+        assertThat(notifyRequest("owner,,").getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(notifyRequest("../contact").getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(notifyRequest("owner/contact").getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(notifyRequest(String.join(",", Collections.nCopies(257, "x"))).getStatus())
+            .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+    }
+
+    private Response notifyRequest(String notify) {
+        return newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages")
+            .request()
+            .cookie(contactCookie)
+            .header("Notify", notify)
+            .post(text("encrypted-content"));
     }
 
     @Test

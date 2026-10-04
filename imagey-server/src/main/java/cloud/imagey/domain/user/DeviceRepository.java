@@ -18,11 +18,15 @@ package cloud.imagey.domain.user;
 
 import static jakarta.json.bind.JsonbBuilder.create;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.json.JsonException;
+import jakarta.json.bind.JsonbException;
+import jakarta.validation.ValidationException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import cloud.imagey.domain.common.AbstractUserFileRepository;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.push.PushSubscription;
 import cloud.imagey.domain.token.Kid;
 
 @ApplicationScoped
@@ -113,6 +118,38 @@ public class DeviceRepository extends AbstractUserFileRepository {
             LOG.info("Recovery key loaded");
         }
         return recoveryKey;
+    }
+
+    /** Overwrites, like {@link #storeDeviceRecoveryKey} - a re-subscribe (key rotation) replaces the old one. */
+    public void storePushSubscription(User user, DeviceId deviceId, PushSubscription subscription) {
+        put(join(devicesFolder(user, deviceId), "push-subscription.json"), create().toJson(subscription));
+    }
+
+    public void deletePushSubscription(User user, DeviceId deviceId) {
+        delete(join(devicesFolder(user, deviceId), "push-subscription.json"));
+    }
+
+    /** Every device's subscription, keyed by {@link DeviceId} - unlike {@link #loadDevices}, nothing else. */
+    public Map<DeviceId, PushSubscription> loadPushSubscriptions(User user) {
+        String devicesPrefix = join(getUserPrefix(user), "devices");
+        Map<DeviceId, PushSubscription> subscriptions = new LinkedHashMap<>();
+        for (String commonPrefix : list(devicesPrefix).commonPrefixes()) {
+            DeviceId deviceId = new DeviceId(commonPrefix.substring(devicesPrefix.length() + 1, commonPrefix.length() - 1));
+            findString(join(devicesFolder(user, deviceId), "push-subscription.json"))
+                .flatMap(json -> parsePushSubscription(deviceId, json))
+                .ifPresent(subscription -> subscriptions.put(deviceId, subscription));
+        }
+        return subscriptions;
+    }
+
+    /** One unreadable file must not stop the push to the user's other devices. */
+    private Optional<PushSubscription> parsePushSubscription(DeviceId deviceId, String json) {
+        try {
+            return Optional.of(create().fromJson(json, PushSubscription.class));
+        } catch (JsonException | JsonbException | ValidationException e) {
+            LOG.warn("Ignoring an invalid push subscription of device {}", deviceId.id(), e);
+            return Optional.empty();
+        }
     }
 
     private String privateKeyFile(User user, DeviceId deviceId) {

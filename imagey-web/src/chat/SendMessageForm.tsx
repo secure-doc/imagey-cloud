@@ -14,6 +14,9 @@ interface SendMessageFormProps {
   chatId: string;
   sharedKey: JsonWebKey;
   onMessageSent: (message: Message) => void;
+  // The other chat members to push-notify (ADR 0020) - passed straight
+  // through to messageService.sendEncryptedMessage.
+  notify: string[];
   // Grants access to a document being shared into this conversation - a 1:1
   // chat wraps its key for the contact (documentService.shareDocument);
   // a group wraps it once for the whole group
@@ -28,6 +31,7 @@ export function SendMessageForm({
   chatId,
   sharedKey,
   onMessageSent,
+  notify,
   share,
 }: SendMessageFormProps) {
   const { t } = useTranslation();
@@ -69,6 +73,7 @@ export function SendMessageForm({
         chatId,
         messageText,
         sharedKey,
+        notify,
       );
       onMessageSent(newMessage);
     } catch (e) {
@@ -94,6 +99,7 @@ export function SendMessageForm({
         chatId,
         payload,
         sharedKey,
+        notify,
       );
       onMessageSent(newMessage);
     } catch (e) {

@@ -14,6 +14,7 @@ import { usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { useChatsId } from "../contexts/SettingsContext";
 import { useContactProfile } from "../hooks/useContactProfile";
+import { notificationKeyringService } from "../notification/NotificationKeyringService";
 
 type ChatsListUpdate = (
   list: { contacts: ContactEntry[]; groups: GroupEntry[] },
@@ -224,6 +225,24 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         setSharedKey(key);
         setPublicProfiles(publicProfiles);
         setChatPending(pending);
+        if (authentication.keyPairs?.deviceKeyPair) {
+          notificationKeyringService
+            .rememberChat(user, authentication.keyPairs.deviceKeyPair, {
+              owner: contact.owner,
+              chatId: contact.chatId,
+              key,
+              title: contactDisplayName(
+                contactUserId,
+                contact,
+                t("Unknown contact"),
+              ),
+              route: `/chats/${contactUserId}`,
+              group: false,
+            })
+            .catch((e) =>
+              console.warn("Failed to remember chat for notifications", e),
+            );
+        }
       })
       .catch((e) => {
         console.error(e);
@@ -320,6 +339,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
               onMessageSent={(newMessage) =>
                 setMessages((prev) => [...(prev ?? []), newMessage])
               }
+              notify={[contactUserId]}
               share={(document) =>
                 documentService.shareDocument(
                   user,
