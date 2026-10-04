@@ -4,7 +4,10 @@ export default defineConfig({
   // Look for test files in the "tests" directory, relative to this configuration file.
   testDir: "tests/integration",
 
-  // Global teardown script
+  // Cleans up the per-worker Pact directories of earlier runs
+  globalSetup: "./tests/integration/global-setup.ts",
+
+  // Global teardown script (merges the per-worker Pact files)
   globalTeardown: "./tests/integration/global-teardown.ts",
 
   // Run all tests in parallel.
@@ -16,8 +19,10 @@ export default defineConfig({
   // Retry on CI only.
   retries: 3,
 
-  // Opt out of parallel tests on CI.
-  workers: 1,
+  // Tests are isolated (own browser context, own Pact mock server), so run them
+  // in parallel. A 4 vCPU CI runner is saturated by two workers (browser +
+  // Playwright/Pact processes need ~1.5 cores each), more only adds flakiness.
+  workers: process.env.CI ? 2 : 4,
 
   // Reporter to use, see https://playwright.dev/docs/test-reporters
   reporter: "list",

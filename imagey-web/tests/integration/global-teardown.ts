@@ -2,32 +2,41 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+const PACT_FILE_NAME = "imagey-web-imagey-server.json";
+
 export default async function globalTeardown() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
+  const workersDir = path.join(__dirname, "../../target/pacts-workers");
   const pactFilePath = path.join(
     __dirname,
-    "../../target/test-classes/imagey-web-imagey-server.json",
+    "../../target/test-classes",
+    PACT_FILE_NAME,
   );
 
-  if (!fs.existsSync(pactFilePath)) {
-    console.log(
-      `Pact file not found at ${pactFilePath}. Skipping deduplication.`,
-    );
+  // Each worker wrote its own pact file (a shared one loses interactions to
+  // concurrent read-merge-write cycles); merge them into the one Maven packages.
+  const workerFiles = fs.existsSync(workersDir)
+    ? fs
+        .readdirSync(workersDir)
+        .map((dir) => path.join(workersDir, dir, PACT_FILE_NAME))
+        .filter((file) => fs.existsSync(file))
+    : [];
+  if (workerFiles.length === 0) {
+    console.log(`No pact files found in ${workersDir}. Skipping merge.`);
     return;
   }
 
   try {
-    const fileContent = fs.readFileSync(pactFilePath, "utf-8");
-    const pact = JSON.parse(fileContent);
-
-    if (!pact.interactions || !Array.isArray(pact.interactions)) {
-      console.log(
-        "No interactions found in the pact file. Skipping deduplication.",
-      );
-      return;
-    }
+    const pacts = workerFiles.map((file) =>
+      JSON.parse(fs.readFileSync(file, "utf-8")),
+    );
+    const pact = {
+      ...pacts[0],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      interactions: pacts.flatMap((p: any) => p.interactions ?? []),
+    };
 
     const originalCount = pact.interactions.length;
     const uniqueInteractions = new Map();
@@ -49,17 +58,12 @@ export default async function globalTeardown() {
     pact.interactions = Array.from(uniqueInteractions.values());
     const newCount = pact.interactions.length;
 
-    if (originalCount !== newCount) {
-      fs.writeFileSync(pactFilePath, JSON.stringify(pact, null, 2), "utf-8");
-      console.log(
-        `Deduplicated pact interactions: reduced from ${originalCount} to ${newCount}.`,
-      );
-    } else {
-      console.log(
-        `No duplicate pact interactions found (count: ${originalCount}).`,
-      );
-    }
+    fs.mkdirSync(path.dirname(pactFilePath), { recursive: true });
+    fs.writeFileSync(pactFilePath, JSON.stringify(pact, null, 2), "utf-8");
+    console.log(
+      `Merged ${workerFiles.length} pact file(s): ${originalCount} interactions, ${newCount} after deduplication.`,
+    );
   } catch (error) {
-    console.error("Error deduplicating pacts:", error);
+    console.error("Error merging pacts:", error);
   }
 }

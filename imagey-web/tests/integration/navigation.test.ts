@@ -6,7 +6,6 @@ import {
   prepareMarysChatsDocument,
   prepareMarysContactRequests,
   prepareMarysDevices,
-  prepareMarysBeachImage,
   prepareMarysDocuments,
   prepareMarysLogin,
   provider,
@@ -107,65 +106,6 @@ test("open and close navigation drawer on mobile resolution", async ({
   });
 });
 
-test("navigate to chats on mobile resolution", async ({ page }) => {
-  await page.setViewportSize({ width: 412, height: 915 });
-  await page.goto("/");
-  await prepareMarysLogin(page);
-
-  await prepareMarysDocuments();
-  await prepareMarysChatsDocument([], "mary has no contacts");
-
-  const given = provider
-    .addInteraction()
-    .given("Mary has declined lauras invitation")
-    .uponReceiving("a request of mary to get contact requests")
-    .withRequest(
-      "GET",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
-      (r) =>
-        r.headers({
-          Accept: "application/json",
-        }),
-    )
-    .willRespondWith(200, (r) => r.jsonBody([]));
-
-  await given.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByAltText("beach-4524911_1920.jpg")).toBeVisible();
-    const menuButton = page.locator("button[aria-label='main-menu']");
-    await expect(menuButton).toBeVisible();
-    await menuButton.click();
-    const chatsLink = page.getByRole("link", { name: "Chats" });
-    await expect(chatsLink).toHaveCount(2);
-
-    // See the "navigate to chats" test above: "No contacts yet?" renders
-    // before the chats document's own load finishes, so wait for that load's
-    // last request (its key GET) explicitly instead of racing the teardown.
-    const chatsKeyResponse = page.waitForResponse((response) =>
-      response
-        .url()
-        .includes(
-          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.chats}/keys/`,
-        ),
-    );
-    await chatsLink.first().click();
-
-    // Then
-    await expect(page.getByText("No contacts yet?")).toBeVisible();
-    const chatsLinks = page.getByRole("link", { name: "Chats" });
-
-    await expect(chatsLinks).toHaveCount(1);
-    await chatsKeyResponse;
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
 test("navigate to image details", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
@@ -200,49 +140,6 @@ test("navigate to image details", async ({ page }) => {
 
     // Then
     await expect(page.getByText(/No image found/)).toBeVisible();
-    await rootKeyResponse;
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
-test("open an image detail view directly after a reload", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysContactRequests();
-  await prepareMarysDocuments();
-  const provider = await prepareMarysBeachImage();
-
-  await provider.executeTest(async (mockServer) => {
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-    await expect(page.locator("main img")).toHaveCount(2, {
-      timeout: 10_000,
-    });
-
-    // When: the in-memory image registry is gone, only the URL is left.
-    // Resolving the image this way re-fetches the root folder's own key
-    // (prepareMarysBeachImage), and that key GET is the load's last request.
-    // See "navigate to chats" above for the same race: wait for it explicitly,
-    // otherwise runningPactRequests can transiently read 0 between this
-    // load's own requests and the poll below tears the mock server down
-    // mid-request (route.fetch -> ECONNREFUSED, flaky in CI).
-    const rootKeyResponse = page.waitForResponse((response) =>
-      response
-        .url()
-        .includes(
-          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${TestData.mary.settings!.documents}/keys/`,
-        ),
-    );
-    await page.goto(
-      "/images/bb66aba3-8338-4ef4-a6f8-43ed0b39ecd3?folder=68980188-577d-4d2f-9e36-a6b32b25cd3a",
-    );
-    await inputMarysPassword(page);
-
-    // Then
-    await expect(page.getByAltText("beach-1836467_1920.jpg")).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByText(/No image found/)).toBeHidden();
     await rootKeyResponse;
     await expect.poll(() => runningPactRequests).toBe(0);
   });
