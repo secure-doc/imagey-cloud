@@ -38,6 +38,7 @@ export const messageService = {
     chatId: string,
     content: string,
     sharedKey: JsonWebKey,
+    notify: string[] = [],
   ): Promise<Message> => {
     const encryptedContent = await cryptoService.encryptMessage(
       content,
@@ -47,6 +48,7 @@ export const messageService = {
       ownerId,
       chatId,
       encryptedContent,
+      notify,
     );
 
     return {

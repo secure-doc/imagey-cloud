@@ -21,6 +21,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import jakarta.inject.Inject;
 
@@ -31,6 +37,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.push.PushSubscription;
 
 @MonoMeecrowaveConfig
 public class DeviceRepositoryTest {
@@ -92,5 +99,72 @@ public class DeviceRepositoryTest {
         assertThat(deviceRepository.isRegistered(user, deviceId)).isTrue();
         assertThat(deviceRepository.loadDevices(user))
             .containsExactly(new Device(deviceId, true, new PublicKey("{}"), new EncryptedDeviceInfo("AAAA")));
+    }
+
+    @Test
+    @DisplayName("loadPushSubscriptions returns every device's subscription, and only that file")
+    void loadPushSubscriptionsListsEveryDevice() {
+        DeviceId otherDevice = new DeviceId("other-device");
+        PushSubscription first = subscription("https://fcm.googleapis.com/send/a");
+        PushSubscription second = subscription("https://fcm.googleapis.com/send/b");
+        deviceRepository.storeDevicePublicKey(user, deviceId, new PublicKey("{}"));
+        deviceRepository.storePushSubscription(user, deviceId, first);
+        deviceRepository.storePushSubscription(user, otherDevice, second);
+
+        Map<DeviceId, PushSubscription> subscriptions = deviceRepository.loadPushSubscriptions(user);
+
+        assertThat(subscriptions).containsOnly(Map.entry(deviceId, first), Map.entry(otherDevice, second));
+    }
+
+    @Test
+    @DisplayName("loadPushSubscriptions skips an invalid file and still returns the other devices' subscriptions")
+    void loadPushSubscriptionsSkipsInvalidFile() throws IOException {
+        PushSubscription valid = subscription("https://fcm.googleapis.com/send/a");
+        deviceRepository.storePushSubscription(user, deviceId, valid);
+        DeviceId corrupt = new DeviceId("corrupt-device");
+        deviceRepository.storePushSubscription(user, corrupt, valid);
+        for (String broken : List.of("not json", "{\"endpoint\":\"http://insecure.example.com\",\"p256dh\":\"x\",\"auth\":\"y\"}")) {
+            overwritePushSubscriptionFile(corrupt, broken);
+
+            assertThat(deviceRepository.loadPushSubscriptions(user)).containsOnly(Map.entry(deviceId, valid));
+        }
+    }
+
+    private void overwritePushSubscriptionFile(DeviceId device, String content) throws IOException {
+        try (Stream<Path> files = Files.walk(Path.of(rootPath))) {
+            Path file = files
+                .filter(path -> path.endsWith(Path.of("devices", device.id(), "push-subscription.json")))
+                .findFirst()
+                .orElseThrow();
+            Files.writeString(file, content);
+        }
+    }
+
+    @Test
+    @DisplayName("storePushSubscription overwrites a previous subscription for the same device")
+    void storePushSubscriptionOverwrites() {
+        deviceRepository.storePushSubscription(user, deviceId, subscription("https://fcm.googleapis.com/send/old"));
+        deviceRepository.storePushSubscription(user, deviceId, subscription("https://fcm.googleapis.com/send/new"));
+
+        assertThat(deviceRepository.loadPushSubscriptions(user).get(deviceId).endpoint())
+            .isEqualTo("https://fcm.googleapis.com/send/new");
+    }
+
+    @Test
+    @DisplayName("deletePushSubscription removes it, without touching the device's other files")
+    void deletePushSubscriptionRemovesOnlyThat() {
+        deviceRepository.storeDevicePublicKey(user, deviceId, new PublicKey("{}"));
+        deviceRepository.storePushSubscription(user, deviceId, subscription("https://fcm.googleapis.com/send/a"));
+
+        deviceRepository.deletePushSubscription(user, deviceId);
+
+        assertThat(deviceRepository.loadPushSubscriptions(user)).isEmpty();
+        assertThat(deviceRepository.isRegistered(user, deviceId)).isTrue();
+    }
+
+    private static PushSubscription subscription(String endpoint) {
+        String p256dh = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[65]);
+        String auth = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[16]);
+        return new PushSubscription(endpoint, p256dh, auth);
     }
 }

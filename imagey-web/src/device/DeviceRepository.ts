@@ -1,3 +1,5 @@
+import { notificationStore } from "../notification/NotificationStore";
+
 // imagey.user           - the signed-in account's server id (a UUID)
 // imagey.email           - the address that id was last reached through (display only)
 // imagey.keepLoggedIn    - the last "keep me logged in" choice, remembered across sign-ins
@@ -57,5 +59,16 @@ export const deviceRepository = {
       `imagey.devices[${deviceId}].recovery-key`,
       encryptedRecoveryKey,
     );
+    // Mirrors the blob into IndexedDB (unreachable from localStorage) so a
+    // service worker can find it, if push is active on this device (ADR
+    // 0020) - keeps the two in lock-step on every rotation, the same way the
+    // recovery-key desync bug taught us to keep server and local in
+    // lock-step. Fire-and-forget: notifications are best-effort, never a
+    // reason to fail sign-in.
+    notificationStore
+      .patch(deviceId, { recoveryBlob: encryptedRecoveryKey })
+      .catch((e) =>
+        console.warn("Failed to mirror the recovery key for notifications", e),
+      );
   },
 };

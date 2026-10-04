@@ -33,6 +33,7 @@ import jakarta.json.JsonString;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
@@ -45,10 +46,12 @@ import jakarta.ws.rs.core.Response;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import cloud.imagey.application.authentication.SessionDevice;
 import cloud.imagey.domain.encryption.PrivateKeyMetadata;
 import cloud.imagey.domain.encryption.PublicKey;
+import cloud.imagey.domain.push.PushSubscription;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.Device;
 import cloud.imagey.domain.user.DeviceId;
@@ -66,6 +69,9 @@ public class DeviceResource {
     private DeviceRepository deviceRepository;
     @Inject
     private HttpServletRequest request;
+    @Inject
+    @ConfigProperty(name = "push.allowed-hosts")
+    private List<String> allowedPushHosts;
 
     @GET
     @RolesAllowed("owner")
@@ -208,5 +214,48 @@ public class DeviceResource {
 
         LOG.info("Loading device recovery key");
         return deviceRepository.loadDeviceRecoveryKey(user, deviceId).orElseThrow(NotFoundException::new);
+    }
+
+    // The subscription only matters to the device it belongs to (ADR 0020, same rule as the
+    // recovery key) - a session bound to a different, or no, device may not touch it.
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{deviceId}/push-subscription")
+    @Consumes(APPLICATION_JSON)
+    public Response storePushSubscription(
+        @PathParam("userId") User user,
+        @PathParam("deviceId") DeviceId deviceId,
+        PushSubscriptionRequest subscription) {
+
+        requireBoundToThisDevice(user, deviceId);
+        PushSubscription validated = PushSubscription.parse(
+            subscription.endpoint(), subscription.p256dh(), subscription.auth(), allowedPushHosts);
+        deviceRepository.storePushSubscription(user, deviceId, validated);
+        return Response.noContent().build();
+    }
+
+    @DELETE
+    @RolesAllowed("owner")
+    @Path("{deviceId}/push-subscription")
+    public Response deletePushSubscription(
+        @PathParam("userId") User user,
+        @PathParam("deviceId") DeviceId deviceId) {
+
+        requireBoundToThisDevice(user, deviceId);
+        deviceRepository.deletePushSubscription(user, deviceId);
+        return Response.noContent().build();
+    }
+
+    private void requireBoundToThisDevice(User user, DeviceId deviceId) {
+        if (!deviceRepository.isRegistered(user, deviceId)) {
+            throw new NotFoundException();
+        }
+        if (sessionDevice().filter(deviceId::equals).isEmpty()) {
+            throw new ForbiddenException("The session is not bound to this device.");
+        }
+    }
+
+    /** The wire shape of a PUT body; validated and turned into a {@link PushSubscription} by the caller. */
+    public record PushSubscriptionRequest(String endpoint, String p256dh, String auth) {
     }
 }

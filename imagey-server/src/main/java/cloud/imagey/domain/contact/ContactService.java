@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.ValidationException;
@@ -46,6 +47,9 @@ import cloud.imagey.domain.mail.EmailBody;
 import cloud.imagey.domain.mail.EmailSubject;
 import cloud.imagey.domain.mail.EmailTemplate;
 import cloud.imagey.domain.mail.MailService;
+import cloud.imagey.domain.push.ContactAcceptedPayload;
+import cloud.imagey.domain.push.ContactRequestPayload;
+import cloud.imagey.domain.push.PushEvent;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -87,6 +91,8 @@ public class ContactService {
     @Inject
     @ConfigProperty(name = "mail.invitation.action")
     private String invitationAction;
+    @Inject
+    private Event<PushEvent> pushEvent;
 
     /**
      * @param sender        the inviting account
@@ -151,7 +157,10 @@ public class ContactService {
         contactRepository.persist(new ContactExchange(
             sender, recipientUser, INVITED, key, chatId, null, publicProfileId, contactInfo));
 
-        if (!registered) {
+        if (registered) {
+            // Unregistered recipients have no device to push to yet - they only get the email below.
+            pushEvent.fireAsync(new PushEvent(recipientUser, new ContactRequestPayload()));
+        } else {
             // The invitee accepts this request as the last step of registration; it reads the
             // inviter's public main key straight off its own persisted contact-request entry
             // (GET /users/{invitee}/contact-requests) rather than from the link.
@@ -201,6 +210,7 @@ public class ContactService {
             exchange.inviter(), exchange.invitee(), ACCEPTED, publicKey, exchange.chatId(), sharedKey, publicProfileId,
             contactInfo);
         contactRepository.persist(accepted);
+        pushEvent.fireAsync(new PushEvent(exchange.inviter(), new ContactAcceptedPayload()));
     }
 
     // Leg 3 of the handshake (ADR 0015), called by the inviter once they have created the chat

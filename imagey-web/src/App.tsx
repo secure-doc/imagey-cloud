@@ -15,6 +15,8 @@ import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
 import Profile from "./pages/ProfilePage";
 import Devices from "./pages/Devices";
+import NotificationSettings from "./notification/NotificationSettings";
+import { pushSubscriptionService } from "./notification/PushSubscriptionService";
 import {
   Email,
   JsonWebKeyPairs,
@@ -106,6 +108,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (user && keyPairs) {
+      pushSubscriptionService
+        .reconcile(user, keyPairs.deviceKeyPair)
+        .catch((e) => console.warn("Failed to reconcile push subscription", e));
+    }
+  }, [user, keyPairs]);
+
+  useEffect(() => {
     if (user && keyPairs && !settings) {
       documentService
         .getSettings(
@@ -181,6 +191,10 @@ function App() {
                         element={user && <Profile id={settings.profile} />}
                       />
                       <Route path="devices" element={user && <Devices />} />
+                      <Route
+                        path="notifications"
+                        element={user && <NotificationSettings />}
+                      />
                     </Route>
                   </Route>
                   <Route path="chats/:contactUserId" element={<ChatRoute />} />

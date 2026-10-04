@@ -31,6 +31,15 @@ export function SettingsList({ className }: { className?: string }) {
             <h6 className="small">{t("Devices")}</h6>
           </div>
         </li>
+        <li
+          className="ripple"
+          onClick={() => navigate("/settings/notifications")}
+        >
+          <i>notifications</i>
+          <div className="max">
+            <h6 className="small">{t("Notifications")}</h6>
+          </div>
+        </li>
       </ul>
     </section>
   );

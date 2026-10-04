@@ -20,6 +20,8 @@ import { publicProfileService } from "../profile/publicProfileService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
 import { useSendContactRequest } from "../hooks/useSendContactRequest";
 import { useSettingsKey } from "../contexts/SettingsContext";
+import { notificationKeyringService } from "../notification/NotificationKeyringService";
+import NotificationBanner from "../notification/NotificationBanner";
 
 export default function Chats({ id }: { id: string }) {
   return (
@@ -149,6 +151,27 @@ export function ChatsList({
         name: loaded.name,
         revision: loaded.revision,
       });
+      const deviceKeyPair = authentication.keyPairs?.deviceKeyPair;
+      if (deviceKeyPair) {
+        const list = { contacts: loaded.contacts, groups: loaded.groups ?? [] };
+        // Only issues extra requests while push is active on this device
+        // (isActive/fillMissing) - a plain load never triggers them, so
+        // existing tests without push stay unaffected.
+        notificationKeyringService
+          .rememberNames(user, deviceKeyPair, loaded.contacts)
+          .then(() =>
+            notificationKeyringService.fillMissing(
+              user,
+              deviceKeyPair,
+              list,
+              id,
+              loaded.key,
+            ),
+          )
+          .catch((e) =>
+            console.warn("Failed to refresh the notification keyring", e),
+          );
+      }
       return true;
     } catch (e) {
       console.error("Failed to load chats document", e);
@@ -263,6 +286,7 @@ export function ChatsList({
           : undefined
       }
     >
+      <NotificationBanner />
       {chatsLoadFailed && (
         <div className="padding">
           {i18n.t("Could not load your chats. Retrying...")}

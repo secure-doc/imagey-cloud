@@ -25,10 +25,12 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.function.Predicate.not;
 
 import java.io.IOException;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Matcher;
@@ -38,9 +40,11 @@ import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -69,6 +73,14 @@ import cloud.imagey.domain.user.UserId;
 @ApplicationScoped
 public class MessageResource {
 
+    /** Guards against an abusive header rather than any real chat size - see {@code MessageService}. */
+    private static final int MAX_NOTIFY_RECIPIENTS = 256;
+    /**
+     * What a user id in the Notify header may look like (a UUID, and nothing that is a path segment of its own): it
+     * ends up in file names, and unlike a URL path segment a header may contain slashes and dots.
+     */
+    private static final Pattern NOTIFY_RECIPIENT = Pattern.compile("[A-Za-z0-9_-]{1,64}");
+
     @Inject
     private MessageService messageService;
     @Inject
@@ -87,10 +99,23 @@ public class MessageResource {
         @PathParam("userId") User owner,
         @PathParam("chatId") DocumentId chatId,
         MessageContent messageContent,
+        @HeaderParam("Notify") String notify,
         @Context UriInfo uriInfo) throws IOException {
 
-        Message message = messageService.sendMessage(owner, chatId, caller(), messageContent);
+        Message message = messageService.sendMessage(owner, chatId, caller(), messageContent, parseNotify(notify));
         return Response.created(uriInfo.getAbsolutePathBuilder().path(message.id().value()).build()).build();
+    }
+
+    @GET
+    @RolesAllowed({"owner", "member"})
+    @Path("{messageId}")
+    @Produces(APPLICATION_JSON)
+    public Message getMessage(
+        @PathParam("userId") User owner,
+        @PathParam("chatId") DocumentId chatId,
+        @PathParam("messageId") MessageId messageId) {
+
+        return messageRepository.fetchMessage(owner, chatId, messageId).orElseThrow(NotFoundException::new);
     }
 
     @GET
@@ -124,6 +149,32 @@ public class MessageResource {
 
     private User caller() {
         return new User(new UserId(securityContext.getUserPrincipal().getName()));
+    }
+
+    // The other chat members to push-notify (ADR 0020 decision 4) - MessageService only actually
+    // notifies the ones that pass its own access check, so this header cannot be used to spam anyone.
+    private static Set<User> parseNotify(String notify) {
+        if (notify == null || notify.isBlank()) {
+            return Set.of();
+        }
+        // limit -1: keeps trailing empty segments (e.g. "a,,") so they are rejected below, rather
+        // than silently discarded by split's default behaviour.
+        String[] parts = notify.split(",", -1);
+        if (parts.length > MAX_NOTIFY_RECIPIENTS) {
+            throw new BadRequestException("Notify header names too many recipients");
+        }
+        Set<User> recipients = new LinkedHashSet<>();
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                throw new BadRequestException("Notify header contains an empty recipient");
+            }
+            if (!NOTIFY_RECIPIENT.matcher(trimmed).matches()) {
+                throw new BadRequestException("Notify header contains an invalid recipient");
+            }
+            recipients.add(new User(new UserId(trimmed)));
+        }
+        return recipients;
     }
 
     public record Prefer(String value) {

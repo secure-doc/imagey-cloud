@@ -8,14 +8,22 @@ export const messageRepository = {
     ownerId: string,
     chatId: string,
     encryptedContent: string,
+    // The other chat members to push-notify (ADR 0020 decision 4) - the
+    // server only pushes to ones that already pass its own access check for
+    // this chat, so this cannot be used to spam arbitrary users.
+    notify: string[] = [],
   ): Promise<string> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "text/plain",
+    };
+    if (notify.length > 0) {
+      headers["Notify"] = notify.join(",");
+    }
     const response = await fetch(
       `/users/${ownerId}/documents/${chatId}/messages`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "text/plain",
-        },
+        headers,
         credentials: "same-origin",
         body: encryptedContent,
       },
