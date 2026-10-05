@@ -66,6 +66,18 @@ public class BoundedLruCacheTest {
     }
 
     @Test
+    @DisplayName("clear removes every entry")
+    void clearRemovesEntries() {
+        cache.put("o", "a", "m", 1);
+        cache.put("o", "b", "m", 2);
+
+        cache.clear();
+
+        assertThat(cache.get("o", "a", "m")).isNull();
+        assertThat(cache.get("o", "b", "m")).isNull();
+    }
+
+    @Test
     @DisplayName("a non-positive capacity is rejected")
     void rejectsNonPositiveCapacity() {
         assertThatThrownBy(() -> new BoundedLruCache<>(0)).isInstanceOf(IllegalArgumentException.class);

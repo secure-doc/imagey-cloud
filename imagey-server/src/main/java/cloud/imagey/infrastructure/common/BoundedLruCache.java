@@ -52,4 +52,8 @@ public class BoundedLruCache<K1, K2, K3, V> {
     public void put(K1 k1, K2 k2, K3 k3, V value) {
         entries.put(List.of(k1, k2, k3), value);
     }
+
+    public void clear() {
+        entries.clear();
+    }
 }
