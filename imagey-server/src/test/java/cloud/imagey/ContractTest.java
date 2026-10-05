@@ -56,6 +56,7 @@ import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvide
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
+import cloud.imagey.application.authentication.RolesFilter;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
 import cloud.imagey.domain.encryption.EncryptedContent;
@@ -101,6 +102,8 @@ public class ContractTest {
     private DocumentRepository documentRepository;
     @Inject
     private KeyFileCrypto keyFileCrypto;
+    @Inject
+    private RolesFilter rolesFilter;
 
     private TokenState tokenState = VALID_TOKEN;
     private User user;
@@ -110,6 +113,10 @@ public class ContractTest {
     @BeforeEach
     void before(PactVerificationContext context) throws IOException {
         sessionDevice = Optional.empty();
+        // The data directory is reset below, but RolesFilter caches positive membership decisions:
+        // without this, a grant from an earlier interaction ("Mary has shared a document with
+        // alice") would leak into later ones, depending on the order the pact lists them in.
+        rolesFilter.clearMembershipCache();
         context.setTarget(fromUrl(create("http://localhost:" + config.getHttpPort()).toURL()));
         File data = new File(rootPath);
         if (data.exists()) {

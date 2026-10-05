@@ -156,6 +156,10 @@ public class RolesFilter implements ContainerRequestFilter {
             && contactService.isProvisionalChatMember(owner, chatId, caller);
     }
 
+    public void clearMembershipCache() {
+        membershipCache.clear();
+    }
+
     private boolean isMember(User owner, DocumentId documentId, User member) {
         Boolean cached = membershipCache.get(owner, documentId, member);
         if (cached != null) {
