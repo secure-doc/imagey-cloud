@@ -11,6 +11,9 @@ Read these rules before starting work and always adhere to them.
   (`imagey-server/target/pacts`). Otherwise the backend build fails during
   `unpack-dependencies` or uses stale Pact files, causing `ContractTest` errors.
 
+- A root `mvn install` also runs the E2E tests (`imagey-e2e`) and therefore needs
+  Docker. Skip them with `-DskipE2E` (or `-DskipTests`).
+
 ## Mandatory Development Workflow
 
 Whenever developing a new feature or making significant changes, follow this
@@ -26,6 +29,17 @@ order of execution:
    unit/integration tests to satisfy the Pact contracts generated in step 1.
 5. **Backend coverage & build**: run the backend Maven build (`mvn clean verify`
    in `imagey-server`) to verify tests, coverage, and Checkstyle.
+
+6. **E2E tests** (`mvn verify -pl imagey-e2e -am -DskipTests -DskipE2E=false`,
+   or `npm run e2e` in `imagey-e2e` after building `imagey-server`): for
+   features that involve several users or devices. Needs Docker.
+
+A test belongs in the **E2E suite** (`imagey-e2e`) if its statement is "what
+client X creates with its keys can be read or processed by client Y", where Y is
+another user or another device. Everything else (error paths, push, single
+steps of a handshake from one side) stays in the Pact/Contract suite of
+`imagey-web`. The E2E suite is blackbox: UI and Greenmail only. See
+`docs/plans/e2e-test-setup.md`.
 
 ### Pact & Playwright guidelines
 

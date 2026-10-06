@@ -347,6 +347,7 @@ test("open an own shared image detail view directly after a reload", async ({
   await expect(page).toHaveURL(`/chats/${LAURA}`);
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e5-share-image.e2e.ts (E5, docs/plans/e2e-test-setup.md)
 test("open an image shared by a contact directly after a reload", async ({
   page,
 }) => {

@@ -1,0 +1,6 @@
+node
+node_modules
+playwright-report
+test-results
+target
+package-lock.json

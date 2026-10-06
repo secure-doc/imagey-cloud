@@ -719,6 +719,7 @@ test("share a document in chat", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e5-share-image.e2e.ts (E5, docs/plans/e2e-test-setup.md)
 test("view shared document from another user", async ({ page }) => {
   await prepareAlicesLogin();
   await prepareAlicesEmptyDocumentsFolder();
@@ -914,6 +915,7 @@ test("view shared document from another user", async ({ page }) => {
     });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e4-chat.e2e.ts (E4, docs/plans/e2e-test-setup.md)
 test("view chat owned by another user (synced chat key)", async ({ page }) => {
   // Mary has a contact whose chat SHE didn't create - Alice invited Mary and
   // owns the chat Document (ADR 0015), so opening it exercises the non-owner
@@ -991,6 +993,7 @@ test("view chat owned by another user (synced chat key)", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e4-chat.e2e.ts (E4, docs/plans/e2e-test-setup.md)
 test("send a message in a chat owned by another user (posts to the owner's tree)", async ({
   page,
 }) => {
@@ -1187,6 +1190,7 @@ test("view chat shows the contact's display name and avatar", async ({
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e4-chat.e2e.ts (E4, docs/plans/e2e-test-setup.md)
 test("write and read messages right after accepting, before the inviter created the chat", async ({
   page,
 }) => {
@@ -1298,6 +1302,7 @@ test("write and read messages right after accepting, before the inviter created 
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e4-chat.e2e.ts (E4, docs/plans/e2e-test-setup.md)
 test("opening a chat that the inviter has created removes the pending chat key", async ({
   page,
 }) => {

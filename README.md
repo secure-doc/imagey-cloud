@@ -12,6 +12,21 @@ To test the application locally and complete the registration process, follow th
 6. Replace the domain part of the extracted link (`https://imagey.cloud`) with your local frontend address (`http://localhost:5173` or the respective port).
 7. Open the modified link in your browser to complete the registration by setting a password. You will then be logged in and can access features such as the user profile.
 
+## E2E Tests
+
+The `imagey-e2e` module tests flows with several users or devices against the real backend
+(server bundle in Docker plus Greenmail). Docker is required.
+
+- `mvn verify -pl imagey-e2e -am -DskipTests -DskipE2E=false` builds frontend and server without
+  their tests and runs only the E2E tests. A plain `mvn install` runs them as well; `-DskipE2E`
+  (or `-DskipTests`) skips them.
+- `npm run e2e` in `imagey-e2e` runs the tests against an already built `imagey-server`
+  (`mvn package -pl imagey-server -am -DskipTests`). Arguments are passed to Playwright, e.g.
+  `npm run e2e -- --grep E0 --ui`.
+- The stack is removed after every run. `E2E_KEEP=1` keeps it for debugging
+  (`docker compose -p imagey-e2e down -v` removes it). On failures the server log is written to
+  `imagey-e2e/target/e2e-server.log`.
+
 ## Push Notifications (Web Push)
 
 Push notifications (ADR 0020) need a VAPID key pair (RFC 8292) configured on the backend

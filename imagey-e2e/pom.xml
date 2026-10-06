@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation=" http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>cloud.imagey</groupId>
+  <artifactId>imagey-e2e</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <name>Imagey E2E</name>
+  <packaging>pom</packaging>
+
+  <description>
+    End-to-end tests (several users or devices) against the real backend in Docker.
+  </description>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <skipTests>false</skipTests>
+    <!-- Skips the E2E phase; -DskipTests skips it as well, -DskipE2E=false runs it nevertheless -->
+    <skipE2E>${skipTests}</skipE2E>
+  </properties>
+
+  <dependencies>
+    <!-- Reactor ordering only: the server bundle (imagey-server/target) is needed for the image -->
+    <dependency>
+      <groupId>cloud.imagey</groupId>
+      <artifactId>imagey-server</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.github.eirslett</groupId>
+        <artifactId>frontend-maven-plugin</artifactId>
+        <version>1.15.1</version>
+        <configuration>
+          <nodeVersion>v22.18.0</nodeVersion>
+          <skip>${skipE2E}</skip>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install node and npm</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>install-node-and-npm</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>npm ci</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>ci</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>lint</id>
+            <phase>process-sources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>run lint</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>install playwright browser</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>npx</goal>
+            </goals>
+            <configuration>
+              <arguments>playwright install chromium</arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>e2e</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>run e2e</arguments>
+              <!-- The plugin skips "-DskipTests" on its own; skipping is controlled by skipE2E here -->
+              <skipTests>false</skipTests>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

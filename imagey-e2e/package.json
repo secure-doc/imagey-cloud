@@ -1,0 +1,21 @@
+{
+  "name": "imagey-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "e2e": "node scripts/run-e2e.mjs",
+    "lint": "prettier . --check && eslint . && tsc --noEmit",
+    "prettier": "prettier . -w"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "@playwright/test": "1.60.0",
+    "@types/node": "^25.0.3",
+    "eslint": "^9.32.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.7.0"
+  }
+}

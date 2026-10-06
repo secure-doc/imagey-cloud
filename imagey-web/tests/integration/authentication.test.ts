@@ -286,6 +286,7 @@ test("new user clicks registration link", async ({ page }) => {
     });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts (E2, docs/plans/e2e-test-setup.md)
 test("new user registers via invite link and accepts the invitation", async ({
   page,
 }) => {
