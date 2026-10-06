@@ -10,7 +10,7 @@ import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
 import { documentService } from "../document/DocumentService";
 import { ConversationView } from "../chat/ConversationView";
 import { GroupInvitationMessage } from "../chat/GroupInvitationMessage";
-import { usePolling } from "../chat/messageHooks";
+import { useLiveActivity, usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { useChatsId } from "../contexts/SettingsContext";
 import { useContactProfile } from "../hooks/useContactProfile";
@@ -55,6 +55,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     chat?.chatId,
     sharedKey,
   );
+  const liveActivity = useLiveActivity(chat?.chatId, messages);
 
   const {
     name: contactName,
@@ -305,6 +306,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         onLoaded={handleChatsListLoaded}
         onLoadError={setChatsLoadFailed}
         registerUpdate={registerChatsListUpdate}
+        liveActivity={liveActivity}
       />
       <div
         className="col s12 m8 l8 vertical"

@@ -543,6 +543,12 @@ public class ContractTest {
     // group messages, or any other chat/group whose id is generated at test-run time) - the
     // content is opaque to the server and not byte-compared, only its presence/count and `sender`
     // matter to a consumer's matchers.
+    // The n-th message of the fixed timeline of the frontend tests (testdata.ts messageId): ids look
+    // like the server's own - "<epoch millis>-<uuid>" - one second apart, so they sort by n.
+    private static String messageId(int n) {
+        return (1791291669481L + n * 1000L) + "-00000000-0000-4000-8000-" + String.format("%012d", n);
+    }
+
     @State("a document has messages")
     void aDocumentHasMessages(Map<String, Object> params) throws IOException {
         String ownerId = (String) params.get("ownerId");
@@ -553,10 +559,31 @@ public class ContractTest {
         deleteQuietly(messagesDir);
         messagesDir.mkdirs();
         for (int i = 1; i <= count; i++) {
-            String id = "msg-" + i;
+            String id = messageId(i);
             writeStringToFile(new File(messagesDir, id + ".json"),
                 "{\"id\":\"" + id + "\",\"sender\":\"" + sender + "\",\"channel\":\""
                 + sender + ":" + ownerId + "\",\"content\":\"AAAA\"}",
+                UTF_8);
+        }
+    }
+
+    // Messages with explicit ids and (optional) server timestamps, e.g. for day separators
+    // (ADR 0021); `messages` is a list of {id, timestamp?}.
+    @State("a document has messages with timestamps")
+    void aDocumentHasMessagesWithTimestamps(Map<String, Object> params) throws IOException {
+        String ownerId = (String) params.get("ownerId");
+        String documentId = (String) params.get("documentId");
+        String sender = (String) params.get("sender");
+        File messagesDir = new File(new File(new File(rootPath, ownerId), "documents/" + documentId), "messages");
+        deleteQuietly(messagesDir);
+        messagesDir.mkdirs();
+        for (Object entry : (java.util.List<?>) params.get("messages")) {
+            Map<?, ?> message = (Map<?, ?>) entry;
+            String id = (String) message.get("id");
+            Object timestamp = message.get("timestamp");
+            writeStringToFile(new File(messagesDir, id + ".json"),
+                "{" + (timestamp == null ? "" : "\"timestamp\":\"" + timestamp + "\",")
+                + "\"sender\":\"" + sender + "\",\"content\":\"AAAA\"}",
                 UTF_8);
         }
     }
@@ -689,16 +716,16 @@ public class ContractTest {
         // fetchMessages), not under a flat "messages/{contact}" folder.
         File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         messagesDir.mkdirs();
-        File messageFile = new File(messagesDir, "msg-123.json");
+        File messageFile = new File(messagesDir, messageId(123) + ".json");
         writeStringToFile(messageFile,
-            "{\"id\":\"msg-123\",\"sender\":\"" + MARY + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
+            "{\"id\":\"" + messageId(123) + "\",\"sender\":\"" + MARY + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
             + "\"content\":\"HW8URzE9G7o/muIVmhdpPBTsmui7mlYyDmx5+d2l28tcQbJV2FXPf3e/jgZYP2Qpj70kqN7H\"}",
             UTF_8);
     }
 
     // ADR 0019: a group-invitation message posted into the 1:1 chat mary already has with alice -
     // exactly one message in chat-mary (unlike "Alice has a chat with mary", which also seeds
-    // msg-123), matching the Pact interactions verifying "a request to receive a group invitation
+    // message 123), matching the Pact interactions verifying "a request to receive a group invitation
     // message" (a list with a single element). The invitation payload's exact ciphertext is opaque
     // to the server - a dummy body is enough, the consumer's own matchers only check its shape/type.
     @State("Mary has an invitation to alice's group in her chat with alice")
@@ -708,9 +735,9 @@ public class ContractTest {
         File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         deleteQuietly(messagesDir);
         messagesDir.mkdirs();
-        File messageFile = new File(messagesDir, "msg-invite-1.json");
+        File messageFile = new File(messagesDir, messageId(902) + ".json");
         writeStringToFile(messageFile,
-            "{\"id\":\"msg-invite-1\",\"sender\":\"" + ALICE + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
+            "{\"id\":\"" + messageId(902) + "\",\"sender\":\"" + ALICE + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
             + "\"content\":\"AAAA\"}",
             UTF_8);
     }
@@ -723,9 +750,9 @@ public class ContractTest {
 
         File messagesDir = new File(getAlicesData(), "documents/chat-mary/messages");
         messagesDir.mkdirs();
-        File messageFile = new File(messagesDir, "msg-999.json");
+        File messageFile = new File(messagesDir, messageId(999) + ".json");
         writeStringToFile(messageFile,
-            "{\"id\":\"msg-999\",\"sender\":\"" + MARY + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
+            "{\"id\":\"" + messageId(999) + "\",\"sender\":\"" + MARY + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
             + "\"content\":\"aeCDPI47cicIa11xsEcrIoJ61HTdQzttLFprdqPYP1eayYPs8/65ktZ0DxZgs6+MSOxeCpqTZGFerRWze9Az"
             + "CjaKpBJGq12foAZlbFfp56WzzAMeFg8JpT8bD/AYh6VBEa77Ipl2BLSpE5Jlszr45nDLQTzg8J3pb3EQiD8TpcndgU1Zyuc=\"}",
             UTF_8);

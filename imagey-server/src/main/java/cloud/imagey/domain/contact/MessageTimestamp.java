@@ -16,30 +16,33 @@
  */
 package cloud.imagey.domain.contact;
 
+import static java.time.ZoneOffset.UTC;
+
 import java.time.Instant;
-import java.util.UUID;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 
 import jakarta.json.bind.annotation.JsonbTypeAdapter;
 
-import cloud.imagey.domain.contact.MessageId.Adapter;
+import cloud.imagey.domain.contact.MessageTimestamp.Adapter;
 import cloud.imagey.infrastructure.record.AbstractSimpleRecordAdapter;
 
+/**
+ * When the server accepted a message (ADR 0021): an ISO-8601 instant in UTC with fixed millisecond precision, e.g.
+ * {@code 2026-10-06T14:03:12.481Z}.
+ */
 @JsonbTypeAdapter(Adapter.class)
-public record MessageId(String value) implements Comparable<MessageId> {
+public record MessageTimestamp(String value) {
 
-    public MessageId(Instant instant) {
-        this(instant.toEpochMilli() + "-" + UUID.randomUUID().toString());
+    private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(UTC);
+
+    public MessageTimestamp(Instant instant) {
+        this(FORMAT.format(instant.truncatedTo(ChronoUnit.MILLIS)));
     }
 
-    /** The creation time encoded in the id's millisecond prefix - every id is {@code <epochMillis>-<uuid>}. */
-    public MessageTimestamp timestamp() {
-        return new MessageTimestamp(Instant.ofEpochMilli(Long.parseLong(value.substring(0, value.indexOf('-')))));
+    public Instant instant() {
+        return Instant.parse(value);
     }
 
-    @Override
-    public int compareTo(MessageId o) {
-        return value.compareTo(o.value);
-    }
-
-    public static class Adapter extends AbstractSimpleRecordAdapter<MessageId, String> { }
+    public static class Adapter extends AbstractSimpleRecordAdapter<MessageTimestamp, String> { }
 }

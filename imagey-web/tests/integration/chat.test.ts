@@ -22,6 +22,11 @@ import {
   loginAsAlice,
   encryptKnownChatMessage,
   generateAesGcmKeyJwk,
+  sentMessageBody,
+  messageId,
+  messageIdAt,
+  messageTimestamp,
+  pactMessageTimestamp,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -42,6 +47,7 @@ test.afterEach("Clear IndexedDB", async ({ page }) => {
 });
 
 test("view chat and send message", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-06T18:00:00Z"));
   await prepareMarysLogin(page);
   await prepareMarysEmptyDocumentsFolder();
 
@@ -57,9 +63,13 @@ test("view chat and send message", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: MatchersV3.string("msg-123"),
+          id: MatchersV3.string(messageId(123)),
           content: MatchersV3.string(
             TestData.mary.chats![0].messages[0].content,
+          ),
+          timestamp: MatchersV3.datetime(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSX",
+            messageTimestamp(123),
           ),
         },
       ]),
@@ -74,7 +84,7 @@ test("view chat and send message", async ({ page }) => {
       "GET",
       "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
       (r) => {
-        r.query({ sinceId: "msg-123" });
+        r.query({ sinceId: messageId(123) });
         r.headers({ Prefer: "wait=30" });
       },
     )
@@ -95,9 +105,9 @@ test("view chat and send message", async ({ page }) => {
     .willRespondWith(201, (r) => {
       r.headers({
         Location: MatchersV3.string(
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/msg-1234",
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/${messageId(1234)}`,
         ),
-      });
+      }).jsonBody(sentMessageBody(1234));
     });
 
   await builder.executeTest(async (mockServer) => {
@@ -122,6 +132,11 @@ test("view chat and send message", async ({ page }) => {
 
     // Verify received message is decrypted and shown
     await expect(page.getByText("Hello Mary, this is Laura!")).toBeVisible();
+    // ... with its time (Europe/Berlin, CEST) and a "Today" day separator
+    await expect(page.locator("time")).toHaveText(/3:03|15:03/);
+    await expect(page.getByText("Today", { exact: true })).toBeVisible();
+    const lauraEntry = page.getByRole("listitem").filter({ hasText: "Laura" });
+    await expect(lauraEntry.locator("label")).toHaveText(/3:03|15:03/);
 
     // Send a message
     const input = page.getByLabel("Type a message");
@@ -137,6 +152,187 @@ test("view chat and send message", async ({ page }) => {
     );
     await page.getByRole("button", { name: "send" }).click();
     await postResponse;
+
+    // The own message shows the time the server stamped right away
+    await expect(page.locator("time")).toHaveCount(2);
+    await expect(page.locator("time").last()).toHaveText(/3:21|15:21/);
+    await expect(page.getByText("Today", { exact: true })).toHaveCount(1);
+    // The chat list follows the conversation: laura's entry shows the time of
+    // the newest message, the one just sent
+    await expect(lauraEntry.locator("label")).toHaveText(/3:21|15:21/);
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("show day separators for messages of several days", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-06T18:00:00Z"));
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+
+  await prepareMarysChat("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6", " for chat");
+
+  // The first message is a legacy one: stored without timestamp, which the
+  // server derives from the time prefix of its id.
+  const times = [
+    "2026-01-02T10:00:00.000Z",
+    "2026-10-05T10:00:00.000Z",
+    "2026-10-06T10:00:00.000Z",
+    "2026-10-06T10:05:00.000Z",
+  ];
+  const ids = times.map((time, i) => messageIdAt(Date.parse(time), i));
+  const content = TestData.mary.chats![0].messages[0].content;
+  provider
+    .addInteraction()
+    .given("a document has messages with timestamps", {
+      ownerId: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      documentId: "chat-laura",
+      sender: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+      messages: times.map((timestamp, i) =>
+        i === 0 ? { id: ids[i] } : { id: ids[i], timestamp },
+      ),
+    })
+    .uponReceiving("a request to receive messages of several days")
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody(
+        times.map((timestamp, i) => ({
+          id: MatchersV3.string(ids[i]),
+          content: MatchersV3.string(content),
+          timestamp: MatchersV3.datetime(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSX",
+            timestamp,
+          ),
+        })),
+      ),
+    );
+  const builder = provider
+    .addInteraction()
+    .given("a document has messages with timestamps", {
+      ownerId: "d20cf443-4f96-418f-a957-c8cbef8677c3",
+      documentId: "chat-laura",
+      sender: "7f53a4ea-58b7-4bbf-b94d-f2038752d5b6",
+      messages: times.map((timestamp, i) =>
+        i === 0 ? { id: ids[i] } : { id: ids[i], timestamp },
+      ),
+    })
+    .uponReceiving("a request to receive more messages of several days")
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
+      (r) => {
+        r.query({ sinceId: ids[3] });
+        r.headers({ Prefer: "wait=30" });
+      },
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsMary(page);
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    await page.getByText("Laura", { exact: true }).first().click();
+
+    await expect(page.getByText("Hello Mary, this is Laura!")).toHaveCount(4);
+    await expect(page.locator("time")).toHaveCount(4);
+    // separators: Jan 2 (a date), yesterday, today (once for two messages)
+    await expect(page.locator(".chip")).toHaveText([
+      /Jan 2, 2026|02\.01\.2026/,
+      "Yesterday",
+      "Today",
+    ]);
+
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});
+
+test("show the last activity of each chat in the chat list", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-10-06T18:00:00Z"));
+  await prepareMarysLogin(page);
+  await prepareMarysEmptyDocumentsFolder();
+  await prepareMarysChat("7f53a4ea-58b7-4bbf-b94d-f2038752d5b6", " for chat");
+  provider
+    .addInteraction()
+    .uponReceiving("a request to receive messages")
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
+    )
+    .willRespondWith(200, (r) =>
+      r.jsonBody([
+        {
+          id: MatchersV3.string(messageId(123)),
+          content: MatchersV3.string(
+            TestData.mary.chats![0].messages[0].content,
+          ),
+          timestamp: MatchersV3.datetime(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSX",
+            messageTimestamp(123),
+          ),
+        },
+      ]),
+    );
+  provider
+    .addInteraction()
+    .uponReceiving("a request to receive more messages")
+    .withRequest(
+      "GET",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
+      (r) => {
+        r.query({ sinceId: messageId(123) });
+        r.headers({ Prefer: "wait=30" });
+      },
+    )
+    .willRespondWith(200, (r) => r.jsonBody([]));
+
+  // laura's chat has messages, alice's none
+  provider
+    .addInteraction()
+    .uponReceiving("a request for the last activity of laura's chat")
+    .withRequest(
+      "HEAD",
+      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
+    )
+    .willRespondWith(200, (r) =>
+      r.headers({ "Last-Modified": "Tue, 06 Oct 2026 13:03:12 GMT" }),
+    );
+  const builder = provider
+    .addInteraction()
+    .given("Mary has a chat with alice")
+    .uponReceiving("a request for the last activity of an empty chat")
+    .withRequest(
+      "HEAD",
+      "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages",
+    )
+    .willRespondWith(200);
+
+  await builder.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer, { lastActivityViaPact: true });
+    await loginAsMary(page);
+    await page.getByRole("link", { name: "Chats" }).first().click();
+    const messages = page.waitForResponse(
+      (response) =>
+        response.url().includes("/chat-laura/messages") &&
+        response.request().method() === "GET",
+    );
+    const lauraContact = page.getByText("Laura", { exact: true }).first();
+    await expect(lauraContact).toBeVisible();
+    await lauraContact.click();
+    await messages;
+
+    const laura = page.getByRole("listitem").filter({ hasText: "Laura" });
+    // today: the time of day, in Europe/Berlin
+    await expect(laura.locator("label")).toHaveText(/3:03|15:03/);
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "Alice" }).locator("label"),
+    ).toHaveCount(0);
 
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await expect.poll(() => runningPactRequests).toBe(0);
@@ -341,10 +537,11 @@ test("share a document in chat", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: MatchersV3.string("msg-123"),
+          id: MatchersV3.string(messageId(123)),
           content: MatchersV3.string(
             TestData.mary.chats![0].messages[0].content,
           ),
+          timestamp: pactMessageTimestamp(123),
         },
       ]),
     );
@@ -355,7 +552,7 @@ test("share a document in chat", async ({ page }) => {
     .withRequest(
       "GET",
       "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages",
-      (r) => r.query({ sinceId: "msg-123" }),
+      (r) => r.query({ sinceId: messageId(123) }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -454,9 +651,9 @@ test("share a document in chat", async ({ page }) => {
     .willRespondWith(201, (r) => {
       r.headers({
         Location: MatchersV3.string(
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/msg-1234",
+          `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/${messageId(1234)}`,
         ),
-      });
+      }).jsonBody(sentMessageBody(1234));
     });
 
   await builder.executeTest(async (mockServer) => {
@@ -557,8 +754,9 @@ test("view shared document from another user", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: "msg-999",
+          id: messageId(999),
           content: MatchersV3.string(sharedDocMessage),
+          timestamp: pactMessageTimestamp(999),
         },
       ]),
     );
@@ -570,7 +768,7 @@ test("view shared document from another user", async ({ page }) => {
     .withRequest(
       "GET",
       "/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/chat-mary/messages",
-      (r) => r.query({ sinceId: "msg-999" }),
+      (r) => r.query({ sinceId: messageId(999) }),
     )
     .willRespondWith(200, (r) => r.jsonBody([]));
 
@@ -858,9 +1056,9 @@ test("send a message in a chat owned by another user (posts to the owner's tree)
     .willRespondWith(201, (r) => {
       r.headers({
         Location: MatchersV3.string(
-          `/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/${chatId}/messages/msg-9001`,
+          `/users/10ad1cce-816b-4e12-b94d-7ef824c0d162/documents/${chatId}/messages/${messageId(9001)}`,
         ),
-      });
+      }).jsonBody(sentMessageBody(9001));
     });
 
   await builder.executeTest(async (mockServer) => {
@@ -926,10 +1124,11 @@ test("view chat shows the contact's display name and avatar", async ({
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: MatchersV3.string("msg-123"),
+          id: MatchersV3.string(messageId(123)),
           content: MatchersV3.string(
             TestData.mary.chats![0].messages[0].content,
           ),
+          timestamp: pactMessageTimestamp(123),
         },
       ]),
     );
@@ -1062,9 +1261,9 @@ test("write and read messages right after accepting, before the inviter created 
     .willRespondWith(201, (r) => {
       r.headers({
         Location: MatchersV3.string(
-          `/users/${alice}/documents/${chatId}/messages/msg-pending`,
+          `/users/${alice}/documents/${chatId}/messages/${messageId(907)}`,
         ),
-      });
+      }).jsonBody(sentMessageBody(907));
     });
 
   await builder.executeTest(async (mockServer) => {

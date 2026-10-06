@@ -15,6 +15,8 @@ import {
   MARY_ID,
   displayName,
   emailOf,
+  messageId,
+  messageTimestamp,
 } from "./testdata";
 
 // --- Chats/contact-requests test helpers -----------------------------------
@@ -993,11 +995,33 @@ export async function loginAsBill(page: Page) {
 }
 
 export let runningPactRequests = 0;
+
+// The time of messageId(n) as a Pact matcher (ADR 0021).
+export function pactMessageTimestamp(n: number) {
+  return MatchersV3.datetime("yyyy-MM-dd'T'HH:mm:ss.SSSX", messageTimestamp(n));
+}
+
+// The server's answer to POST .../messages: the new id plus the timestamp it
+// stamped (ADR 0021) - both of message n, so the id's prefix matches the time.
+export function sentMessageBody(n: number) {
+  return {
+    id: MatchersV3.string(messageId(n)),
+    timestamp: pactMessageTimestamp(n),
+  };
+}
 export let expectedUploadDocumentId = "945331a6-b9a8-4f88-a5f5-5928bcdf2fdb";
 export let expectedUploadSmallImageId: string | undefined = undefined;
 export let expectedUploadPreviewImageId: string | undefined = undefined;
 
-export async function setupMockServer(page: Page, mockServer: MockServer) {
+// `lastActivityViaPact`: the chat list asks HEAD .../messages for every chat
+// (ADR 0021). Only the tests covering that contract register the interactions
+// for it; everywhere else the request is answered locally ("no messages")
+// instead of being sent to the mock server, which would reject it.
+export async function setupMockServer(
+  page: Page,
+  mockServer: MockServer,
+  { lastActivityViaPact = false }: { lastActivityViaPact?: boolean } = {},
+) {
   const mockServerUrl = new URL(mockServer.url);
 
   // Matches "/users/..." (the vast majority of endpoints) AND the bare
@@ -1022,6 +1046,15 @@ export async function setupMockServer(page: Page, mockServer: MockServer) {
 
         const postData: Buffer | null = request.postDataBuffer();
         const headers = request.headers();
+
+        if (
+          !lastActivityViaPact &&
+          request.method() === "HEAD" &&
+          requestUrl.pathname.endsWith("/messages")
+        ) {
+          await route.fulfill({ status: 200 });
+          return;
+        }
 
         if (
           request.method() === "GET" &&

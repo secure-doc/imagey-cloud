@@ -18,11 +18,14 @@ package cloud.imagey.domain.contact;
 
 import static jakarta.json.bind.JsonbBuilder.create;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import cloud.imagey.domain.common.AbstractUserFileRepository;
 import cloud.imagey.domain.document.DocumentId;
@@ -31,21 +34,27 @@ import cloud.imagey.domain.user.User;
 @ApplicationScoped
 public class MessageRepository extends AbstractUserFileRepository {
 
+    @Inject
+    private Clock clock;
+
     public Message persist(User owner, DocumentId chatId, User sender, MessageContent encryptedContent) {
-        MessageId id = new MessageId();
-        Message message = new Message(sender, encryptedContent);
+        // One instant for both the id's prefix and the stored timestamp (ADR 0021).
+        Instant now = clock.instant();
+        MessageId id = new MessageId(now);
+        MessageTimestamp timestamp = new MessageTimestamp(now);
+        Message message = new Message(sender, encryptedContent).withTimestamp(timestamp);
         String jsonContent = create().toJson(message);
 
         put(join(messagesPrefix(owner, chatId), id.value() + ".json"), jsonContent);
 
-        return new Message(sender, encryptedContent)
+        return message
             .withId(id)
             .inChannel(new Channel(chatId.id()));
     }
 
     public Optional<Message> fetchMessage(User owner, DocumentId chatId, MessageId messageId) {
         String key = join(messagesPrefix(owner, chatId), messageId.value() + ".json");
-        return findString(key).map(json -> create().fromJson(json, Message.class).withId(messageId));
+        return findString(key).map(json -> withTimestampFallback(create().fromJson(json, Message.class).withId(messageId)));
     }
 
     public List<Message> fetchMessages(User owner, DocumentId chatId, Optional<MessageId> sinceId) {
@@ -57,10 +66,29 @@ public class MessageRepository extends AbstractUserFileRepository {
             String id = key.substring(prefix.length() + 1).replace(".json", "");
             if (sinceId.isEmpty() || new MessageId(id).compareTo(sinceId.get()) > 0) {
                 Message message = create().fromJson(readString(key), Message.class);
-                messages.add(message.withId(new MessageId(id)));
+                messages.add(withTimestampFallback(message.withId(new MessageId(id))));
             }
         }
         return messages;
+    }
+
+    /** The timestamp of the newest message, or empty for a chat without messages. */
+    public Optional<MessageTimestamp> findLatestTimestamp(User owner, DocumentId chatId) {
+        String prefix = messagesPrefix(owner, chatId);
+        return list(prefix).keys().stream()
+            .filter(key -> key.endsWith(".json"))
+            .max(String::compareTo)
+            .map(key -> {
+                String id = key.substring(prefix.length() + 1).replace(".json", "");
+                Message message = create().fromJson(readString(key), Message.class);
+                return withTimestampFallback(message.withId(new MessageId(id))).timestamp();
+            });
+    }
+
+    // Messages stored before the server stamped them carry no timestamp; their id still starts with
+    // the creation time in milliseconds (ADR 0021).
+    private Message withTimestampFallback(Message message) {
+        return message.timestamp() != null ? message : message.withTimestamp(message.id().timestamp());
     }
 
     private String messagesPrefix(User owner, DocumentId chatId) {

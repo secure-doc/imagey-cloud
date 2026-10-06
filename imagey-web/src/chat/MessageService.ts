@@ -27,6 +27,7 @@ export const messageService = {
         id: m.id,
         sender: m.sender,
         content: await cryptoService.decryptMessage(m.content, sharedKey),
+        timestamp: m.timestamp,
         isMine: m.sender === userId,
       })),
     );
@@ -44,7 +45,7 @@ export const messageService = {
       content,
       sharedKey,
     );
-    const id = await messageRepository.sendMessage(
+    const { id, timestamp } = await messageRepository.sendMessage(
       ownerId,
       chatId,
       encryptedContent,
@@ -55,6 +56,7 @@ export const messageService = {
       id: id,
       sender: userId,
       content: content,
+      timestamp,
     };
   },
 };

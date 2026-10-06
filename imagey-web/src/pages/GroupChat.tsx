@@ -9,7 +9,7 @@ import {
 import { documentService } from "../document/DocumentService";
 import { groupService, loadGroupContent } from "../contact/GroupService";
 import { ConversationView } from "../chat/ConversationView";
-import { usePolling } from "../chat/messageHooks";
+import { useLiveActivity, usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { useChatsId } from "../contexts/SettingsContext";
 import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
@@ -56,6 +56,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
     groupId,
     group?.key,
   );
+  const liveActivity = useLiveActivity(groupId, messages);
 
   useBackButton();
 
@@ -216,6 +217,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
         activeGroupId={groupId}
         onLoaded={handleChatsListLoaded}
         onLoadError={setChatsLoadFailed}
+        liveActivity={liveActivity}
       />
       <div
         className="col s12 m8 l8 vertical"

@@ -29,7 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.time.Instant;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Future;
 
@@ -170,6 +172,72 @@ public class MessageResourceTest {
         assertThat(messages).hasSize(1);
         assertThat(messages.get(0).content().value()).isEqualTo("encrypted-content");
         assertThat(messages.get(0).sender().id().id()).isEqualTo("contact");
+    }
+
+    @Test
+    @DisplayName("A sent message is answered with, and stored with, the server's timestamp (ADR 0021)")
+    void sendStampsTheMessage() {
+        Response response = contactClient.messages(null).post(text("encrypted-content"));
+        String body = response.readEntity(String.class);
+        String location = response.getLocation().toString();
+        String id = location.substring(location.lastIndexOf('/') + 1);
+
+        assertThat(body).matches("\\{.*\"id\":\"" + id + "\".*\"timestamp\":\"\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z\".*}");
+        assertThat(body).doesNotContain("encrypted-content");
+
+        Message stored = ownerClient.messages(null).get(new GenericType<List<Message>>() { }).get(0);
+        assertThat(body).contains(stored.timestamp().value());
+        // The id's millisecond prefix and the timestamp stem from the same instant.
+        assertThat(stored.timestamp().instant().toEpochMilli()).isEqualTo(Long.parseLong(id.substring(0, id.indexOf('-'))));
+    }
+
+    @Test
+    @DisplayName("A message stored without timestamp gets it from the time prefix of its id, if there is one")
+    void legacyMessagesFallBackToTheIdPrefix() throws IOException {
+        writeMessage("1759755792481-legacy", "{\"sender\":\"contact\",\"content\":\"old\"}");
+
+        List<Message> messages = ownerClient.messages(null).get(new GenericType<List<Message>>() { });
+        assertThat(messages).extracting(m -> m.id().value()).containsExactly("1759755792481-legacy");
+        assertThat(messages.get(0).timestamp().value()).isEqualTo("2025-10-06T13:03:12.481Z");
+
+        Response single = newClient()
+            .register(RecordMessageBodyReader.class)
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages/1759755792481-legacy")
+            .request()
+            .cookie(ownerCookie)
+            .get();
+        assertThat(single.readEntity(Message.class).timestamp().value()).isEqualTo("2025-10-06T13:03:12.481Z");
+    }
+
+    @Test
+    @DisplayName("HEAD reports the time of the newest message as Last-Modified, and nothing for an empty chat")
+    void lastActivity() throws IOException {
+        Response empty = messagesOf(CHAT_ID, ownerCookie).head();
+        assertThat(empty.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(empty.getLastModified()).isNull();
+
+        writeMessage("1759755792481-first", "{\"sender\":\"contact\",\"content\":\"a\"}");
+        writeMessage("1759759392481-second", "{\"sender\":\"contact\",\"content\":\"b\"}");
+        Response response = messagesOf(CHAT_ID, contactCookie).head();
+        assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+        assertThat(response.getLastModified()).isEqualTo(Date.from(Instant.parse("2025-10-06T14:03:12Z")));
+    }
+
+    @Test
+    @DisplayName("HEAD of a chat is only allowed for its members")
+    void lastActivityRequiresAccess() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users/owner/documents/" + CHAT_ID + "/messages")
+            .request()
+            .head();
+
+        assertThat(response.getStatus()).isEqualTo(UNAUTHORIZED.getStatusCode());
+    }
+
+    private void writeMessage(String id, String json) throws IOException {
+        writeStringToFile(new File(rootPath, "owner/documents/" + CHAT_ID + "/messages/" + id + ".json"), json, UTF_8);
     }
 
     @Test

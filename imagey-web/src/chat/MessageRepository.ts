@@ -12,7 +12,7 @@ export const messageRepository = {
     // server only pushes to ones that already pass its own access check for
     // this chat, so this cannot be used to spam arbitrary users.
     notify: string[] = [],
-  ): Promise<string> => {
+  ): Promise<{ id: string; timestamp: string }> => {
     const headers: Record<string, string> = {
       "Content-Type": "text/plain",
     };
@@ -36,7 +36,24 @@ export const messageRepository = {
       throw new Error("No Location header returned");
     }
     const parts = location.split("/");
-    return parts[parts.length - 1];
+    const { timestamp } = await response.json();
+    return { id: parts[parts.length - 1], timestamp };
+  },
+  // The time of the chat's newest message, from the Last-Modified header of
+  // HEAD .../messages (ADR 0021). undefined for a chat without messages.
+  fetchLastActivity: async (
+    ownerId: string,
+    chatId: string,
+  ): Promise<Date | undefined> => {
+    const response = await fetch(
+      `/users/${ownerId}/documents/${chatId}/messages`,
+      { method: "HEAD", credentials: "same-origin" },
+    );
+    if (!response.ok) {
+      throw new Error("Failed to fetch last activity");
+    }
+    const lastModified = response.headers.get("Last-Modified");
+    return lastModified ? new Date(lastModified) : undefined;
   },
   receiveMessages: async (
     ownerId: string,

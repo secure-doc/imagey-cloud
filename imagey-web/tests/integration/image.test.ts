@@ -12,6 +12,8 @@ import {
   setupMarysDevice,
   stubMobile,
   TestData,
+  messageId,
+  messageTimestamp,
 } from "./setup";
 
 // Navigation flows around the image detail view (/images/:id) that need a
@@ -154,7 +156,14 @@ async function routeChatSharingBeachImage(page: Page) {
         status: 200,
         json: route.request().url().includes("sinceId")
           ? []
-          : [{ id: "msg-1", sender: MARY, content: message }],
+          : [
+              {
+                id: messageId(1),
+                timestamp: messageTimestamp(1),
+                sender: MARY,
+                content: message,
+              },
+            ],
       }),
   );
 }

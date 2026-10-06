@@ -10,6 +10,8 @@ import {
   routeGeneratedDocument,
   stubMobile,
   TestData,
+  messageId,
+  messageTimestamp,
 } from "./setup";
 import { ALICE_ID, LAURA_ID, MARY_ID } from "./testdata";
 import { MAX_INLINE_MEDIA_BYTES } from "../../src/document/mediaTypes";
@@ -228,7 +230,14 @@ async function routeChatSharingMedia(
         status: 200,
         json: route.request().url().includes("sinceId")
           ? []
-          : [{ id: "msg-1", sender: MARY, content: message }],
+          : [
+              {
+                id: messageId(1),
+                timestamp: messageTimestamp(1),
+                sender: MARY,
+                content: message,
+              },
+            ],
       }),
   );
   return { contentRequests };
@@ -318,7 +327,14 @@ async function routeGroupSharingMedia(
         status: 200,
         json: route.request().url().includes("sinceId")
           ? []
-          : [{ id: "msg-1", sender: ALICE, content: message }],
+          : [
+              {
+                id: messageId(1),
+                timestamp: messageTimestamp(1),
+                sender: ALICE,
+                content: message,
+              },
+            ],
       }),
   );
 }

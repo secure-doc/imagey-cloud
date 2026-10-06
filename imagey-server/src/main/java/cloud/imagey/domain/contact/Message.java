@@ -29,30 +29,37 @@ public record Message(
     @JsonbProperty("id") @JsonbTypeAdapter(MessageId.Adapter.class) MessageId id,
     @JsonbProperty("sender") @JsonbTypeAdapter(User.Adapter.class) User sender,
     @JsonbProperty("channel") @JsonbTypeAdapter(Channel.Adapter.class) Channel channel,
-    @JsonbProperty("content") @JsonbTypeAdapter(MessageContent.Adapter.class) MessageContent content) {
+    @JsonbProperty("content") @JsonbTypeAdapter(MessageContent.Adapter.class) MessageContent content,
+    @JsonbProperty("timestamp") @JsonbTypeAdapter(MessageTimestamp.Adapter.class) MessageTimestamp timestamp) {
 
     @JsonbCreator
     public Message(
         @JsonbProperty("id") String messageId,
         @JsonbProperty("sender") String sender,
         @JsonbProperty("channel") String channel,
-        @JsonbProperty("content") String content) {
+        @JsonbProperty("content") String content,
+        @JsonbProperty("timestamp") String timestamp) {
 
         this(ofNullable(messageId).map(MessageId::new).orElse(null),
             new User(new UserId(sender)),
             ofNullable(channel).map(Channel::new).orElse(null),
-            new MessageContent(content));
+            new MessageContent(content),
+            ofNullable(timestamp).map(MessageTimestamp::new).orElse(null));
     }
 
     public Message(User sender, MessageContent content) {
-        this(null, sender, null, content);
+        this(null, sender, null, content, null);
     }
 
     public Message withId(MessageId messageId) {
-        return new Message(messageId, sender, channel, content);
+        return new Message(messageId, sender, channel, content, timestamp);
     }
 
     public Message inChannel(Channel messageChannel) {
-        return new Message(id, sender, messageChannel, content);
+        return new Message(id, sender, messageChannel, content, timestamp);
+    }
+
+    public Message withTimestamp(MessageTimestamp messageTimestamp) {
+        return new Message(id, sender, channel, content, messageTimestamp);
     }
 }

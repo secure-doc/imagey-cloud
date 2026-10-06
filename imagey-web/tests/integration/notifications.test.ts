@@ -18,6 +18,7 @@ import {
   prepareMarysChat,
   inputMarysPassword,
   LAURA_ID,
+  messageId,
 } from "./setup";
 import { cryptoService } from "../../src/authentication/CryptoService";
 import type { handlePush } from "../../src/notification/handlePush";
@@ -247,7 +248,7 @@ test("a 1:1 message shows the decrypted preview", async ({ page }) => {
 
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "chat-laura", "msg-1", {
+  await routeMessage(page, MARY_ID, "chat-laura", messageId(1), {
     sender: "laura-id",
     content: encryptedContent,
   });
@@ -259,7 +260,7 @@ test("a 1:1 message shows the decrypted preview", async ({ page }) => {
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-1",
+      messageId: messageId(1),
     },
     record,
   );
@@ -297,7 +298,7 @@ test("a group message from a known sender is prefixed with their name", async ({
 
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "group-1", "msg-2", {
+  await routeMessage(page, MARY_ID, "group-1", messageId(2), {
     sender: "laura-id",
     content: encryptedContent,
   });
@@ -309,7 +310,7 @@ test("a group message from a known sender is prefixed with their name", async ({
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "group-1",
-      messageId: "msg-2",
+      messageId: messageId(2),
     },
     record,
   );
@@ -336,7 +337,7 @@ test("a group message from an unrecognized sender falls back to 'Someone'", asyn
 
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "group-1", "msg-3", {
+  await routeMessage(page, MARY_ID, "group-1", messageId(3), {
     sender: "unknown-member",
     content: encryptedContent,
   });
@@ -348,7 +349,7 @@ test("a group message from an unrecognized sender falls back to 'Someone'", asyn
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "group-1",
-      messageId: "msg-3",
+      messageId: messageId(3),
     },
     record,
   );
@@ -381,7 +382,7 @@ test("a shared-document message shows a generic 'shared a picture' preview", asy
 
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "chat-laura", "msg-4", {
+  await routeMessage(page, MARY_ID, "chat-laura", messageId(4), {
     sender: "laura-id",
     content: encryptedContent,
   });
@@ -393,7 +394,7 @@ test("a shared-document message shows a generic 'shared a picture' preview", asy
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-4",
+      messageId: messageId(4),
     },
     record,
   );
@@ -427,7 +428,7 @@ test("a group-invitation message shows an 'invites you to' preview", async ({
 
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "chat-laura", "msg-5", {
+  await routeMessage(page, MARY_ID, "chat-laura", messageId(5), {
     sender: "laura-id",
     content: encryptedContent,
   });
@@ -439,7 +440,7 @@ test("a group-invitation message shows an 'invites you to' preview", async ({
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-5",
+      messageId: messageId(5),
     },
     record,
   );
@@ -466,7 +467,7 @@ test("a long message preview is truncated to 120 characters", async ({
 
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "chat-laura", "msg-6", {
+  await routeMessage(page, MARY_ID, "chat-laura", messageId(6), {
     sender: "laura-id",
     content: encryptedContent,
   });
@@ -478,7 +479,7 @@ test("a long message preview is truncated to 120 characters", async ({
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-6",
+      messageId: messageId(6),
     },
     record,
   );
@@ -500,7 +501,7 @@ test("falls back to a generic notification when there is no store record for the
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-7",
+      messageId: messageId(7),
     },
     undefined,
   );
@@ -527,7 +528,7 @@ test("falls back to a generic notification when the chat is missing from the key
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-8",
+      messageId: messageId(8),
     },
     record,
   );
@@ -559,7 +560,7 @@ test("falls back to a generic notification when fetching the recovery key fails"
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-9",
+      messageId: messageId(9),
     },
     record,
   );
@@ -583,7 +584,7 @@ test("falls back to a generic notification when the message can no longer be loa
   });
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "chat-laura", "msg-10", undefined);
+  await routeMessage(page, MARY_ID, "chat-laura", messageId(10), undefined);
 
   const { notifications } = await callHandlePush(
     page,
@@ -592,7 +593,7 @@ test("falls back to a generic notification when the message can no longer be loa
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-10",
+      messageId: messageId(10),
     },
     record,
   );
@@ -618,7 +619,7 @@ test("falls back to a generic notification when the keyring can't be decrypted",
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-11",
+      messageId: messageId(11),
     },
     record,
   );
@@ -712,7 +713,7 @@ test("suppresses the notification when a client is visible on the chat's route",
     recipient: MARY_ID,
     owner: MARY_ID,
     chatId: "chat-laura",
-    messageId: "msg-12",
+    messageId: messageId(12),
   };
   const { notifications } = await callHandlePush(page, payload, record, {
     visibleRoute: "/chats/laura-id",
@@ -738,7 +739,7 @@ test("does not suppress on WebKit even when a client is visible on the chat's ro
   });
   await setupMarysDevice(page);
   await routeRecoveryKey(page);
-  await routeMessage(page, MARY_ID, "chat-laura", "msg-13", {
+  await routeMessage(page, MARY_ID, "chat-laura", messageId(13), {
     sender: "laura-id",
     content: encryptedContent,
   });
@@ -750,7 +751,7 @@ test("does not suppress on WebKit even when a client is visible on the chat's ro
       recipient: MARY_ID,
       owner: MARY_ID,
       chatId: "chat-laura",
-      messageId: "msg-13",
+      messageId: messageId(13),
     },
     record,
     { visibleRoute: "/chats/laura-id", isWebKit: true },
@@ -2103,7 +2104,7 @@ test("Chat.tsx logs a warning when remembering a chat in an active but undecrypt
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: Matchers.string("msg-123"),
+          id: Matchers.string(messageId(123)),
           content: Matchers.string(TestData.mary.chats![0].messages[0].content),
         },
       ]),
@@ -2118,7 +2119,7 @@ test("Chat.tsx logs a warning when remembering a chat in an active but undecrypt
       "GET",
       `/users/${MARY_ID}/documents/chat-laura/messages`,
       (r) => {
-        r.query({ sinceId: "msg-123" });
+        r.query({ sinceId: messageId(123) });
         r.headers({ Prefer: "wait=30" });
       },
     )
@@ -2138,7 +2139,7 @@ test("Chat.tsx logs a warning when remembering a chat in an active but undecrypt
     const pollResponse = page.waitForResponse(
       (response) =>
         response.url().includes("/chat-laura/messages") &&
-        response.url().includes("sinceId=msg-123"),
+        response.url().includes(`sinceId=${messageId(123)}`),
     );
     await loginAsMary(page);
     await setupBrokenActiveKeyring(page);

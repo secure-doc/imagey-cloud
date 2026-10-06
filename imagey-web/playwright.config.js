@@ -31,6 +31,11 @@ export default defineConfig({
     // Base URL to use in actions like `await page.goto('/')`.
     baseURL: "http://localhost:5173",
 
+    // Message times are rendered in the browser's zone; pin it so the
+    // day-change and "today" branches do not depend on the machine.
+    timezoneId: "Europe/Berlin",
+    locale: "en-US",
+
     // Collect trace when retrying the failed test.
     trace: "on-first-retry",
   },

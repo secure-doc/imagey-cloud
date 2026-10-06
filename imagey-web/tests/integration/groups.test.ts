@@ -26,6 +26,9 @@ import {
   aesGcmEncrypt,
   encryptKeyEnvelope,
   generateAesGcmKeyJwk,
+  sentMessageBody,
+  messageId,
+  pactMessageTimestamp,
 } from "./setup";
 import type { groupService } from "../../src/contact/GroupService";
 
@@ -73,11 +76,13 @@ test("create a group and add a member", async ({ page }) => {
       },
     )
     .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/msg-invite",
-        ),
-      }),
+      r
+        .headers({
+          Location: MatchersV3.string(
+            `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/${messageId(901)}`,
+          ),
+        })
+        .jsonBody(sentMessageBody(901)),
     );
 
   await builder.executeTest(async (mockServer) => {
@@ -243,7 +248,8 @@ test("join a group from an invitation in a 1:1 chat", async ({ page }) => {
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: MatchersV3.string("msg-invite-1"),
+          id: MatchersV3.string(messageId(902)),
+          timestamp: pactMessageTimestamp(902),
           sender: ALICE_ID,
           content: MatchersV3.string(messageContent.toString("base64")),
         },
@@ -257,7 +263,7 @@ test("join a group from an invitation in a 1:1 chat", async ({ page }) => {
       "GET",
       `/users/${ALICE_ID}/documents/chat-mary/messages`,
       (r) => {
-        r.query({ sinceId: "msg-invite-1" });
+        r.query({ sinceId: messageId(902) });
         r.headers({ Prefer: "wait=30" });
       },
     )
@@ -653,12 +659,14 @@ test("send/receive messages, view a shared image and the sender's name in a grou
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: MatchersV3.string("msg-1"),
+          id: MatchersV3.string(messageId(1)),
+          timestamp: pactMessageTimestamp(1),
           sender: ALICE_ID,
           content: MatchersV3.string(textMessageContent.toString("base64")),
         },
         {
-          id: MatchersV3.string("msg-2"),
+          id: MatchersV3.string(messageId(2)),
+          timestamp: pactMessageTimestamp(2),
           sender: ALICE_ID,
           content: MatchersV3.string(
             sharedDocumentMessageContent.toString("base64"),
@@ -674,7 +682,7 @@ test("send/receive messages, view a shared image and the sender's name in a grou
       "GET",
       `/users/${ALICE_ID}/documents/${GROUP_ID}/messages`,
       (r) => {
-        r.query({ sinceId: "msg-2" });
+        r.query({ sinceId: messageId(2) });
         r.headers({ Prefer: "wait=30" });
       },
     )
@@ -692,11 +700,13 @@ test("send/receive messages, view a shared image and the sender's name in a grou
       },
     )
     .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          `/users/${ALICE_ID}/documents/${GROUP_ID}/messages/msg-3`,
-        ),
-      }),
+      r
+        .headers({
+          Location: MatchersV3.string(
+            `/users/${ALICE_ID}/documents/${GROUP_ID}/messages/${messageId(3)}`,
+          ),
+        })
+        .jsonBody(sentMessageBody(3)),
     );
 
   await builder.executeTest(async (mockServer) => {
@@ -851,11 +861,13 @@ test("mary shares one of her own images into a group she belongs to", async ({
       (r) => r.headers({ "Content-Type": "text/plain" }),
     )
     .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          `/users/${ALICE_ID}/documents/${GROUP_ID}/messages/msg-shared`,
-        ),
-      }),
+      r
+        .headers({
+          Location: MatchersV3.string(
+            `/users/${ALICE_ID}/documents/${GROUP_ID}/messages/${messageId(904)}`,
+          ),
+        })
+        .jsonBody(sentMessageBody(904)),
     );
 
   await builder.executeTest(async (mockServer) => {
@@ -1013,11 +1025,13 @@ test("mary opens a group she owns and adds another member via Add Member", async
       (r) => r.headers({ "Content-Type": "text/plain" }),
     )
     .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/msg-add",
-        ),
-      }),
+      r
+        .headers({
+          Location: MatchersV3.string(
+            `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/${messageId(905)}`,
+          ),
+        })
+        .jsonBody(sentMessageBody(905)),
     );
 
   await builder.executeTest(async (mockServer) => {
@@ -1329,11 +1343,13 @@ test("addMember re-adding an existing member dedupes and leaves publicProfiles u
       (r) => r.headers({ "Content-Type": "text/plain" }),
     )
     .willRespondWith(201, (r) =>
-      r.headers({
-        Location: MatchersV3.string(
-          "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/msg-readd",
-        ),
-      }),
+      r
+        .headers({
+          Location: MatchersV3.string(
+            `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/chat-laura/messages/${messageId(906)}`,
+          ),
+        })
+        .jsonBody(sentMessageBody(906)),
     );
 
   await builder.executeTest(async (mockServer) => {

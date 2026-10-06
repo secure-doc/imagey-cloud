@@ -25,6 +25,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.function.Predicate.not;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HEAD;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
@@ -95,6 +97,7 @@ public class MessageResource {
     @POST
     @RolesAllowed({"owner", "member"})
     @Consumes(TEXT_PLAIN)
+    @Produces(APPLICATION_JSON)
     public Response sendMessage(
         @PathParam("userId") User owner,
         @PathParam("chatId") DocumentId chatId,
@@ -103,7 +106,20 @@ public class MessageResource {
         @Context UriInfo uriInfo) throws IOException {
 
         Message message = messageService.sendMessage(owner, chatId, caller(), messageContent, parseNotify(notify));
-        return Response.created(uriInfo.getAbsolutePathBuilder().path(message.id().value()).build()).build();
+        return Response.created(uriInfo.getAbsolutePathBuilder().path(message.id().value()).build())
+            .entity(new SentMessage(message.id(), message.timestamp()))
+            .build();
+    }
+
+    // The chat's last activity (ADR 0021): Last-Modified is the time of its newest message, absent
+    // for a chat without messages. The same access check as the GET applies.
+    @HEAD
+    @RolesAllowed({"owner", "member"})
+    public Response lastActivity(@PathParam("userId") User owner, @PathParam("chatId") DocumentId chatId) {
+        Response.ResponseBuilder response = Response.ok();
+        messageRepository.findLatestTimestamp(owner, chatId)
+            .ifPresent(timestamp -> response.lastModified(Date.from(timestamp.instant())));
+        return response.build();
     }
 
     @GET
