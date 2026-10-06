@@ -106,6 +106,7 @@
     "Signed in as": "Signed in as",
     "Someone": "Someone",
     "This device": "This device",
+    "Today": "Today",
     "Type a message": "Type a message",
     "Uknown Authentication Error": "Uknown Authentication Error",
     "Unknown contact": "Unknown contact",
@@ -116,6 +117,7 @@
     "Upload Images": "Upload Images",
     "Waiting for activation": "Waiting for activation",
     "Without \"keep me logged in\" you will only see \"New message\".": "Without \"keep me logged in\" you will only see \"New message\".",
-    "Wrong password": "Wrong password"
+    "Wrong password": "Wrong password",
+    "Yesterday": "Yesterday"
   }
 }

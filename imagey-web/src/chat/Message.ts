@@ -7,4 +7,6 @@ export interface Message {
   id: ChatId;
   sender: UserId;
   content: MessageContent;
+  // ISO-8601 (UTC), stamped by the server (ADR 0021).
+  timestamp: string;
 }

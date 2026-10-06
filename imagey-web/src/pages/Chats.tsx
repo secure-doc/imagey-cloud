@@ -22,6 +22,8 @@ import { useSendContactRequest } from "../hooks/useSendContactRequest";
 import { useSettingsKey } from "../contexts/SettingsContext";
 import { notificationKeyringService } from "../notification/NotificationKeyringService";
 import NotificationBanner from "../notification/NotificationBanner";
+import { useLastActivity } from "../chat/messageHooks";
+import { formatChatListDate } from "../chat/messageTime";
 
 export default function Chats({ id }: { id: string }) {
   return (
@@ -40,6 +42,7 @@ export function ChatsList({
   onLoaded,
   onLoadError,
   registerUpdate,
+  liveActivity,
 }: {
   id: string;
   // Only the standalone chats page offers "add contact"/"new group" in the
@@ -66,6 +69,10 @@ export function ChatsList({
   // Reports whether the "chats" document failed to load, so a caller waiting
   // on onLoaded (Chat.tsx) can show an error instead of an eternal spinner.
   onLoadError?: (failed: boolean) => void;
+  // The newest message of the chat currently open next to this list, as the
+  // open conversation knows it - it supersedes that chat's own (one-off)
+  // last-activity lookup, which would otherwise stay stale while chatting.
+  liveActivity?: { chatId: string; date: Date };
   // Hands the caller a function that writes a change (e.g. a newly joined
   // group) back into this list's own "chats" document state, once it exists.
   // A caller that instead kept its own copy of the document (from onLoaded)
@@ -306,23 +313,12 @@ export function ChatsList({
         <ul className="list border">
           {chatsDocument?.groups &&
             chatsDocument.groups.map((group) => (
-              <li key={`group-${group.groupId}`}>
-                <NavLink
-                  to={`/chats/groups/${group.groupId}`}
-                  className={({ isActive }) =>
-                    isActive || group.groupId === activeGroupId
-                      ? "active surface-variant"
-                      : ""
-                  }
-                >
-                  <button className="circle transparent">
-                    <i>group</i>
-                  </button>
-                  <div className="max">
-                    <h6 className="small">{group.name}</h6>
-                  </div>
-                </NavLink>
-              </li>
+              <GroupListItem
+                key={`group-${group.groupId}`}
+                group={group}
+                activeGroupId={activeGroupId}
+                liveActivity={liveActivity}
+              />
             ))}
           {openInvitations.map((contactRequest, index) => (
             <InvitationListItem
@@ -354,36 +350,13 @@ export function ChatsList({
             />
           ))}
           {chatsDocument?.contacts &&
-            chatsDocument.contacts.map((contact, index) => {
-              const displayName = contactDisplayName(
-                contact.userId,
-                contact,
-                i18n.t("Unknown contact"),
-              );
-              return (
-                <li key={index + openInvitations.length}>
-                  <NavLink
-                    to={`/chats/${contact.userId}`}
-                    className={({ isActive }) =>
-                      isActive ? "active surface-variant" : ""
-                    }
-                  >
-                    <button className="circle transparent">
-                      {displayName.charAt(0).toLocaleUpperCase()}
-                    </button>
-                    <div className="max">
-                      <h6 className="small">{displayName}</h6>
-                      {contact.email && contact.email !== displayName && (
-                        <div>{contact.email}</div>
-                      )}
-                    </div>
-                    <label>
-                      {new Date().toLocaleDateString(i18n.language)}
-                    </label>
-                  </NavLink>
-                </li>
-              );
-            })}
+            chatsDocument.contacts.map((contact, index) => (
+              <ContactListItem
+                key={index + openInvitations.length}
+                contact={contact}
+                liveActivity={liveActivity}
+              />
+            ))}
         </ul>
       ) : (
         <NoContactsPanel className="s12" />
@@ -479,6 +452,97 @@ function InvitationListItem({
           onDeclined={onDeclined}
         />
       </div>
+    </li>
+  );
+}
+
+function LastActivityLabel({
+  owner,
+  chatId,
+  liveActivity,
+}: {
+  owner: string;
+  chatId: string;
+  liveActivity?: { chatId: string; date: Date };
+}) {
+  const { i18n } = useTranslation();
+  const loaded = useLastActivity(owner, chatId);
+  const lastActivity =
+    liveActivity?.chatId === chatId ? liveActivity.date : loaded;
+  return lastActivity ? (
+    <label>{formatChatListDate(lastActivity, i18n.language)}</label>
+  ) : null;
+}
+
+function GroupListItem({
+  group,
+  activeGroupId,
+  liveActivity,
+}: {
+  group: GroupEntry;
+  activeGroupId?: string;
+  liveActivity?: { chatId: string; date: Date };
+}) {
+  return (
+    <li>
+      <NavLink
+        to={`/chats/groups/${group.groupId}`}
+        className={({ isActive }) =>
+          isActive || group.groupId === activeGroupId
+            ? "active surface-variant"
+            : ""
+        }
+      >
+        <button className="circle transparent">
+          <i>group</i>
+        </button>
+        <div className="max">
+          <h6 className="small">{group.name}</h6>
+        </div>
+        <LastActivityLabel
+          owner={group.owner}
+          chatId={group.groupId}
+          liveActivity={liveActivity}
+        />
+      </NavLink>
+    </li>
+  );
+}
+
+function ContactListItem({
+  contact,
+  liveActivity,
+}: {
+  contact: ContactEntry;
+  liveActivity?: { chatId: string; date: Date };
+}) {
+  const { t } = useTranslation();
+  const displayName = contactDisplayName(
+    contact.userId,
+    contact,
+    t("Unknown contact"),
+  );
+  return (
+    <li>
+      <NavLink
+        to={`/chats/${contact.userId}`}
+        className={({ isActive }) => (isActive ? "active surface-variant" : "")}
+      >
+        <button className="circle transparent">
+          {displayName.charAt(0).toLocaleUpperCase()}
+        </button>
+        <div className="max">
+          <h6 className="small">{displayName}</h6>
+          {contact.email && contact.email !== displayName && (
+            <div>{contact.email}</div>
+          )}
+        </div>
+        <LastActivityLabel
+          owner={contact.owner}
+          chatId={contact.chatId}
+          liveActivity={liveActivity}
+        />
+      </NavLink>
     </li>
   );
 }

@@ -25,6 +25,9 @@ import {
   prepareMarysGroupOwnProfileShare,
   prepareMarysGroupMetadataPut,
   LAURA_ID,
+  messageId,
+  messageTimestamp,
+  pactMessageTimestamp,
 } from "./setup";
 import type { deviceService } from "../../src/device/DeviceService";
 import type { contactService } from "../../src/contact/ContactService";
@@ -2546,9 +2549,14 @@ test("addMember's group-metadata retry carries through after a concurrent-modifi
   await page.route(`**/users/${owner}/documents/chat-laura/messages`, (route) =>
     route.fulfill({
       status: 201,
+      contentType: "application/json",
       headers: {
-        Location: `/users/${owner}/documents/chat-laura/messages/msg-1`,
+        Location: `/users/${owner}/documents/chat-laura/messages/${messageId(1)}`,
       },
+      body: JSON.stringify({
+        id: messageId(1),
+        timestamp: messageTimestamp(1),
+      }),
     }),
   );
   await page.goto("/");
@@ -2967,7 +2975,8 @@ test("GroupInvitationMessage's Join button shows Retry after a failed join", asy
     .willRespondWith(200, (r) =>
       r.jsonBody([
         {
-          id: MatchersV3.string("msg-invite-fail"),
+          id: MatchersV3.string(messageId(903)),
+          timestamp: pactMessageTimestamp(903),
           sender: owner,
           content: MatchersV3.string(messageContent.toString("base64")),
         },
@@ -2980,7 +2989,7 @@ test("GroupInvitationMessage's Join button shows Retry after a failed join", asy
       "a request to receive more messages after a failed-join invitation",
     )
     .withRequest("GET", `/users/${owner}/documents/chat-mary/messages`, (r) => {
-      r.query({ sinceId: "msg-invite-fail" });
+      r.query({ sinceId: messageId(903) });
       r.headers({ Prefer: "wait=30" });
     })
     .willRespondWith(200, (r) => r.jsonBody([]));

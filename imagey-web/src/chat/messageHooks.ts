@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Message } from "./Message";
 import { messageService } from "./MessageService";
+import { messageRepository } from "./MessageRepository";
 
 export function usePolling(
   userId: string,
@@ -81,4 +82,39 @@ export function usePolling(
   }, []);
 
   return { messages, appendMessage };
+}
+
+// The newest message of the open chat as a ChatsList `liveActivity` (see
+// Chats.tsx), so the list follows sent and polled messages.
+export function useLiveActivity(
+  chatId: string | undefined,
+  messages: Message[] | undefined,
+): { chatId: string; date: Date } | undefined {
+  const timestamp = messages?.[messages.length - 1]?.timestamp;
+  return useMemo(
+    () =>
+      chatId && timestamp ? { chatId, date: new Date(timestamp) } : undefined,
+    [chatId, timestamp],
+  );
+}
+
+// The time of a chat's newest message for the chat list (ADR 0021) - loaded
+// once. undefined while loading, for a chat without messages and on failure
+// (the list then simply shows no date).
+export function useLastActivity(
+  ownerId: string,
+  chatId: string,
+): Date | undefined {
+  const [lastActivity, setLastActivity] = useState<Date>();
+  useEffect(() => {
+    let mounted = true;
+    messageRepository
+      .fetchLastActivity(ownerId, chatId)
+      .then((date) => mounted && setLastActivity(date))
+      .catch((e) => console.warn("Failed to load the last activity", e));
+    return () => {
+      mounted = false;
+    };
+  }, [ownerId, chatId]);
+  return lastActivity;
 }

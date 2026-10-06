@@ -3,6 +3,22 @@
 // server-side test fixtures (imagey-server UserFactory + src/test/resources/data)
 // pin for each persona - the Playwright suite must use the exact same values so
 // the generated pacts line up with the provider ContractTest.
+// Message ids as the server generates them: "<epoch millis>-<uuid>" (ADR 0021
+// derives a message's time from that prefix). messageId(n) is the n-th message
+// of a fixed timeline, one second apart, so ids sort in the order of n; the
+// imagey-server ContractTest builds the very same ids (ContractTest.messageId).
+const FIRST_MESSAGE_MILLIS = Date.parse("2026-10-06T13:01:09.481Z");
+export function messageIdAt(millis: number, n = 0): string {
+  return `${millis}-00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+export function messageId(n: number): string {
+  return messageIdAt(FIRST_MESSAGE_MILLIS + n * 1000, n);
+}
+// The time encoded in messageId(n), as the server renders a timestamp.
+export function messageTimestamp(n: number): string {
+  return new Date(FIRST_MESSAGE_MILLIS + n * 1000).toISOString();
+}
+
 export const UserIds = {
   "mary@imagey.cloud": "d20cf443-4f96-418f-a957-c8cbef8677c3",
   "joe@imagey.cloud": "35c34cb3-559d-4001-a67b-23259e45e69e",
@@ -61,7 +77,7 @@ export interface TestDevice {
 export interface TestChat {
   contactEmail: string;
   encryptedSharedKey: string;
-  messages: { id: string; content: string }[];
+  messages: { id: string; content: string; timestamp: string }[];
 }
 
 export interface TestDocument {
@@ -255,7 +271,8 @@ export const TestData: TestDataStructure = {
           "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf",
         messages: [
           {
-            id: "msg-123",
+            id: messageId(123),
+            timestamp: messageTimestamp(123),
             content:
               "HW8URzE9G7o/muIVmhdpPBTsmui7mlYyDmx5+d2l28tcQbJV2FXPf3e/jgZYP2Qpj70kqN7H",
           },
@@ -353,7 +370,8 @@ export const TestData: TestDataStructure = {
           "WPBJTuiZwokG7UKTcmZEdRPQOT+f0ytpVeFms2M0iPBUInOShgWt2EcNbiyLW1UVvF3IFKnmxQxOvSnRXLoOOrjuCubivIbTvxOh0mM650TCiTrqeDilOquIUX/ZykGyNt2QN/o0UCe1p6oc64NdmdfVjc9bFOzH9dUTk46od+wYrzzlKRj+NIhbRXY2JZ6MK/vrWitf",
         messages: [
           {
-            id: "msg-123",
+            id: messageId(123),
+            timestamp: messageTimestamp(123),
             content:
               "HW8URzE9G7o/muIVmhdpPBTsmui7mlYyDmx5+d2l28tcQbJV2FXPf3e/jgZYP2Qpj70kqN7H",
           },

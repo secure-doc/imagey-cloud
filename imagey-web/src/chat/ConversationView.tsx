@@ -1,9 +1,11 @@
-import { ReactNode, useEffect, useRef } from "react";
+import { Fragment, ReactNode, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Message } from "./Message";
 import { SendMessageForm } from "./SendMessageForm";
 import { SharedDocumentMessage } from "./SharedDocumentMessage";
 import { parseMessageContent } from "./parseMessageContent";
 import DocumentMetadata from "../document/DocumentMetadata";
+import { dayKey, formatDaySeparator, formatMessageTime } from "./messageTime";
 
 export interface ConversationViewProps {
   userId: string;
@@ -58,6 +60,7 @@ export function ConversationView({
   renderSender,
 }: ConversationViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,40 +75,59 @@ export function ConversationView({
           gap: "0.5rem",
         }}
       >
-        {messages.map((m) => {
+        {messages.map((m, index) => {
+          // A day separator whenever a message starts a new day.
+          const separator =
+            index === 0 ||
+            dayKey(m.timestamp) !== dayKey(messages[index - 1].timestamp)
+              ? formatDaySeparator(m.timestamp, i18n.language, t)
+              : undefined;
           const isMine = m.sender === userId;
           const parsed = parseMessageContent(m.content);
           return (
-            <div
-              key={m.id}
-              className={`padding elevate ${
-                isMine
-                  ? "primary top-round left-round"
-                  : "surface-container top-round right-round"
-              }`}
-              style={{
-                alignSelf: isMine ? "flex-end" : "flex-start",
-                maxWidth: "80%",
-                wordWrap: "break-word",
-              }}
-            >
-              {!isMine && renderSender?.(m.sender)}
-              {parsed.type === "shared-document" ? (
-                <SharedDocumentMessage
-                  documentId={parsed.documentId}
-                  owner={parsed.owner}
-                  chatKey={group ? undefined : sharedKey}
-                  contactUserId={contactUserId}
-                  group={group}
-                />
-              ) : parsed.type === "group-invitation" && renderInvitation ? (
-                renderInvitation(parsed)
-              ) : parsed.type === "text" ? (
-                parsed.content
-              ) : (
-                m.content
+            <Fragment key={m.id}>
+              {separator && (
+                <div className="center-align">
+                  <span className="chip">{separator}</span>
+                </div>
               )}
-            </div>
+              <div
+                className={`padding elevate ${
+                  isMine
+                    ? "primary top-round left-round"
+                    : "surface-container top-round right-round"
+                }`}
+                style={{
+                  alignSelf: isMine ? "flex-end" : "flex-start",
+                  maxWidth: "80%",
+                  wordWrap: "break-word",
+                }}
+              >
+                {!isMine && renderSender?.(m.sender)}
+                {parsed.type === "shared-document" ? (
+                  <SharedDocumentMessage
+                    documentId={parsed.documentId}
+                    owner={parsed.owner}
+                    chatKey={group ? undefined : sharedKey}
+                    contactUserId={contactUserId}
+                    group={group}
+                  />
+                ) : parsed.type === "group-invitation" && renderInvitation ? (
+                  renderInvitation(parsed)
+                ) : parsed.type === "text" ? (
+                  parsed.content
+                ) : (
+                  m.content
+                )}
+                <div className="right-align" style={{ opacity: 0.7 }}>
+                  <small>
+                    <time dateTime={m.timestamp}>
+                      {formatMessageTime(m.timestamp, i18n.language)}
+                    </time>
+                  </small>
+                </div>
+              </div>
+            </Fragment>
           );
         })}
         <div ref={messagesEndRef} />
