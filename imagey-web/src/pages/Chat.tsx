@@ -49,7 +49,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     name: string;
     revision: string;
   }>();
-  const { messages, setMessages } = usePolling(
+  const { messages, appendMessage } = usePolling(
     user,
     chat?.ownerId,
     chat?.chatId,
@@ -336,9 +336,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
               sharedKey={sharedKey}
               contactUserId={contactUserId}
               messages={messages}
-              onMessageSent={(newMessage) =>
-                setMessages((prev) => [...(prev ?? []), newMessage])
-              }
+              onMessageSent={(newMessage) => appendMessage(newMessage)}
               notify={[contactUserId]}
               share={(document) =>
                 documentService.shareDocument(

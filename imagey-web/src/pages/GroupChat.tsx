@@ -50,7 +50,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
   const [loadError, setLoadError] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
 
-  const { messages, setMessages } = usePolling(
+  const { messages, appendMessage } = usePolling(
     user,
     group?.ownerId,
     groupId,
@@ -240,9 +240,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
             chatId={groupId}
             sharedKey={group.key}
             messages={messages}
-            onMessageSent={(newMessage) =>
-              setMessages((prev) => [...(prev ?? []), newMessage])
-            }
+            onMessageSent={(newMessage) => appendMessage(newMessage)}
             notify={group.members.filter((member) => member !== user)}
             share={(document) =>
               groupService.shareDocumentIntoGroup(
