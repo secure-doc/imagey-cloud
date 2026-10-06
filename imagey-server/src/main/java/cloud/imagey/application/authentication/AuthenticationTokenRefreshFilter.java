@@ -19,6 +19,7 @@ package cloud.imagey.application.authentication;
 import static java.util.Optional.ofNullable;
 
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,6 +28,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.Provider;
 
 import org.apache.logging.log4j.LogManager;
@@ -67,6 +69,10 @@ public class AuthenticationTokenRefreshFilter implements ContainerResponseFilter
             // The request is itself a sign-in / sign-out - do not fight its own cookie.
             return;
         }
+        if (isPublicRoute(requestContext)) {
+            // A public answer may be cached by a shared cache: it must never carry a session.
+            return;
+        }
         Optional<DecodedToken> decoded = ofNullable(requestContext.getCookies().get("token"))
             .map(Cookie::getValue)
             .flatMap(value -> tokenService.decode(new Token(value)))
@@ -87,5 +93,10 @@ public class AuthenticationTokenRefreshFilter implements ContainerResponseFilter
         User user = new User(new UserId(decoded.get().jwt().getSubject()));
         LOG.info("Refreshing trusted authentication cookie");
         responseContext.getHeaders().add("Set-Cookie", tokenService.authenticationCookie(user, true, decoded.get().device()));
+    }
+
+    private static boolean isPublicRoute(ContainerRequestContext requestContext) {
+        List<String> segments = requestContext.getUriInfo().getPathSegments().stream().map(PathSegment::getPath).toList();
+        return GuestPolicy.isPublicRoute(requestContext.getMethod(), segments);
     }
 }

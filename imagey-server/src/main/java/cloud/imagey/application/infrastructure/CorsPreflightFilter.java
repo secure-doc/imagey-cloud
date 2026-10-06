@@ -64,11 +64,12 @@ public class CorsPreflightFilter implements ContainerRequestFilter {
         if (!federationSettings.enabled()
             || !"OPTIONS".equals(requestContext.getMethod())
             || requestContext.getHeaderString("Origin") == null
-            || requestedMethod == null
-            || allowedUrls.contains(domainNameProvider.getDomainName(requestContext))) {
+            || requestedMethod == null) {
             return;
         }
-        if (GuestPolicy.isGuestRoute(requestedMethod, CorsFilter.pathSegments(requestContext))) {
+        List<String> segments = CorsFilter.pathSegments(requestContext);
+        boolean own = allowedUrls.contains(domainNameProvider.getDomainName(requestContext));
+        if (GuestPolicy.isPublicRoute(requestedMethod, segments) || !own && GuestPolicy.isGuestRoute(requestedMethod, segments)) {
             requestContext.abortWith(Response.status(NO_CONTENT).build());
         }
     }

@@ -51,11 +51,28 @@ public class CorsFilter implements ContainerResponseFilter {
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
 
         DomainName domain = domainNameProvider.getDomainName(requestContext);
-        if (allowedUrls.contains(domain)) {
+        if (isPublicRequest(requestContext)) {
+            addPublicHeaders(responseContext);
+        } else if (allowedUrls.contains(domain)) {
             addCredentialsHeaders(responseContext, domain);
         } else if (isGuestRequest(requestContext)) {
             addGuestHeaders(responseContext);
         }
+    }
+
+    // A route that is public to every origin (the federation key, ADR 0013 A9), also to the own ones.
+    // It must be decided first, so that there is never a second Access-Control-Allow-Origin.
+    private boolean isPublicRequest(ContainerRequestContext requestContext) {
+        return federationSettings.enabled()
+            && GuestPolicy.isPublicRoute(effectiveMethod(requestContext), pathSegments(requestContext));
+    }
+
+    private void addPublicHeaders(ContainerResponseContext responseContext) {
+        responseContext.getHeaders().add("Access-Control-Allow-Origin", "*");
+        responseContext.getHeaders().add("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+        responseContext.getHeaders().add("Access-Control-Allow-Headers", "content-type");
+        responseContext.getHeaders().add("Access-Control-Max-Age", "7200");
+        responseContext.getHeaders().add("Vary", "Origin");
     }
 
     private void addCredentialsHeaders(ContainerResponseContext responseContext, DomainName domain) {

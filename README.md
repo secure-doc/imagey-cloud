@@ -32,6 +32,23 @@ The `imagey-e2e` module tests flows with several users or devices against the re
   `http://securedoc.localhost:<port>`. Ports are chosen per run; the tests read them from
   `E2E_BASE_URL` and `E2E_BASE_URL_B`.
 
+## Federation Signing Key
+
+With `federation.enabled=true` the server signs its federation assertions with its own ES256 key
+pair (ADR 0013). The public key is published at `GET /users/federation/key` as a JWK Set with one key
+(`kid` = RFC 7638 thumbprint); while federation is off the endpoint answers 404 and no key is created.
+
+- The private key is created on first use and stored encrypted (AES-256-GCM, key derived from
+  `authentication.secret` with HKDF) as `federation/signing-key.enc`. Changing `authentication.secret`
+  makes it unreadable; the server then logs a warning and creates a new one.
+- To rotate by hand, delete `federation/signing-key.enc` and restart all instances.
+- Keys of other servers are fetched over HTTPS from `https://<domain>/users/federation/key` and cached.
+  Domains in `federation.insecure-domains` (comma separated `host[:port]`, for local development and
+  E2E only) are fetched over HTTP and may resolve to private addresses.
+- Tuning (defaults): `federation.key.max-age` (3600 s), `federation.key-cache.ceiling` (3600 s),
+  `federation.key-cache.min` (60 s), `federation.key-cache.negative` (30 s),
+  `federation.key-cache.refetch-cooldown` (60 s), `federation.key-fetch.new-domains-per-minute` (30).
+
 ## Push Notifications (Web Push)
 
 Push notifications (ADR 0020) need a VAPID key pair (RFC 8292) configured on the backend

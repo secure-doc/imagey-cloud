@@ -117,6 +117,20 @@ public class AuthenticationTokenRefreshFilterTest {
         assertThat(requestPublicKey(guest).getHeaderString("Set-Cookie")).isNull();
     }
 
+    @Test
+    @DisplayName("The public federation key never carries a session cookie, as it may be cached by others")
+    void publicRouteGetsNoCookie() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path("federation").path("key")
+            .request()
+            .cookie(trustedCookie(TokenService.ONE_HOUR))
+            .get();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getHeaderString("Set-Cookie")).isNull();
+    }
+
     private DecodedToken refreshedToken(Response response) {
         String cookie = response.getHeaderString("Set-Cookie");
         String value = cookie.substring("token=".length(), cookie.indexOf(';'));

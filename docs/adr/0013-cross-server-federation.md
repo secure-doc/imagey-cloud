@@ -602,12 +602,12 @@ The flow is reversed:
 1. Bob enters his home server on A's invitation page as free text. The client
    normalizes it (no scheme or path, lower case, `https` implied).
 2. The client validates it before redirecting. It fetches
-   `https://<server>/.well-known/imagey-federation-key` with a short timeout.
+   `https://<server>/users/federation/key` (A9) with a short timeout.
    If the server is unreachable, returns no valid key, or is A itself, an
    error is shown next to the input and nothing is redirected. This is a
    usability check only. The security check is the redemption on A
-   (decision 4). It needs `Access-Control-Allow-Origin: *` on the
-   `.well-known` response.
+   (decision 4). It needs `Access-Control-Allow-Origin: *` on the key
+   response.
 3. A redirects to `https://B/federation/accept#invitation=<token>&from=<A>`.
    The invitation token travels in the fragment and never reaches a server.
 4. Bob's client on B, logged in same-origin and holding his keys:
@@ -721,6 +721,54 @@ for a chat that lives on another server (`ContactEntry` domain differs from
 the own domain). For groups, the group's server decides. This only affects
 the guest's side. A federated 1:1 chat lives on the inviter's server
 (ADR 0015), so the inviter still gets push for messages the guest posts.
+
+### A9. Endpoint paths (replaces the `.well-known` URL of decision 1)
+
+The key is published at **`GET /users/federation/key`**, not at
+`/.well-known/imagey-federation-key`. The session exchange of decision 4 is
+**`POST /users/federation/sessions`**. Every mention of the `.well-known`
+key URL or key fetch above refers to this path.
+
+- `.well-known` (RFC 8615) is a discovery convention for arbitrary third-party
+  software. Only compatible servers talk to each other here, so a fixed path
+  in the application's own namespace is enough.
+- The JAX-RS application is mounted at `/users`, and production nginx already
+  forwards `/users/*` to it while serving `/.well-known/` (ACME) from a
+  static webroot. Under `/users/federation/...` no nginx rule and no
+  `FrontendFilter` exception is needed. The precedent is
+  `/users/push/vapid-public-key`. Literal paths take precedence over
+  `{userId}`, and `UserId`s are UUIDs, so there is no collision.
+- Product names stay out of protocol names (paths, claims, key-derivation
+  labels).
+
+### A10. Key format, storage and identity (refines decision 1)
+
+- **ES256 (P-256), published as a JWK Set with exactly one key** whose `kid`
+  is its RFC 7638 thumbprint. Assertions carry the `kid` in the JWS header.
+  This is no JWKS-style overlap scheme: there is still only one key at a
+  time. The `kid` only lets a verifier recognize an unknown key and refetch
+  (within the throttle of decision 1) instead of inferring it from a failed
+  signature.
+- **The private key is stored encrypted in the BlobStore** (AES-256-GCM, key
+  from `HKDF-SHA256(authentication.secret, "federation-signing-key")`). Stolen
+  storage alone therefore cannot mint assertions, matching ADR 0009's threat
+  model. There is no new secret. If `authentication.secret` changes, a new
+  key pair is generated, which decision 1 already treats as cheap.
+- **One identity per deployment.** A deployment serving several domains
+  (`secure-doc.urls`) publishes the same key on each. Its own domains are the
+  hosts (with port) of `secure-doc.urls`, and there is no separate
+  `federation.domain` setting.
+- **The key fetch resolves and vets the addresses itself** (custom DNS
+  resolver in the HTTP client) and connects only to the vetted addresses, so
+  that DNS rebinding cannot bypass decision 5's private-address check.
+  A fetched key is only accepted if its `kid` equals its thumbprint, so a
+  refetch for a `kid` the verifier already knows can never yield another key:
+  a bad signature is never a reason to refetch.
+- **Known limit: the budget for first-time domains is global.** A caller who
+  names as many made-up domains per minute as the budget allows keeps real new
+  partners from being resolved during that minute (known domains are not
+  affected). Once the domain comes from an unauthenticated assertion (decision
+  4), the session endpoint needs a budget per client in addition.
 
 ### Consequences of this amendment
 
