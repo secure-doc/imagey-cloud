@@ -4,8 +4,10 @@ Date: 2026-09-15
 
 ## Status
 
-Proposed - not yet implemented. Written up from a design discussion; no code
-exists for any part of this ADR.
+Accepted 2026-10-06 - not yet implemented. Amended by ADR 0015 (decision 7)
+and by the implementation review below ("Amendment (2026-10-06)"), which
+takes precedence where the two differ. Implementation plan:
+`docs/plans/federation.md`.
 
 ## Context
 
@@ -572,3 +574,160 @@ Decision 7 is superseded in its core premise: the chat is now owned by the
   membership of ADR 0015 decision 4, which compares `UserId`s and therefore
   works for `ForeignUserMapping` principals unchanged.
 - The "Sharing an image in the chat" paragraph of decision 7 is unaffected.
+
+## Amendment (2026-10-06, implementation review)
+
+Comparing this ADR with the current code before implementing it turned up six
+gaps. The decisions below close them and record the open details settled in
+the same review. Where they differ from the decisions above, these win.
+
+### A1. The invitation link no longer registers on open
+
+Today `InvitationFilter` (`GET /invitations/{token}`) creates the account and
+sets the session cookie as soon as the link is opened. Decision 2 needs a
+choice first ("register here" / "I already have an account elsewhere").
+The filter therefore only redirects to an SPA page
+(`/invitation?token=...&invited-by=...`). Registration happens after the
+choice, in a separate step (`POST /invitations/{token}`). The local
+invite-and-register flow is otherwise unchanged.
+
+### A2. Accepting completes on the invitee's home server (replaces decision 2, steps 3-4)
+
+Accepting needs the invitee's private main key (ECDH chat key, ADR 0015) and
+their "chats" document. Both exist only in the client on **B's** origin,
+because IndexedDB is per origin. A page on A cannot accept for bob.
+
+The flow is reversed:
+
+1. Bob enters his home server on A's invitation page as free text. The client
+   normalizes it (no scheme or path, lower case, `https` implied).
+2. The client validates it before redirecting. It fetches
+   `https://<server>/.well-known/imagey-federation-key` with a short timeout.
+   If the server is unreachable, returns no valid key, or is A itself, an
+   error is shown next to the input and nothing is redirected. This is a
+   usability check only. The security check is the redemption on A
+   (decision 4). It needs `Access-Control-Allow-Origin: *` on the
+   `.well-known` response.
+3. A redirects to `https://B/federation/accept#invitation=<token>&from=<A>`.
+   The invitation token travels in the fragment and never reaches a server.
+4. Bob's client on B, logged in same-origin and holding his keys:
+   - mints an assertion with `aud = A` at B (A3),
+   - redeems it at A cross-origin together with the invitation token, which
+     yields a guest token (A4),
+   - accepts the contact request at A cross-origin, and
+   - stores the `ContactEntry` (with the chat's domain) in its own "chats"
+     document on B.
+
+The redirect back to A and the forwarding of an assertion through A's page
+are gone. The security check of decision 2
+(`assertion.sub == invitationToken.sub`) is unchanged.
+
+### A3. Minting an assertion
+
+`POST /users/{me}/federation-assertions` with body `{aud, email}`:
+
+- `@RolesAllowed("owner")`, cookie session only. A guest session cannot
+  mint.
+- The server stores addresses only as `HMAC(email)` (ADR 0007), so it cannot
+  derive `sub` from `{me}`. The client sends its address, and the server
+  checks `userMappingService.findUserId(email) == {me}` before signing. A
+  mismatch fails like an unknown user (403). The address is not stored.
+- Claims: `iss` (own domain), `sub` (email), `aud`, `exp` (now + 60 s),
+  `jti`.
+- **Any** session may mint, including sessions not bound to a device
+  (ADR 0018). Access to the mailbox is already the trust anchor for accepting
+  invitations and for logging in locally. Requiring a bound session would not
+  draw a real boundary.
+
+### A4. Guest sessions: own claim and an explicit allowlist (refines decisions 4 and 6)
+
+`RolesFilter` grants `owner` whenever the token's `sub` equals the `{userId}`
+in the path. A guest token for the foreign `UserId` X would therefore be
+`owner` of `/users/X/...` and could create devices, documents or settings
+there. Decision 4 says guests never reach `owner` endpoints, but nothing
+enforces that today. From now on:
+
+- Guest tokens carry the claim `guest = <home domain>` and live 15 minutes.
+  They are accepted **only** as `Authorization: Bearer`, and a Bearer token
+  without the claim is rejected. The cookie path is never used for guests,
+  and `AuthenticationTokenRefreshFilter` ignores guest tokens, because
+  renewal goes through a fresh assertion.
+- For a guest, `RolesFilter` denies `owner`, except on this allowlist, which
+  applies only to the guest's own `{userId}`:
+  - `GET /users/{self}/contact-requests`
+  - `PUT /users/{self}/contact-requests/{contact}` (accept, leg 2)
+  - `DELETE /users/{self}/contact-requests/{contact}` (decline)
+- Sending contact requests (`POST .../contact-requests`) is **not** on the
+  list. A guest cannot invite anybody on A.
+- Decision 8 (folder contribution) will later add
+  `POST /users/{self}/documents`, restricted to folder targets.
+- `member` checks are unchanged. The CORS rules of decision 6 apply to the
+  `member` routes and to the allowlist above.
+
+### A5. Rebinding moves both copies of the exchange (refines decision 3)
+
+`ContactRepository.persist` writes each exchange twice, once into each
+party's tree, each copy keyed by the *other* party's `UserId`
+(`{inviter}/contact-requests/{invitee}.json` and
+`{invitee}/contact-requests/{inviter}.json`). Rebinding from the placeholder
+`UserId` to the `ForeignUserMapping` id therefore has to:
+
+- write both copies under the new id, and
+- delete the two copies keyed by, or stored under, the placeholder. Without
+  that, the inviter would list the contact twice.
+
+The foreign principal thus does get a minimal tree on A. It contains only its
+`contact-requests` and never a root folder, settings, devices or a
+registration marker. Decision 3's "no home tree" is to be read in this sense.
+Keys granted to the guest still live in the owners' trees, as for any member.
+Any other leftovers of the placeholder stay orphaned, as decision 3 already
+accepts.
+
+### A6. How a principal first becomes known on the other server (refines decision 4)
+
+The inviter O needs a guest session on B to read bob's public profile and the
+images bob shares into the chat (ADR 0015 §6). O holds no invitation token
+for B, so decision 4's "pure lookup" would find nothing. New rule:
+
+- `POST /users/{me}/foreign-principals` with body `{domain, address}`,
+  `@RolesAllowed("owner")`, returns the `UserId` of that foreign principal,
+  creating it if needed. Bob's client calls this while accepting, before it
+  grants O a key on B.
+- `ForeignUserMapping` entries are created **only** by redeeming an invitation
+  (A) or at the explicit request of a local user (B). Redeeming an assertion
+  without an invitation token is a lookup only: an unknown
+  `(domain, address)` fails like any other invalid redemption
+  (decision 5, uniform failure shape). A stranger cannot make a server create
+  an identity for them.
+- Storage mirrors `UserMappingService` (ADR 0007/0010): one object per
+  mapping at `index/foreign/<HMAC(domain | address)>`, keyed with
+  `user.mapping.secret`, created with `putIfAbsent`.
+
+### A7. Configuration and local testing
+
+- `federation.enabled` (default `false`). Without it, none of the new
+  endpoints is reachable, and the invitation page offers no "account
+  elsewhere" option.
+- `federation.insecure-domains` (default empty). Domains for which the key
+  fetch of decision 5 may use `http` and private addresses. Used only by the
+  two-server E2E setup (`imagey.localhost` / `securedoc.localhost`), never in
+  production.
+
+### A8. Notifications
+
+There is no push across servers (ADR 0020). A guest polls. The UI shows this
+per chat: in the chat list and the chat header, the bell is **crossed out**
+for a chat that lives on another server (`ContactEntry` domain differs from
+the own domain). For groups, the group's server decides. This only affects
+the guest's side. A federated 1:1 chat lives on the inviter's server
+(ADR 0015), so the inviter still gets push for messages the guest posts.
+
+### Consequences of this amendment
+
+- One new endpoint on the home server (A3) and one more owner-scoped endpoint
+  (A6), in addition to the three pieces listed under "What stays unchanged".
+- `RolesFilter` gains a guest mode. This is the only change to the
+  authorization model, and it only narrows what a token may do.
+- The local invitation flow changes shape (A1): one more redirect and one
+  more request. No stored data changes.
+
