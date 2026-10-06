@@ -9,19 +9,51 @@ services:
     environment:
       - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled -Dgreenmail.users=test@imagey.cloud:password
 
-  server:
-    build:
+  server-a:
+    build: &server-build
       # Assembled by scripts/run-e2e.mjs: Dockerfile + the bundle from imagey-server/target.
+      # Both servers use the same context, the second build is served from the cache.
       context: target/image
     ports:
       # The origin must be listed in secure-doc.urls, so this port is fixed per run (see run-e2e.mjs).
-      - "${E2E_SERVER_PORT:?set by scripts/run-e2e.mjs}:8080"
+      # The server listens on 8080 inside the container, the mapping makes the origin reachable.
+      - "${E2E_PORT_A:?set by scripts/run-e2e.mjs}:8080"
     # Every run starts with an empty storage.
     tmpfs:
       - /app/data
+    # Reach the other server under its public origin (needed from F2/F4 on): *.localhost would
+    # otherwise resolve to the container's own loopback.
+    extra_hosts:
+      - "imagey.localhost:host-gateway"
+      - "securedoc.localhost:host-gateway"
     environment:
-      # Throwaway secrets. No push.vapid.* keys, so Web Push is off.
-      - MEECROWAVE_OPTS=-Droot.path=data -Dauthentication.secret=ZTJlLXRocm93YXdheS1hdXRoZW50aWNhdGlvbi1zZWNyZXQtZTJlLXRocm93YXdheS1hdXRoZW50aWNhdGlvbi1zZWNyZXQ= -Duser.mapping.secret=e2e-user-mapping-pepper -Ddocument.mapping.secret=e2e-keyfile-pepper -Dsmtp.host=greenmail -Dsmtp.port=3025 -Dsmtp.user=test@imagey.cloud -Dsmtp.password=password -Dsecure-doc.urls=http://localhost:${E2E_SERVER_PORT}
+      # Throwaway secrets, different per server. No push.vapid.* keys, so Web Push is off.
+      - MEECROWAVE_OPTS=-Droot.path=data -Dauthentication.secret=ZTJlLXRocm93YXdheS1hdXRoZW50aWNhdGlvbi1zZWNyZXQtZTJlLXRocm93YXdheS1hdXRoZW50aWNhdGlvbi1zZWNyZXQ= -Duser.mapping.secret=e2e-a-user-mapping-pepper -Ddocument.mapping.secret=e2e-a-keyfile-pepper -Dsmtp.host=greenmail -Dsmtp.port=3025 -Dsmtp.user=test@imagey.cloud -Dsmtp.password=password -Dsecure-doc.urls=http://imagey.localhost:${E2E_PORT_A} -Dfederation.enabled=true -Dfederation.insecure-domains=imagey.localhost:${E2E_PORT_A},securedoc.localhost:${E2E_PORT_B}
+    depends_on:
+      - greenmail
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/manifest.json"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  server-b:
+    build: *server-build
+    ports:
+      # The origin must be listed in secure-doc.urls, so this port is fixed per run (see run-e2e.mjs).
+      # The server listens on 8080 inside the container, the mapping makes the origin reachable.
+      - "${E2E_PORT_B:?set by scripts/run-e2e.mjs}:8080"
+    # Every run starts with an empty storage.
+    tmpfs:
+      - /app/data
+    # Reach the other server under its public origin (needed from F2/F4 on): *.localhost would
+    # otherwise resolve to the container's own loopback.
+    extra_hosts:
+      - "imagey.localhost:host-gateway"
+      - "securedoc.localhost:host-gateway"
+    environment:
+      # Throwaway secrets, different per server. No push.vapid.* keys, so Web Push is off.
+      - MEECROWAVE_OPTS=-Droot.path=data -Dauthentication.secret=ZTJlLXNlcnZlci1iLWF1dGhlbnRpY2F0aW9uLXNlY3JldC1lMmUtc2VydmVyLWItYXV0aGVudGljYXRpb24tc2VjcmV0 -Duser.mapping.secret=e2e-b-user-mapping-pepper -Ddocument.mapping.secret=e2e-b-keyfile-pepper -Dsmtp.host=greenmail -Dsmtp.port=3025 -Dsmtp.user=test@imagey.cloud -Dsmtp.password=password -Dsecure-doc.urls=http://securedoc.localhost:${E2E_PORT_B} -Dfederation.enabled=true -Dfederation.insecure-domains=imagey.localhost:${E2E_PORT_A},securedoc.localhost:${E2E_PORT_B}
     depends_on:
       - greenmail
     healthcheck:

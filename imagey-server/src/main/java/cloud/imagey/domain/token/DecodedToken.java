@@ -63,4 +63,17 @@ public record DecodedToken(JWTClaimsSet jwt) {
             return false;
         }
     }
+
+    /** The home domain of a guest session (ADR 0013 A4), empty for a local session. */
+    public Optional<String> guestDomain() {
+        try {
+            return Optional.ofNullable(jwt.getStringClaim(TokenService.GUEST_CLAIM));
+        } catch (ParseException e) {
+            return Optional.empty();
+        }
+    }
+
+    public boolean isGuest() {
+        return guestDomain().isPresent();
+    }
 }

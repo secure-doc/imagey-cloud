@@ -71,7 +71,8 @@ public class AuthenticationTokenRefreshFilter implements ContainerResponseFilter
             .map(Cookie::getValue)
             .flatMap(value -> tokenService.decode(new Token(value)))
             .filter(token -> token.isOfType(TokenType.AUTHENTICATION))
-            .filter(DecodedToken::isTrusted);
+            .filter(DecodedToken::isTrusted)
+            .filter(token -> !token.isGuest());
         if (decoded.isEmpty()) {
             return;
         }

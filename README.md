@@ -25,7 +25,12 @@ The `imagey-e2e` module tests flows with several users or devices against the re
   `npm run e2e -- --grep E0 --ui`.
 - The stack is removed after every run. `E2E_KEEP=1` keeps it for debugging
   (`docker compose -p imagey-e2e down -v` removes it). On failures the server log is written to
-  `imagey-e2e/target/e2e-server.log`.
+  `imagey-e2e/target/e2e-server.log` (all services; `docker compose -p imagey-e2e logs server-a
+  server-b` shows both servers while the stack is kept).
+- Two independent servers run side by side, with their own data and secrets: A at
+  `http://imagey.localhost:<port>` (the default of all tests) and B at
+  `http://securedoc.localhost:<port>`. Ports are chosen per run; the tests read them from
+  `E2E_BASE_URL` and `E2E_BASE_URL_B`.
 
 ## Push Notifications (Web Push)
 

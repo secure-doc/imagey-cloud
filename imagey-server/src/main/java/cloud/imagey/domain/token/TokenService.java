@@ -44,6 +44,7 @@ import com.nimbusds.jwt.SignedJWT;
 
 import cloud.imagey.domain.mail.Email;
 import cloud.imagey.domain.user.DeviceId;
+import cloud.imagey.domain.user.DomainName;
 import cloud.imagey.domain.user.User;
 
 @ApplicationScoped
@@ -69,6 +70,16 @@ public class TokenService {
      * was answered to obtain the session (ADR 0018). Missing on sessions from emailed links.
      */
     public static final String DEVICE_CLAIM = "device";
+
+    /**
+     * Claim name (string) on a guest {@code AUTHENTICATION} token (ADR 0013 A4): the home domain
+     * (host, without scheme) of the user from another server. Guest tokens travel as bearer
+     * tokens, never as cookies.
+     */
+    public static final String GUEST_CLAIM = "guest";
+
+    /** Lifetime of a guest session: 15 minutes (ADR 0013 decision 4). */
+    public static final long GUEST_SESSION = 15 * 60 * 1000;
 
     /** {@code Max-Age} (seconds) of the persistent "keep me logged in" cookie. */
     public static final long TRUSTED_COOKIE_MAX_AGE_SECONDS = ONE_MONTH / 1000;
@@ -129,6 +140,25 @@ public class TokenService {
         claims.put(TRUSTED_CLAIM, trusted);
         device.ifPresent(d -> claims.put(DEVICE_CLAIM, d.id()));
         return generate(user.id().id(), TokenType.AUTHENTICATION, validityInMilliseconds, claims);
+    }
+
+    /**
+     * Short-lived bearer token for a guest: a user of the server at {@code homeDomain}. Not
+     * trusted, not bound to a device, and deliberately without a cookie variant.
+     *
+     * <p>The subject must be the <em>local</em> id of the guest (the {@code ForeignUserMapping} id
+     * of F4), never an id the other server claims: the session is identified by the subject alone,
+     * so a claimed id equal to a local user's would be that user. See docs/plans/federation.md, F4.
+     */
+    public Token generateGuestToken(User user, DomainName homeDomain) {
+        return generateGuestToken(user, homeDomain, GUEST_SESSION);
+    }
+
+    /** Like {@link #generateGuestToken(User, DomainName)} with an explicit lifetime. */
+    public Token generateGuestToken(User user, DomainName homeDomain, long validityInMilliseconds) {
+        String host = homeDomain.value().replaceFirst("^https?://", "");
+        return generate(user.id().id(), TokenType.AUTHENTICATION, validityInMilliseconds,
+            Map.of(TRUSTED_CLAIM, false, GUEST_CLAIM, host));
     }
 
     /**

@@ -18,6 +18,7 @@ package cloud.imagey.infrastructure.jakartars;
 
 import static jakarta.ws.rs.Priorities.AUTHORIZATION;
 import static jakarta.ws.rs.core.Response.status;
+import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 
 import java.io.IOException;
@@ -29,6 +30,9 @@ import jakarta.ws.rs.core.SecurityContext;
 
 @Priority(AUTHORIZATION)
 public class UserInRoleFilter implements ContainerRequestFilter {
+
+    /** Authentication scheme of a guest session (ADR 0013 A4); see {@code DefaultSecurityContext}. */
+    public static final String GUEST_SCHEME = "IMAGEY_GUEST";
 
     private String[] roles;
 
@@ -44,6 +48,9 @@ public class UserInRoleFilter implements ContainerRequestFilter {
                 return;
             }
         }
-        requestContext.abortWith(status(UNAUTHORIZED).build());
+        // A guest with a valid token but without the role is forbidden, not unauthenticated: the
+        // client renews its token on 401, which would not help here.
+        boolean guest = GUEST_SCHEME.equals(securityContext.getAuthenticationScheme());
+        requestContext.abortWith(status(guest ? FORBIDDEN : UNAUTHORIZED).build());
     }
 }

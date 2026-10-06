@@ -16,6 +16,7 @@
  */
 package cloud.imagey.application.authentication;
 
+import static cloud.imagey.application.authentication.DefaultSecurityContext.forGuest;
 import static cloud.imagey.application.authentication.DefaultSecurityContext.forPrincipal;
 import static jakarta.ws.rs.Priorities.AUTHENTICATION;
 import static java.util.Optional.ofNullable;
@@ -25,6 +26,7 @@ import java.security.Principal;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -43,6 +45,7 @@ import cloud.imagey.domain.contact.ContactService;
 import cloud.imagey.domain.document.AccessPath;
 import cloud.imagey.domain.document.DocumentId;
 import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.federation.FederationSettings;
 import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
@@ -77,6 +80,8 @@ public class RolesFilter implements ContainerRequestFilter {
     private ContactService contactService;
     @Inject
     private HttpServletRequest request;
+    @Inject
+    private FederationSettings federationSettings;
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
@@ -85,12 +90,29 @@ public class RolesFilter implements ContainerRequestFilter {
         // below and DocumentResource.uploadDocument read the parsed value off this attribute.
         request.setAttribute(AccessPath.class.getName(),
             AccessPath.parse(requestContext.getHeaderString(AccessPath.HEADER)));
-        Optional<Cookie> cookie = ofNullable(requestContext.getCookies().get("token"));
-        Optional<DecodedToken> decodedToken = cookie
-            .flatMap(c -> tokenService.decode(new Token(c.getValue())))
-            .filter(token -> token.isOfType(TokenType.AUTHENTICATION));
+        Optional<DecodedToken> decodedToken = authenticate(requestContext);
         SessionDevice.set(request, decodedToken.flatMap(DecodedToken::device));
+        SessionGuest.set(request, decodedToken.flatMap(DecodedToken::guestDomain));
         setupPrincipal(requestContext, decodedToken);
+    }
+
+    // A guest (ADR 0013 A4) authenticates with a bearer token, a local session with the cookie. The
+    // two ways exclude each other: a request with an Authorization header ignores the cookie, and a
+    // guest token in the cookie - or a local token as bearer - is no authentication at all.
+    private Optional<DecodedToken> authenticate(ContainerRequestContext requestContext) {
+        String authorization = requestContext.getHeaderString("Authorization");
+        boolean bearer = GuestPolicy.usesBearer(federationSettings.enabled(), authorization);
+        Optional<String> value = bearer
+            ? GuestPolicy.bearerToken(authorization)
+            : ofNullable(requestContext.getCookies().get("token")).map(Cookie::getValue);
+        return value
+            .flatMap(v -> tokenService.decode(new Token(v)))
+            .filter(token -> token.isOfType(TokenType.AUTHENTICATION))
+            .filter(token -> token.isGuest() == bearer);
+    }
+
+    private static List<String> pathSegments(UriInfo uriInfo) {
+        return uriInfo.getPathSegments().stream().map(PathSegment::getPath).toList();
     }
 
     private User extractUser(UriInfo uriInfo) {
@@ -124,15 +146,22 @@ public class RolesFilter implements ContainerRequestFilter {
         }
         User user = extractUser(requestContext.getUriInfo());
         String principalName = decodedToken.get().jwt().getSubject();
-        requestContext.setSecurityContext(forPrincipal(principalName,
-            (role) -> hasRole(new User(new UserId(principalName)), user, requestContext.getUriInfo(), role)));
+        boolean guest = decodedToken.get().isGuest();
+        Function<String, Boolean> isUserInRole = (role) -> hasRole(new User(new UserId(principalName)), user,
+            requestContext, guest, role);
+        requestContext.setSecurityContext(guest
+            ? forGuest(principalName, isUserInRole)
+            : forPrincipal(principalName, isUserInRole));
         Supplier<Principal> principalSupplier = requestContext.getSecurityContext()::getUserPrincipal;
         request.setAttribute(Principal.class.getName() + ".supplier", principalSupplier);
     }
 
-    private boolean hasRole(User currentPrincipal, User contextUser, UriInfo uriInfo, String role) {
+    private boolean hasRole(User currentPrincipal, User contextUser, ContainerRequestContext requestContext,
+        boolean guest, String role) {
+        UriInfo uriInfo = requestContext.getUriInfo();
         if ("owner".equals(role)) {
-            return currentPrincipal.equals(contextUser);
+            return currentPrincipal.equals(contextUser)
+                && (!guest || GuestPolicy.allowsOwner(requestContext.getMethod(), pathSegments(uriInfo)));
         }
         if (!"member".equals(role)) {
             // Only "owner"/"member" are used across the resources (see @RolesAllowed). Deny anything

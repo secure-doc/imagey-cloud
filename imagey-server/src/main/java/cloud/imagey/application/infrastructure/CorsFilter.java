@@ -24,10 +24,13 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
+import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.Provider;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cloud.imagey.application.authentication.GuestPolicy;
+import cloud.imagey.domain.federation.FederationSettings;
 import cloud.imagey.domain.user.DomainName;
 
 @Provider
@@ -41,13 +44,21 @@ public class CorsFilter implements ContainerResponseFilter {
     @ConfigProperty(name = "secure-doc.urls")
     private List<DomainName> allowedUrls;
 
+    @Inject
+    private FederationSettings federationSettings;
+
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
 
         DomainName domain = domainNameProvider.getDomainName(requestContext);
-        if (!allowedUrls.contains(domain)) {
-            return;
+        if (allowedUrls.contains(domain)) {
+            addCredentialsHeaders(responseContext, domain);
+        } else if (isGuestRequest(requestContext)) {
+            addGuestHeaders(responseContext);
         }
+    }
+
+    private void addCredentialsHeaders(ContainerResponseContext responseContext, DomainName domain) {
         responseContext.getHeaders().add("Access-Control-Allow-Origin", domain.value());
 
         responseContext.getHeaders().add("Access-Control-Allow-Credentials", "true");
@@ -55,5 +66,34 @@ public class CorsFilter implements ContainerResponseFilter {
             "Access-Control-Allow-Headers", "origin, content-type, accept, authorization, if-match");
         responseContext.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");
         responseContext.getHeaders().add("Access-Control-Expose-Headers", "Location, ETag");
+    }
+
+    // A foreign origin (ADR 0013 A4): any origin may call the guest routes, but never with
+    // credentials - a guest authenticates with a bearer token, so the wildcard is safe.
+    private boolean isGuestRequest(ContainerRequestContext requestContext) {
+        return federationSettings.enabled()
+            && requestContext.getHeaderString("Origin") != null
+            && GuestPolicy.isGuestRoute(effectiveMethod(requestContext), pathSegments(requestContext));
+    }
+
+    private void addGuestHeaders(ContainerResponseContext responseContext) {
+        responseContext.getHeaders().add("Access-Control-Allow-Origin", "*");
+        responseContext.getHeaders().add("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, DELETE, OPTIONS");
+        responseContext.getHeaders().add(
+            "Access-Control-Allow-Headers", "authorization, content-type, access-path, if-match");
+        responseContext.getHeaders().add("Access-Control-Expose-Headers", "ETag, Location, Last-Modified");
+        responseContext.getHeaders().add("Access-Control-Max-Age", "7200");
+        responseContext.getHeaders().add("Vary", "Origin");
+    }
+
+    /** The method the browser is going to use: for a preflight the one it asks about. */
+    static String effectiveMethod(ContainerRequestContext requestContext) {
+        String method = requestContext.getMethod();
+        String requested = requestContext.getHeaderString("Access-Control-Request-Method");
+        return "OPTIONS".equals(method) && requested != null ? requested : method;
+    }
+
+    static List<String> pathSegments(ContainerRequestContext requestContext) {
+        return requestContext.getUriInfo().getPathSegments().stream().map(PathSegment::getPath).toList();
     }
 }

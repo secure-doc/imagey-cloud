@@ -37,8 +37,17 @@ export function imagePath(name: string): string {
   );
 }
 
+// The two independent servers of the stack: A is the default, B the second one (federation).
+export type Server = "a" | "b";
+
+export function serverURL(server: Server): string {
+  return server === "a"
+    ? (process.env.E2E_BASE_URL ?? "http://imagey.localhost:8080")
+    : (process.env.E2E_BASE_URL_B ?? "http://securedoc.localhost:8081");
+}
+
 export function baseURL(): string {
-  return process.env.E2E_BASE_URL ?? "http://localhost:8080";
+  return serverURL("a");
 }
 
 // Every device of a test; fixtures.ts closes them when the test is over.
@@ -49,8 +58,11 @@ export async function closeAllDevices(): Promise<void> {
 }
 
 // A new browser context is a new device: own IndexedDB, localStorage and cookies.
-export async function newDevice(browser: Browser): Promise<Device> {
-  const context = await browser.newContext({ baseURL: baseURL() });
+export async function newDevice(
+  browser: Browser,
+  server: Server = "a",
+): Promise<Device> {
+  const context = await browser.newContext({ baseURL: serverURL(server) });
   openContexts.push(context);
   return { context, page: await context.newPage() };
 }
@@ -59,16 +71,23 @@ export async function newDevice(browser: Browser): Promise<Device> {
 export async function registerUser(
   browser: Browser,
   name: string,
+  server: Server = "a",
+  email = randomEmail(name),
 ): Promise<User> {
-  const email = randomEmail(name);
-  const device = await newDevice(browser);
+  const device = await newDevice(browser, server);
   const { page } = device;
+  const mails = await mailCount(email);
   await page.goto("/");
   await page.getByPlaceholder("email@imagey.cloud").fill(email);
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(page.getByText(/verification link/)).toBeVisible();
 
-  const link = await waitForMailLink(email, /^\/registrations\//, baseURL());
+  const link = await waitForMailLink(
+    email,
+    /^\/registrations\//,
+    serverURL(server),
+    { after: mails },
+  );
   await page.goto(link);
   await setPassword(page, "register");
   return { ...device, email };

@@ -69,7 +69,7 @@ function hostPort(service, containerPort) {
   return match[1];
 }
 
-// A free port, chosen up front: the server only accepts requests from origins listed in its
+// A free port, chosen up front: a server only accepts requests from origins listed in its
 // secure-doc.urls, so the origin has to be known before it starts.
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -89,8 +89,10 @@ const PORT_CONFLICT = /port is already allocated|address already in use/i;
 
 async function startStack() {
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const serverPort = await freePort();
-    process.env.E2E_SERVER_PORT = String(serverPort);
+    const ports = { a: await freePort(), b: await freePort() };
+    // Both servers are told each other's origin (federation.insecure-domains).
+    process.env.E2E_PORT_A = String(ports.a);
+    process.env.E2E_PORT_B = String(ports.b);
     // Asynchronous, so that Ctrl+C reaches docker and our cleanup still runs.
     const up = await runAsync(
       "docker",
@@ -98,7 +100,7 @@ async function startStack() {
       { stdio: ["inherit", "inherit", "pipe"] },
     );
     if (up.status === 0) {
-      return serverPort;
+      return ports;
     }
     saveServerLog();
     if (!PORT_CONFLICT.test(up.stderr ?? "")) {
@@ -106,7 +108,37 @@ async function startStack() {
     }
     run("docker", [...compose, "down", "-v", "--remove-orphans"]);
   }
-  return fail("no free port for the server after 3 attempts");
+  return fail("no free ports for the servers after 3 attempts");
+}
+
+// Federation needs each server to reach the other under its public origin, which only works
+// when extra_hosts/host-gateway does. Better to find out here than as a puzzling failure later.
+// curl itself resolves *.localhost to loopback (RFC 6761) and ignores /etc/hosts, unlike the
+// JVM of the servers, so the address comes from getent and is passed with --connect-to.
+function checkServersReachEachOther(ports) {
+  const checks = [
+    ["server-a", `http://securedoc.localhost:${ports.b}`],
+    ["server-b", `http://imagey.localhost:${ports.a}`],
+  ];
+  for (const [service, origin] of checks) {
+    const { hostname, port } = new URL(origin);
+    const result = run("docker", [
+      ...compose,
+      "exec",
+      "-T",
+      service,
+      "sh",
+      "-c",
+      `ip=$(getent ahostsv4 ${hostname} | head -1 | cut -d' ' -f1) && [ -n "$ip" ] && ` +
+        `curl -fsS --connect-to ${hostname}:${port}:"$ip":${port} ${origin}/manifest.json`,
+    ]);
+    if (result.status !== 0) {
+      saveServerLog();
+      fail(
+        `${service} cannot reach ${origin} (extra_hosts/host-gateway does not work): ${result.stderr}`,
+      );
+    }
+  }
 }
 
 let status = 1;
@@ -128,10 +160,13 @@ try {
   );
   copyFileSync(join(root, "Dockerfile"), join(imageContext, "Dockerfile"));
 
-  const serverPort = await startStack();
+  const ports = await startStack();
+  checkServersReachEachOther(ports);
   const env = {
     ...process.env,
-    E2E_BASE_URL: `http://localhost:${serverPort}`,
+    // Server A is the default for every test, server B the second, independent server.
+    E2E_BASE_URL: `http://imagey.localhost:${ports.a}`,
+    E2E_BASE_URL_B: `http://securedoc.localhost:${ports.b}`,
     E2E_MAIL_URL: `http://localhost:${hostPort("greenmail", "8080")}`,
   };
   ({ status } = await runAsync(
