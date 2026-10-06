@@ -384,6 +384,7 @@ test("an HTML file downloads its original content instead of being rendered", as
   ).toBeUndefined();
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e5-share-image.e2e.ts (E5, docs/plans/e2e-test-setup.md)
 test("a shared file in a 1:1 chat downloads on click", async ({ page }) => {
   const fileKey = await generateAesGcmKeyJwk();
   const content = Buffer.from("shared note content");

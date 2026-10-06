@@ -1,0 +1,31 @@
+name: imagey-e2e
+
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.0
+    ports:
+      # Host ports are assigned dynamically, scripts/run-e2e.mjs reads them back.
+      - "8080"
+    environment:
+      - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled -Dgreenmail.users=test@imagey.cloud:password
+
+  server:
+    build:
+      # Assembled by scripts/run-e2e.mjs: Dockerfile + the bundle from imagey-server/target.
+      context: target/image
+    ports:
+      # The origin must be listed in secure-doc.urls, so this port is fixed per run (see run-e2e.mjs).
+      - "${E2E_SERVER_PORT:?set by scripts/run-e2e.mjs}:8080"
+    # Every run starts with an empty storage.
+    tmpfs:
+      - /app/data
+    environment:
+      # Throwaway secrets. No push.vapid.* keys, so Web Push is off.
+      - MEECROWAVE_OPTS=-Droot.path=data -Dauthentication.secret=ZTJlLXRocm93YXdheS1hdXRoZW50aWNhdGlvbi1zZWNyZXQtZTJlLXRocm93YXdheS1hdXRoZW50aWNhdGlvbi1zZWNyZXQ= -Duser.mapping.secret=e2e-user-mapping-pepper -Ddocument.mapping.secret=e2e-keyfile-pepper -Dsmtp.host=greenmail -Dsmtp.port=3025 -Dsmtp.user=test@imagey.cloud -Dsmtp.password=password -Dsecure-doc.urls=http://localhost:${E2E_SERVER_PORT}
+    depends_on:
+      - greenmail
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/manifest.json"]
+      interval: 2s
+      timeout: 3s
+      retries: 60

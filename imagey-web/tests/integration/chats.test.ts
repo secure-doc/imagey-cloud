@@ -23,6 +23,7 @@ test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts and e3-contact-request.e2e.ts (E2/E3, docs/plans/e2e-test-setup.md)
 test("accept open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
@@ -130,6 +131,7 @@ test("accept open invitations", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts and e3-contact-request.e2e.ts (E2/E3, docs/plans/e2e-test-setup.md)
 test("decline open invitations", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
@@ -186,6 +188,7 @@ test("decline open invitations", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts and e3-contact-request.e2e.ts (E2/E3, docs/plans/e2e-test-setup.md)
 test("pick up an accepted invitation (inviter side)", async ({ page }) => {
   // The inviter's side of the handshake (leg 3 of ADR 0015, ContactService.
   // receiveContactRequest, driven by Chats.tsx's second effect): Bill

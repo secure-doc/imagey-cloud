@@ -169,6 +169,7 @@ async function unlockNewDevice(
     });
 }
 
+// Other side of this story with real clients: imagey-e2e/tests/e1-second-device.e2e.ts (E1, docs/plans/e2e-test-setup.md)
 test("mary unlocks new device", async ({ page }) => {
   await unlockNewDevice(page, "activates");
 });
@@ -185,6 +186,7 @@ test("mary cannot unlock a new device with a session that is not bound to a devi
   await unlockNewDevice(page, "refused");
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e1-second-device.e2e.ts (E1, docs/plans/e2e-test-setup.md)
 test("mary logs into new device", async ({ page }) => {
   // Given
   await setupMarysSecondDevice(page);
@@ -317,6 +319,7 @@ test("mary logs into new device", async ({ page }) => {
     });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e1-second-device.e2e.ts (E1, docs/plans/e2e-test-setup.md)
 test("mary successfully activates newly registered device after unlocking", async ({
   page,
 }) => {

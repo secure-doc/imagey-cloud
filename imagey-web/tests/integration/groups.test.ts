@@ -120,6 +120,7 @@ test("create a group and add a member", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e6-group.e2e.ts (E6, docs/plans/e2e-test-setup.md)
 test("join a group from an invitation in a 1:1 chat", async ({ page }) => {
   const GROUP_ID = "11111111-1111-1111-1111-111111111111";
   const groupKey = await generateAesGcmKeyJwk();
@@ -295,6 +296,7 @@ test("join a group from an invitation in a 1:1 chat", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e6-group.e2e.ts (E6, docs/plans/e2e-test-setup.md)
 test("send/receive messages, view a shared image and the sender's name in a group", async ({
   page,
 }) => {

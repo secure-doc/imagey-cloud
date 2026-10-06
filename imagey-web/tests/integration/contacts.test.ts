@@ -71,6 +71,7 @@ test("wrong contact email", async ({ page }) => {
   });
 });
 
+// Other side of this story with real clients: imagey-e2e/tests/e3-contact-request.e2e.ts (E3, docs/plans/e2e-test-setup.md)
 test("send contact request", async ({ page }) => {
   // Given
   await prepareMarysLogin(page);
