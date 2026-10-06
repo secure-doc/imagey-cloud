@@ -42,6 +42,7 @@ import cloud.imagey.domain.token.DecodedToken;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DeviceId;
+import cloud.imagey.domain.user.DomainName;
 import cloud.imagey.domain.user.User;
 
 // Covers AuthenticationTokenRefreshFilter: an aging trusted session cookie is slid forward on
@@ -104,6 +105,16 @@ public class AuthenticationTokenRefreshFilterTest {
 
         assertThat(refreshedToken(requestPublicKey(bound)).device()).contains(device);
         assertThat(refreshedToken(requestPublicKey(trustedCookie(TokenService.ONE_HOUR))).device()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("A guest token never triggers a cookie, even as a (forbidden) cookie")
+    void guestTokenNeverRefreshes() {
+        Cookie guest = new Cookie.Builder("token")
+            .value(tokenService.generateGuestToken(mary, new DomainName("https://secure-doc.store"), TokenService.ONE_HOUR).token())
+            .build();
+
+        assertThat(requestPublicKey(guest).getHeaderString("Set-Cookie")).isNull();
     }
 
     private DecodedToken refreshedToken(Response response) {

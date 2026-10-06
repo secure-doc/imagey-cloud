@@ -21,6 +21,8 @@ import java.util.function.Function;
 
 import jakarta.ws.rs.core.SecurityContext;
 
+import cloud.imagey.infrastructure.jakartars.UserInRoleFilter;
+
 public interface DefaultSecurityContext extends SecurityContext {
 
     static SecurityContext forPrincipal(String name, Function<String, Boolean> isUserInRole) {
@@ -31,6 +33,24 @@ public interface DefaultSecurityContext extends SecurityContext {
 
             public boolean isUserInRole(String role) {
                 return isUserInRole.apply(role);
+            }
+        };
+    }
+
+    /** Like {@link #forPrincipal}, but flagged as a guest session (see {@code UserInRoleFilter}). */
+    static SecurityContext forGuest(String name, Function<String, Boolean> isUserInRole) {
+        return new DefaultSecurityContext() {
+            public String getUserPrincipalName() {
+                return name;
+            }
+
+            public boolean isUserInRole(String role) {
+                return isUserInRole.apply(role);
+            }
+
+            @Override
+            public String getAuthenticationScheme() {
+                return UserInRoleFilter.GUEST_SCHEME;
             }
         };
     }
