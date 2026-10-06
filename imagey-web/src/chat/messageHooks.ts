@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Message } from "./Message";
 import { messageService } from "./MessageService";
 
@@ -70,5 +70,15 @@ export function usePolling(
     };
   }, [userId, ownerId, chatId, sharedKey]);
 
-  return { messages, setMessages };
+  // A sent message can already have arrived via the running long poll before
+  // the POST response does - append it only if polling hasn't added it yet.
+  const appendMessage = useCallback((message: Message) => {
+    setMessages((prev) =>
+      prev?.some((m) => m.id === message.id)
+        ? prev
+        : [...(prev ?? []), message],
+    );
+  }, []);
+
+  return { messages, appendMessage };
 }
