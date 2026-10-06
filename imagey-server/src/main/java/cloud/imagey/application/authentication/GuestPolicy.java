@@ -31,6 +31,8 @@ public final class GuestPolicy {
     private static final String BEARER = "Bearer ";
     private static final String CONTACT_REQUESTS = "contact-requests";
     private static final String DOCUMENTS = "documents";
+    private static final String FEDERATION = "federation";
+    private static final String KEY = "key";
     // {owner}/documents/{id}
     private static final int DOCUMENT_SIZE = 3;
     // {owner}/documents/{id}/messages
@@ -60,6 +62,15 @@ public final class GuestPolicy {
      */
     public static boolean isGuestRoute(String method, List<String> segments) {
         return allowsOwner(method, segments) || isMemberRoute(method, segments);
+    }
+
+    /**
+     * Whether the route is public to any origin, with or without a session: the federation key of
+     * this server (ADR 0013 A9). Only {@code GET} and {@code HEAD}, the key is read-only.
+     */
+    public static boolean isPublicRoute(String method, List<String> segments) {
+        return segments.size() == 2 && FEDERATION.equals(segments.get(0)) && KEY.equals(segments.get(1))
+            && ("GET".equals(method) || "HEAD".equals(method));
     }
 
     private static boolean isMemberRoute(String method, List<String> segments) {

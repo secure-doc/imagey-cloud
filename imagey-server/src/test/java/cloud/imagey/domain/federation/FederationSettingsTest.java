@@ -18,8 +18,13 @@ package cloud.imagey.domain.federation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import cloud.imagey.domain.user.DomainName;
 
 public class FederationSettingsTest {
 
@@ -29,5 +34,29 @@ public class FederationSettingsTest {
         assertThat(new FederationSettings(true).enabled()).isTrue();
         assertThat(new FederationSettings(false).enabled()).isFalse();
         assertThat(new FederationSettings().enabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("The defaults are an hour for the key, a minute to half a minute for the caches and 30 new domains a minute")
+    void defaults() {
+        FederationSettings settings = new FederationSettings();
+
+        assertThat(settings.keyMaxAge()).isEqualTo(Duration.ofHours(1));
+        assertThat(settings.keyCacheCeiling()).isEqualTo(Duration.ofHours(1));
+        assertThat(settings.keyCacheMin()).isEqualTo(Duration.ofMinutes(1));
+        assertThat(settings.keyCacheNegative()).isEqualTo(Duration.ofSeconds(30));
+        assertThat(settings.keyRefetchCooldown()).isEqualTo(Duration.ofMinutes(1));
+        assertThat(settings.newDomainsPerMinute()).isEqualTo(30);
+        assertThat(settings.ownDomains()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("The own domains are the hosts of the configured urls, with their port, in lower case")
+    void ownDomains() {
+        FederationSettings settings = new FederationSettings(true, List.of(
+            new DomainName("https://Imagey.cloud"), new DomainName("https://www.imagey.cloud/"),
+            new DomainName("http://localhost:8080"), new DomainName("https://imagey.cloud")));
+
+        assertThat(settings.ownDomains()).containsExactlyInAnyOrder("imagey.cloud", "www.imagey.cloud", "localhost:8080");
     }
 }

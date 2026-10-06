@@ -41,6 +41,20 @@ import cloud.imagey.application.MessageResource;
 public class GuestPolicyTest {
 
     @Test
+    @DisplayName("The federation key is the one public route, for reading only")
+    void publicRoute() {
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation", "key"))).isTrue();
+        assertThat(GuestPolicy.isPublicRoute("HEAD", List.of("federation", "key"))).isTrue();
+
+        assertThat(GuestPolicy.isPublicRoute("POST", List.of("federation", "key"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation", "other"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("other", "key"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation", "key", "x"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("u", "devices"))).isFalse();
+    }
+
+    @Test
     @DisplayName("A guest is owner of its contact requests only")
     void ownerAllowlist() {
         assertThat(GuestPolicy.allowsOwner("GET", List.of("u", "contact-requests"))).isTrue();

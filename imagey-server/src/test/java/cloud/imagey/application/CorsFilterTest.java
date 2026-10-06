@@ -44,6 +44,7 @@ public class CorsFilterTest {
     private static final String OWN = "https://imagey.cloud";
     private static final String GUEST_ROUTE = "/users/u/documents/d/messages";
     private static final String OWNER_ROUTE = "/users/u/devices";
+    private static final String PUBLIC_ROUTE = "/users/federation/key";
 
     @ConfigurationInject
     private static Meecrowave.Builder config;
@@ -105,6 +106,60 @@ public class CorsFilterTest {
     void withoutOrigin() throws Exception {
         HttpResponse<String> response = send("GET", GUEST_ROUTE, null, null);
 
+        assertThat(header(response, "Access-Control-Allow-Origin")).isNull();
+    }
+
+    @Test
+    @DisplayName("The federation key is readable from any origin: exactly one wildcard, no credentials")
+    void publicKeyForForeignOrigin() throws Exception {
+        HttpResponse<String> response = send("GET", PUBLIC_ROUTE, FOREIGN, null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().allValues("Access-Control-Allow-Origin")).containsExactly("*");
+        assertThat(header(response, "Access-Control-Allow-Credentials")).isNull();
+        assertThat(header(response, "Vary")).isEqualTo("Origin");
+    }
+
+    @Test
+    @DisplayName("The federation key of an own origin has the wildcard only, not the origin on top of it")
+    void publicKeyForOwnOrigin() throws Exception {
+        HttpResponse<String> response = send("GET", PUBLIC_ROUTE, OWN, null);
+
+        assertThat(response.headers().allValues("Access-Control-Allow-Origin")).containsExactly("*");
+        assertThat(header(response, "Access-Control-Allow-Credentials")).isNull();
+    }
+
+    @Test
+    @DisplayName("Without an Origin header, but on an own host, the federation key still has one wildcard")
+    void publicKeyWithoutOrigin() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + config.getHttpPort() + PUBLIC_ROUTE))
+            .header("X-Forwarded-Host", "imagey.cloud")
+            .header("X-Forwarded-Proto", "https")
+            .build();
+        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.headers().allValues("Access-Control-Allow-Origin")).containsExactly("*");
+    }
+
+    @Test
+    @DisplayName("A preflight for the federation key is answered, from a foreign and from an own origin")
+    void publicKeyPreflight() throws Exception {
+        for (String origin : new String[] {FOREIGN, OWN}) {
+            HttpResponse<String> response = send("OPTIONS", PUBLIC_ROUTE, origin, "GET");
+
+            assertThat(response.statusCode()).isEqualTo(204);
+            assertThat(response.headers().allValues("Access-Control-Allow-Origin")).containsExactly("*");
+            assertThat(header(response, "Access-Control-Allow-Methods")).contains("GET");
+            assertThat(header(response, "Access-Control-Allow-Credentials")).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("The wildcard is for reading the key, not for anything else on that path")
+    void publicKeyIsReadOnly() throws Exception {
+        HttpResponse<String> response = send("POST", PUBLIC_ROUTE, FOREIGN, null);
+
+        assertThat(response.statusCode()).isEqualTo(405);
         assertThat(header(response, "Access-Control-Allow-Origin")).isNull();
     }
 
