@@ -1242,6 +1242,13 @@ test("leaving a group before a member's profile finishes loading doesn't error",
     await expect(
       page.getByRole("button", { name: "person_add", exact: true }),
     ).toBeVisible();
+    // The chats page's "add contact"/"new group" actions don't belong here.
+    await expect(
+      page.getByRole("button", { name: "group_add", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "add", exact: true }),
+    ).toHaveCount(0);
 
     // Leave before alice's profile (still in flight) resolves.
     await page.getByRole("link", { name: "Chats" }).first().click();

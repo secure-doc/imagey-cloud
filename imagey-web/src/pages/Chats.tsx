@@ -26,13 +26,14 @@ import NotificationBanner from "../notification/NotificationBanner";
 export default function Chats({ id }: { id: string }) {
   return (
     <main>
-      <ChatsList id={id} />
+      <ChatsList id={id} showActions />
     </main>
   );
 }
 
 export function ChatsList({
   id,
+  showActions = false,
   className,
   activeContactUserId,
   activeGroupId,
@@ -41,6 +42,10 @@ export function ChatsList({
   registerUpdate,
 }: {
   id: string;
+  // Only the standalone chats page offers "add contact"/"new group" in the
+  // app bar - not the sidebar list embedded in a single chat (Chat.tsx,
+  // GroupChat.tsx).
+  showActions?: boolean;
   className?: string;
   activeContactUserId?: string;
   activeGroupId?: string;
@@ -101,23 +106,26 @@ export function ChatsList({
     );
 
   const actionIcons = useMemo(
-    () => [
-      <button
-        key="add-contact"
-        className="circle transparent"
-        onClick={() => setIsDialogOpen(true)}
-      >
-        <i>add</i>
-      </button>,
-      <button
-        key="new-group"
-        className="circle transparent"
-        onClick={() => setIsGroupDialogOpen(true)}
-      >
-        <i>group_add</i>
-      </button>,
-    ],
-    [],
+    () =>
+      showActions
+        ? [
+            <button
+              key="add-contact"
+              className="circle transparent"
+              onClick={() => setIsDialogOpen(true)}
+            >
+              <i>add</i>
+            </button>,
+            <button
+              key="new-group"
+              className="circle transparent"
+              onClick={() => setIsGroupDialogOpen(true)}
+            >
+              <i>group_add</i>
+            </button>,
+          ]
+        : [],
+    [showActions],
   );
   useActionIcons(actionIcons);
 
