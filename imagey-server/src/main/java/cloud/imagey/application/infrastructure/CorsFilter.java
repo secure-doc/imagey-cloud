@@ -80,9 +80,10 @@ public class CorsFilter implements ContainerResponseFilter {
 
         responseContext.getHeaders().add("Access-Control-Allow-Credentials", "true");
         responseContext.getHeaders().add(
-            "Access-Control-Allow-Headers", "origin, content-type, accept, authorization, if-match");
+            "Access-Control-Allow-Headers",
+            "origin, content-type, accept, authorization, if-match, access-path, prefer, notify");
         responseContext.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");
-        responseContext.getHeaders().add("Access-Control-Expose-Headers", "Location, ETag");
+        responseContext.getHeaders().add("Access-Control-Expose-Headers", "Location, ETag, Last-Modified");
     }
 
     // A foreign origin (ADR 0013 A4): any origin may call the guest routes, but never with
@@ -97,7 +98,8 @@ public class CorsFilter implements ContainerResponseFilter {
         responseContext.getHeaders().add("Access-Control-Allow-Origin", "*");
         responseContext.getHeaders().add("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, DELETE, OPTIONS");
         responseContext.getHeaders().add(
-            "Access-Control-Allow-Headers", "authorization, content-type, access-path, if-match");
+            "Access-Control-Allow-Headers",
+            "authorization, content-type, access-path, if-match, prefer, notify");
         responseContext.getHeaders().add("Access-Control-Expose-Headers", "ETag, Location, Last-Modified");
         responseContext.getHeaders().add("Access-Control-Max-Age", "7200");
         responseContext.getHeaders().add("Vary", "Origin");

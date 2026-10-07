@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { guestSessionStore } from "../api/GuestSessionStore";
 import { deviceRepository } from "../device/DeviceRepository";
 import EmailDialog from "./EmailDialog";
 import { AuthenticationStatus } from "./AuthenticationStatus";
@@ -118,6 +119,7 @@ export default function AuthenticationComponent({
         .catch((e) => console.warn("Failed to disable notifications", e));
     }
     deviceRepository.removeUser();
+    guestSessionStore.clear();
     setUserId(undefined);
     setEmail(undefined);
   };

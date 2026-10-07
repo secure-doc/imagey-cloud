@@ -435,7 +435,7 @@ test("new user registers via invite link and accepts the invitation", async ({
         Location: MatchersV3.string(
           "/users/35c34cb3-559d-4001-a67b-23259e45e69e/documents/joes-public-profile",
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
       }),
     );
   provider

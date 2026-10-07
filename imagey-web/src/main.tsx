@@ -15,6 +15,13 @@ import { notificationStore } from "./notification/NotificationStore";
 import { notificationKeyringService } from "./notification/NotificationKeyringService";
 import { pushSubscriptionService } from "./notification/PushSubscriptionService";
 import { pushSubscriptionRepository } from "./notification/PushSubscriptionRepository";
+import { createRemoteApiClient } from "./api/RemoteApiClient";
+import { guestSessionStore } from "./api/GuestSessionStore";
+import { repositoriesFor, setGuestTokenProvider } from "./api/repositoriesFor";
+import { createDocumentRepository } from "./document/DocumentRepository";
+import { createMessageRepository } from "./chat/MessageRepository";
+import { createContactRepository } from "./contact/ContactRepository";
+import { FederationUnavailableError } from "./api/GuestTokenProvider";
 import { createTranslator } from "./notification/notificationTranslations";
 
 declare global {
@@ -31,6 +38,16 @@ declare global {
     pushSubscriptionService: typeof pushSubscriptionService;
     pushSubscriptionRepository: typeof pushSubscriptionRepository;
     createTranslator: typeof createTranslator;
+    remoteApi: {
+      createRemoteApiClient: typeof createRemoteApiClient;
+      createDocumentRepository: typeof createDocumentRepository;
+      createMessageRepository: typeof createMessageRepository;
+      createContactRepository: typeof createContactRepository;
+      guestSessionStore: typeof guestSessionStore;
+      repositoriesFor: typeof repositoriesFor;
+      setGuestTokenProvider: typeof setGuestTokenProvider;
+      FederationUnavailableError: typeof FederationUnavailableError;
+    };
   }
 }
 
@@ -47,6 +64,16 @@ if (import.meta.env.DEV) {
   window.pushSubscriptionService = pushSubscriptionService;
   window.pushSubscriptionRepository = pushSubscriptionRepository;
   window.createTranslator = createTranslator;
+  window.remoteApi = {
+    createRemoteApiClient,
+    createDocumentRepository,
+    createMessageRepository,
+    createContactRepository,
+    guestSessionStore,
+    repositoriesFor,
+    setGuestTokenProvider,
+    FederationUnavailableError,
+  };
 }
 
 registerServiceWorker();
