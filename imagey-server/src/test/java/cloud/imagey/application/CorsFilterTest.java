@@ -57,7 +57,8 @@ public class CorsFilterTest {
         assertThat(response.statusCode()).isEqualTo(204);
         assertThat(header(response, "Access-Control-Allow-Origin")).isEqualTo("*");
         assertThat(header(response, "Access-Control-Allow-Credentials")).isNull();
-        assertThat(header(response, "Access-Control-Allow-Headers")).contains("authorization").contains("access-path");
+        assertThat(header(response, "Access-Control-Allow-Headers"))
+            .contains("authorization").contains("access-path").contains("prefer").contains("notify");
         assertThat(header(response, "Access-Control-Max-Age")).isEqualTo("7200");
         assertThat(header(response, "Vary")).isEqualTo("Origin");
     }
@@ -98,6 +99,9 @@ public class CorsFilterTest {
         assertThat(header(response, "Access-Control-Allow-Origin")).isEqualTo(OWN);
         assertThat(header(response, "Access-Control-Allow-Credentials")).isEqualTo("true");
         assertThat(response.headers().allValues("Access-Control-Allow-Origin")).hasSize(1);
+        assertThat(header(response, "Access-Control-Allow-Headers"))
+            .contains("access-path").contains("prefer").contains("notify");
+        assertThat(header(response, "Access-Control-Expose-Headers")).contains("Last-Modified");
         assertThat(header(response, "Access-Control-Max-Age")).isNull();
     }
 

@@ -769,7 +769,7 @@ export async function prepareMarysChatCreation(
         Location: MatchersV3.string(
           `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${chatId}`,
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
       }),
     );
 }
@@ -827,7 +827,7 @@ export async function prepareMarysGroupCreation(
         Location: MatchersV3.string(
           "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-group-id",
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
         ETag: MatchersV3.string('"chats-etag-with-group"'),
       }),
     );
@@ -1631,7 +1631,7 @@ export async function prepareMarysFolderCreation() {
         Location: MatchersV3.string(
           "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-folder-id",
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
       }),
     );
 }
@@ -1993,7 +1993,7 @@ export async function prepareMarysPublicProfileCreation(): Promise<void> {
         Location: MatchersV3.string(
           "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/new-public-profile-id",
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
         ETag: MatchersV3.string('"new-public-profile-etag"'),
       }),
     );
@@ -2183,7 +2183,7 @@ export async function prepareDocumentUpload(documentId: string) {
         Location: MatchersV3.string(
           `/users/d20cf443-4f96-418f-a957-c8cbef8677c3/documents/${documentId}`,
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
       }),
     );
 
@@ -3147,7 +3147,7 @@ export async function prepareBillsDocumentUpload(documentId: string) {
         Location: MatchersV3.string(
           `/users/a358c2ed-07d4-4a25-a7db-d860d5c0b895/documents/${documentId}`,
         ),
-        "Access-Control-Expose-Headers": "Location, ETag",
+        "Access-Control-Expose-Headers": "Location, ETag, Last-Modified",
       }),
     );
 
