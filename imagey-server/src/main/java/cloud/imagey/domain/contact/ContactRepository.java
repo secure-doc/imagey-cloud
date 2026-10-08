@@ -49,6 +49,11 @@ public class ContactRepository extends AbstractUserFileRepository {
             content);
     }
 
+    /** Removes the copy of the exchange with {@code contact} from the tree of {@code owner}; both copies need two calls. */
+    public void delete(User owner, User contact) {
+        delete(join(getUserPrefix(owner), CONTACT_REQUESTS, contact.id().id() + ".json"));
+    }
+
     public List<ContactExchange> findContactRequests(User user) {
         String prefix = join(getUserPrefix(user), CONTACT_REQUESTS);
         return list(prefix).keys().stream()

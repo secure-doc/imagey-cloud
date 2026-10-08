@@ -67,13 +67,14 @@ export async function newDevice(
   return { context, page: await context.newPage() };
 }
 
-// Registers a fresh user with a verification mail from Greenmail, entirely through the UI.
+// Registers a fresh user with a verification mail from Greenmail, entirely through the UI. Also
+// returns the id of the new account on that server.
 export async function registerUser(
   browser: Browser,
   name: string,
   server: Server = "a",
   email = randomEmail(name),
-): Promise<User> {
+): Promise<User & { userId: string }> {
   const device = await newDevice(browser, server);
   const { page } = device;
   const mails = await mailCount(email);
@@ -89,8 +90,11 @@ export async function registerUser(
     { after: mails },
   );
   await page.goto(link);
+  // The link redirects to the app with the id of the new account in the query (the app drops it later).
+  const userId = new URL(page.url()).searchParams.get("userId");
+  expect(userId).toBeTruthy();
   await setPassword(page, "register");
-  return { ...device, email };
+  return { ...device, email, userId: userId! };
 }
 
 // Logs `email` in on `page` through the login mail, as a user whose session is gone does.

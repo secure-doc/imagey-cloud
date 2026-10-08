@@ -18,6 +18,7 @@ package cloud.imagey.domain.federation;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -46,6 +47,7 @@ public class FederationSettings {
     private static final String CACHE_NEGATIVE = "30";
     private static final String REFETCH_COOLDOWN = "60";
     private static final String NEW_DOMAINS_PER_MINUTE = "30";
+    private static final String SESSIONS_PER_MINUTE = "30";
 
     @Inject
     @ConfigProperty(name = "federation.enabled", defaultValue = "false")
@@ -75,6 +77,16 @@ public class FederationSettings {
     @Inject
     @ConfigProperty(name = "federation.key-fetch.new-domains-per-minute", defaultValue = NEW_DOMAINS_PER_MINUTE)
     private int newDomainsPerMinute = Integer.parseInt(NEW_DOMAINS_PER_MINUTE);
+
+    // The most POST /users/federation/sessions per minute and client address
+    @Inject
+    @ConfigProperty(name = "federation.sessions.per-minute", defaultValue = SESSIONS_PER_MINUTE)
+    private int sessionsPerMinute = Integer.parseInt(SESSIONS_PER_MINUTE);
+
+    // Reverse proxies (addresses or CIDR ranges) whose X-Forwarded-For is believed, besides loopback
+    @Inject
+    @ConfigProperty(name = "federation.trusted-proxies", defaultValue = "")
+    private String trustedProxies = "";
 
     @Inject
     @ConfigProperty(name = "secure-doc.urls")
@@ -127,6 +139,22 @@ public class FederationSettings {
         return newDomainsPerMinute;
     }
 
+    /** The proxies in front of this server ({@code federation.trusted-proxies}), as addresses or CIDR ranges. */
+    public List<String> trustedProxies() {
+        return Arrays.stream(trustedProxies.split(",")).map(String::trim).filter(entry -> !entry.isEmpty()).toList();
+    }
+
+    /** The most session requests per minute one client address may make. */
+    public int sessionsPerMinute() {
+        return sessionsPerMinute;
+    }
+
+    /** The {@code host[:port]} (lower case) of a URL such as an origin, as assertions name a server. */
+    public static String domainOf(DomainName url) {
+        URI uri = URI.create(url.value());
+        return (uri.getHost() + (uri.getPort() < 0 ? "" : ":" + uri.getPort())).toLowerCase(Locale.ROOT);
+    }
+
     /**
      * The domains ({@code host[:port]}, lower case) this deployment is reached under: the hosts of
      * {@code secure-doc.urls}. One deployment serves all of them with the same identity.
@@ -138,8 +166,7 @@ public class FederationSettings {
         }
         Set<String> domains = new HashSet<>();
         for (DomainName url : urls) {
-            URI uri = URI.create(url.value());
-            domains.add((uri.getHost() + (uri.getPort() < 0 ? "" : ":" + uri.getPort())).toLowerCase(Locale.ROOT));
+            domains.add(domainOf(url));
         }
         ownDomains = Set.copyOf(domains);
         return ownDomains;

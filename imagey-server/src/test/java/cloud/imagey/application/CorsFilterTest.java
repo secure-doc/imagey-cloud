@@ -167,6 +167,20 @@ public class CorsFilterTest {
         assertThat(header(response, "Access-Control-Allow-Origin")).isNull();
     }
 
+    @Test
+    @DisplayName("The session exchange may be called with POST from any origin, and its preflight is answered")
+    void sessionsExchange() throws Exception {
+        for (String origin : new String[] {FOREIGN, OWN}) {
+            HttpResponse<String> preflight = send("OPTIONS", "/users/federation/sessions", origin, "POST");
+
+            assertThat(preflight.statusCode()).isEqualTo(204);
+            assertThat(preflight.headers().allValues("Access-Control-Allow-Origin")).containsExactly("*");
+            assertThat(header(preflight, "Access-Control-Allow-Methods")).contains("POST");
+            assertThat(header(preflight, "Access-Control-Allow-Headers")).contains("content-type");
+            assertThat(header(preflight, "Access-Control-Allow-Credentials")).isNull();
+        }
+    }
+
     private HttpResponse<String> send(String method, String path, String origin, String requestMethod)
             throws IOException, InterruptedException {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + config.getHttpPort() + path))

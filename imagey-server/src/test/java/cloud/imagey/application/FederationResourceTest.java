@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.lang.reflect.Field;
+import java.nio.file.Path;
 
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.client.Entity;
@@ -31,11 +32,14 @@ import org.apache.meecrowave.junit5.MonoMeecrowaveConfig;
 import org.apache.meecrowave.testing.ConfigurationInject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
 
 import cloud.imagey.domain.federation.FederationSettings;
+import cloud.imagey.domain.federation.FederationSigningKey;
+import cloud.imagey.infrastructure.storage.FilesystemBlobStore;
 import cloud.imagey.junit.GreenMail;
 
 @GreenMail
@@ -91,6 +95,23 @@ public class FederationResourceTest {
         settings.set(resource, new FederationSettings(false));
 
         assertThatThrownBy(resource::key).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("While federation is off the signing key is not even created")
+    void noKeyWhileDisabled(@TempDir Path root) throws Exception {
+        FederationResource resource = new FederationResource();
+        set(resource, "settings", new FederationSettings(false));
+        set(resource, "signingKey", new FederationSigningKey(new FilesystemBlobStore(root.toString()), "secret"));
+
+        assertThatThrownBy(resource::key).isInstanceOf(NotFoundException.class);
+        assertThat(root.resolve("federation/signing-key.enc")).doesNotExist();
+    }
+
+    private static void set(Object target, String name, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     private static Response get() {
