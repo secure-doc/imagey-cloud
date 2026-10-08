@@ -36,16 +36,22 @@ import org.junit.jupiter.api.Test;
 import cloud.imagey.application.ContactResource;
 import cloud.imagey.application.DeviceResource;
 import cloud.imagey.application.DocumentResource;
+import cloud.imagey.application.FederationUserResource;
 import cloud.imagey.application.MessageResource;
 
 public class GuestPolicyTest {
 
     @Test
-    @DisplayName("The federation key is the one public route, for reading only")
+    @DisplayName("The federation key (for reading) and the session exchange (POST) are the public routes")
     void publicRoute() {
         assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation", "key"))).isTrue();
         assertThat(GuestPolicy.isPublicRoute("HEAD", List.of("federation", "key"))).isTrue();
 
+        assertThat(GuestPolicy.isPublicRoute("POST", List.of("federation", "sessions"))).isTrue();
+
+        assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation", "sessions"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("PUT", List.of("federation", "sessions"))).isFalse();
+        assertThat(GuestPolicy.isPublicRoute("POST", List.of("federation", "sessions", "x"))).isFalse();
         assertThat(GuestPolicy.isPublicRoute("POST", List.of("federation", "key"))).isFalse();
         assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation"))).isFalse();
         assertThat(GuestPolicy.isPublicRoute("GET", List.of("federation", "other"))).isFalse();
@@ -116,7 +122,7 @@ public class GuestPolicyTest {
     @Test
     @DisplayName("Everything the guest may do as owner exists as an owner route, and nothing else of the owner routes is open")
     void ownerRoutesOfTheResources() {
-        for (Class<?> type : List.of(ContactResource.class, DeviceResource.class, DocumentResource.class)) {
+        for (Class<?> type : List.of(ContactResource.class, DeviceResource.class, DocumentResource.class, FederationUserResource.class)) {
             for (Method method : type.getDeclaredMethods()) {
                 RolesAllowed roles = method.getAnnotation(RolesAllowed.class);
                 if (roles == null || List.of(roles.value()).contains("member")) {

@@ -33,6 +33,7 @@ public final class GuestPolicy {
     private static final String DOCUMENTS = "documents";
     private static final String FEDERATION = "federation";
     private static final String KEY = "key";
+    private static final String SESSIONS = "sessions";
     // {owner}/documents/{id}
     private static final int DOCUMENT_SIZE = 3;
     // {owner}/documents/{id}/messages
@@ -66,11 +67,15 @@ public final class GuestPolicy {
 
     /**
      * Whether the route is public to any origin, with or without a session: the federation key of
-     * this server (ADR 0013 A9). Only {@code GET} and {@code HEAD}, the key is read-only.
+     * this server (ADR 0013 A9; only {@code GET} and {@code HEAD}, it is read-only) and the exchange of
+     * an assertion for a guest session (F4; {@code POST}, the assertion is the credential).
      */
     public static boolean isPublicRoute(String method, List<String> segments) {
-        return segments.size() == 2 && FEDERATION.equals(segments.get(0)) && KEY.equals(segments.get(1))
-            && ("GET".equals(method) || "HEAD".equals(method));
+        if (segments.size() != 2 || !FEDERATION.equals(segments.get(0))) {
+            return false;
+        }
+        return KEY.equals(segments.get(1)) && ("GET".equals(method) || "HEAD".equals(method))
+            || SESSIONS.equals(segments.get(1)) && "POST".equals(method);
     }
 
     private static boolean isMemberRoute(String method, List<String> segments) {

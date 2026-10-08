@@ -17,6 +17,8 @@ import { pushSubscriptionService } from "./notification/PushSubscriptionService"
 import { pushSubscriptionRepository } from "./notification/PushSubscriptionRepository";
 import { createRemoteApiClient } from "./api/RemoteApiClient";
 import { guestSessionStore } from "./api/GuestSessionStore";
+import { createFederationGuestTokenProvider } from "./federation/federationGuestTokenProvider";
+import { federationRepository } from "./federation/FederationRepository";
 import { repositoriesFor, setGuestTokenProvider } from "./api/repositoriesFor";
 import { createDocumentRepository } from "./document/DocumentRepository";
 import { createMessageRepository } from "./chat/MessageRepository";
@@ -38,6 +40,10 @@ declare global {
     pushSubscriptionService: typeof pushSubscriptionService;
     pushSubscriptionRepository: typeof pushSubscriptionRepository;
     createTranslator: typeof createTranslator;
+    federation: {
+      federationRepository: typeof federationRepository;
+      createFederationGuestTokenProvider: typeof createFederationGuestTokenProvider;
+    };
     remoteApi: {
       createRemoteApiClient: typeof createRemoteApiClient;
       createDocumentRepository: typeof createDocumentRepository;
@@ -64,6 +70,10 @@ if (import.meta.env.DEV) {
   window.pushSubscriptionService = pushSubscriptionService;
   window.pushSubscriptionRepository = pushSubscriptionRepository;
   window.createTranslator = createTranslator;
+  window.federation = {
+    federationRepository,
+    createFederationGuestTokenProvider,
+  };
   window.remoteApi = {
     createRemoteApiClient,
     createDocumentRepository,

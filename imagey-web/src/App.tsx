@@ -17,6 +17,8 @@ import Profile from "./pages/ProfilePage";
 import Devices from "./pages/Devices";
 import NotificationSettings from "./notification/NotificationSettings";
 import { pushSubscriptionService } from "./notification/PushSubscriptionService";
+import { setGuestTokenProvider } from "./api/repositoriesFor";
+import { createFederationGuestTokenProvider } from "./federation/federationGuestTokenProvider";
 import {
   Email,
   JsonWebKeyPairs,
@@ -106,6 +108,17 @@ function App() {
   useEffect(() => {
     ui("theme", "#1176f3");
   }, []);
+
+  // Guest sessions at other servers (ADR 0013): one provider per signed-in user, so
+  // it never hands out the assertion of somebody else.
+  useEffect(() => {
+    // Not before somebody is signed in: until then the provider is not ours to set.
+    if (user) {
+      setGuestTokenProvider(
+        createFederationGuestTokenProvider(() => ({ userId: user, email })),
+      );
+    }
+  }, [user, email]);
 
   useEffect(() => {
     if (user && keyPairs) {
