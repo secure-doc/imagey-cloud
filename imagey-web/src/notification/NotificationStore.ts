@@ -22,12 +22,118 @@ export interface NotificationDeviceRecord {
   endpoint?: string;
 }
 
-const DB_NAME = "imagey-notifications";
+const DB_NAME = "notifications";
+// Removed by migrateLegacyDb; delete this constant (and the migration) later.
+const LEGACY_DB_NAME = "imagey-notifications";
 const STORE = "devices";
 const BY_USER_INDEX = "byUser";
 const DB_VERSION = 1;
 
-function openDb(): Promise<IDBDatabase> {
+// Opens the legacy database without creating it: if it did not exist, the
+// upgrade is aborted so no empty database is left behind.
+function openLegacyDb(): Promise<IDBDatabase | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(LEGACY_DB_NAME);
+    let missing = false;
+    request.onupgradeneeded = (event) => {
+      if (event.oldVersion === 0) {
+        missing = true;
+        request.transaction?.abort();
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      missing ? resolve(undefined) : reject(request.error);
+  });
+}
+
+function resultOf<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteLegacyDb(): Promise<void> {
+  const request = indexedDB.deleteDatabase(LEGACY_DB_NAME);
+  return Promise.race([
+    resultOf(request).then(() => undefined),
+    // Another context still has it open: the deletion completes once that
+    // connection closes, but we must not wait for it. The next start retries.
+    new Promise<void>((resolve) => {
+      request.onblocked = () => {
+        console.warn("Legacy notification database is still in use");
+        resolve();
+      };
+    }),
+  ]);
+}
+
+async function copyLegacyRecords(): Promise<void> {
+  const legacy = await openLegacyDb();
+  if (!legacy) {
+    return;
+  }
+  let records: NotificationDeviceRecord[];
+  try {
+    records = await resultOf(
+      legacy.transaction(STORE, "readonly").objectStore(STORE).getAll(),
+    );
+  } finally {
+    legacy.close();
+  }
+  const db = await openNewDb();
+  try {
+    await Promise.all(
+      records.map(
+        (record) =>
+          new Promise<void>((resolve, reject) => {
+            const request = db
+              .transaction(STORE, "readwrite")
+              .objectStore(STORE)
+              .add(record);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => {
+              // Already present (e.g. migrated by the other context): keep it.
+              if (request.error?.name === "ConstraintError") {
+                event.preventDefault();
+                resolve();
+              } else {
+                reject(request.error);
+              }
+            };
+          }),
+      ),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+// Moves the records of the legacy "imagey-notifications" database into
+// "notifications", once per context (page or service worker). `add` rather
+// than `put`, so a stale copy never overwrites a newer record that the other
+// context already wrote. Errors are swallowed: the app rewrites the records on
+// start anyway.
+let migration: Promise<void> | undefined;
+function migrateLegacyDb(): Promise<void> {
+  migration ??= (async () => {
+    try {
+      await copyLegacyRecords();
+      await deleteLegacyDb();
+    } catch (error) {
+      console.warn("Failed to migrate the legacy notification database", error);
+    }
+  })();
+  return migration;
+}
+
+async function openDb(): Promise<IDBDatabase> {
+  await migrateLegacyDb();
+  return openNewDb();
+}
+
+function openNewDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
