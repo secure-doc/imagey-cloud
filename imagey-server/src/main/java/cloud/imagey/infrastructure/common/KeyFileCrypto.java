@@ -62,12 +62,11 @@ public class KeyFileCrypto {
     private static final String HMAC_SHA256 = "HmacSHA256";
     private static final byte SEP = 0x00;
     private static final int SALT_LENGTH = 16;
-    private static final byte[] SALT_LABEL = "salt".getBytes(StandardCharsets.UTF_8);
 
     // HKDF-Expand, single block: the configured secret is required to be >= 256 bits of entropy, so
     // it is used directly as the PRK. The trailing 0x01 is the HKDF block counter.
-    private static final byte[] NAME_INFO = infoBlock("imagey/keyfile-name/v1");
-    private static final byte[] WITNESS_INFO = infoBlock("imagey/keyfile-witness/v1");
+    private static final byte[] NAME_INFO = infoBlock("keyfile-name/v1");
+    private static final byte[] WITNESS_INFO = infoBlock("keyfile-witness/v1");
 
     private final SecureRandom random = new SecureRandom();
 
@@ -91,18 +90,6 @@ public class KeyFileCrypto {
     /** {@code base64url(HMAC(K_name, docId || 0x00 || kid)) + ".json"} - the on-disk key-file name. */
     public String fileName(String documentId, String kid) {
         return base64Url(mac(nameKey, concat(bytes(documentId), SEP, bytes(kid)))) + ".json";
-    }
-
-    /**
-     * {@code HMAC(K_name, "salt" || 0x00 || docId || 0x00 || kid)}, first 16 bytes. Used only by the
-     * one-off fixture migration so its output is reproducible; production writes use
-     * {@link #randomSalt()}.
-     */
-    public byte[] deterministicSalt(String documentId, String kid) {
-        byte[] full = mac(nameKey, concat(SALT_LABEL, SEP, bytes(documentId), SEP, bytes(kid)));
-        byte[] salt = new byte[SALT_LENGTH];
-        System.arraycopy(full, 0, salt, 0, SALT_LENGTH);
-        return salt;
     }
 
     /** 16 fresh random bytes. */

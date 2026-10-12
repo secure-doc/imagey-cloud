@@ -663,6 +663,161 @@ test("notificationStore.list returns every stored device record", async ({
   );
 });
 
+// Creates the legacy "imagey-notifications" database (and, optionally, the
+// current "notifications" one) directly, then reloads so the page runs the
+// migration fresh on its first store access.
+async function seedLegacyDatabases(
+  page: Page,
+  options: {
+    legacy?: { deviceId: string; userId: string; language?: string }[];
+    legacyWithoutStore?: boolean;
+    current?: { deviceId: string; userId: string; language?: string }[];
+  },
+) {
+  await page.evaluate(async (options) => {
+    const create = (
+      name: string,
+      records: { deviceId: string; userId: string }[],
+      withStore: boolean,
+    ) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(name, 1);
+        request.onupgradeneeded = () => {
+          if (!withStore) {
+            return;
+          }
+          const store = request.result.createObjectStore("devices", {
+            keyPath: "deviceId",
+          });
+          store.createIndex("byUser", "userId", { unique: false });
+          records.forEach((record) => store.add(record));
+        };
+        request.onsuccess = () => {
+          request.result.close();
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+    if (options.legacy || options.legacyWithoutStore) {
+      await create(
+        "imagey-notifications",
+        options.legacy ?? [],
+        !options.legacyWithoutStore,
+      );
+    }
+    if (options.current) {
+      await create("notifications", options.current, true);
+    }
+  }, options);
+  await page.reload();
+}
+
+const databaseNames = (page: Page) =>
+  page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));
+
+test("the legacy notification database is migrated and removed", async ({
+  page,
+}) => {
+  await clearNotificationDatabases(page);
+  await seedLegacyDatabases(page, {
+    legacy: [
+      { deviceId: "d1", userId: "u1", language: "de" },
+      { deviceId: "d2", userId: "u2" },
+    ],
+  });
+
+  const result = await page.evaluate(async () => ({
+    d1: await window.notificationStore.load("d1"),
+    u2: await window.notificationStore.loadForUser("u2"),
+  }));
+
+  expect(result.d1).toEqual({ deviceId: "d1", userId: "u1", language: "de" });
+  expect(result.u2?.deviceId).toBe("d2");
+  const names = await databaseNames(page);
+  expect(names).not.toContain("imagey-notifications");
+  expect(names).toContain("notifications");
+});
+
+test("migrating the legacy notification database keeps newer records", async ({
+  page,
+}) => {
+  await clearNotificationDatabases(page);
+  await seedLegacyDatabases(page, {
+    legacy: [{ deviceId: "d1", userId: "stale" }],
+    current: [{ deviceId: "d1", userId: "fresh" }],
+  });
+
+  const record = await page.evaluate(() => window.notificationStore.load("d1"));
+
+  expect(record?.userId).toBe("fresh");
+  expect(await databaseNames(page)).not.toContain("imagey-notifications");
+});
+
+test("no legacy notification database is created when there is none", async ({
+  page,
+}) => {
+  await clearNotificationDatabases(page);
+  await page.reload();
+
+  const count = await page.evaluate(() => window.notificationStore.count());
+
+  expect(count).toBe(0);
+  const names = await databaseNames(page);
+  expect(names).not.toContain("imagey-notifications");
+  expect(names).toContain("notifications");
+});
+
+test("a legacy notification database that is still in use does not block the store", async ({
+  page,
+}) => {
+  await clearNotificationDatabases(page);
+  await seedLegacyDatabases(page, {
+    legacy: [{ deviceId: "d1", userId: "u1" }],
+  });
+  // Keep a connection to the legacy database open so its deletion is blocked.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const request = indexedDB.open("imagey-notifications");
+        request.onsuccess = () => {
+          (
+            window as unknown as { legacyConnection: IDBDatabase }
+          ).legacyConnection = request.result;
+          resolve();
+        };
+      }),
+  );
+
+  const record = await page.evaluate(() => window.notificationStore.load("d1"));
+
+  expect(record?.userId).toBe("u1");
+});
+
+test("a broken legacy notification database does not break the store", async ({
+  page,
+}) => {
+  await clearNotificationDatabases(page);
+  await seedLegacyDatabases(page, { legacyWithoutStore: true });
+
+  const count = await page.evaluate(() => window.notificationStore.count());
+
+  expect(count).toBe(0);
+});
+
+async function clearNotificationDatabases(page: Page) {
+  await page.evaluate(async () => {
+    for (const name of ["imagey-notifications", "notifications"]) {
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase(name);
+        request.onsuccess =
+          request.onerror =
+          request.onblocked =
+            () => resolve();
+      });
+    }
+  });
+}
+
 test("a contact-accepted push shows a generic text", async ({ page }) => {
   await setupMarysDevice(page);
 

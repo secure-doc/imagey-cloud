@@ -190,9 +190,13 @@ Zusätzlich bei jedem Fall: Im Log darf kein `Failed to push-notify` oder
   „Angemeldet bleiben“, Chats öffnen. Soll: Ab dann entschlüsselte
   Vorschauen wie in T2.
 - [ ] **T4.5 Gegenprobe Datenschutz.** Im Browser: DevTools → Application →
-  IndexedDB → `imagey-notifications` → `devices`. Der Eintrag enthält
+  IndexedDB → `notifications` → `devices`. Der Eintrag enthält
   `keyring` (verschlüsselter String) und `recoveryBlob`, **keinen**
   Klartext von Namen, Schlüsseln oder Nachrichten.
+  (Die frühere Datenbank `imagey-notifications` wird beim ersten Zugriff in
+  `notifications` übernommen und gelöscht; die Migration bleibt bis nach dem
+  ersten Produktivbetrieb samt Übergangszeit im Code, siehe
+  `LEGACY_DB_NAME` in `NotificationStore.ts`.)
 
 ### T5 — Chats, die auf dem Gerät nie geöffnet wurden
 
@@ -322,7 +326,7 @@ Voraussetzung: HTTPS-URL (siehe 1.1), iOS ≥ 16.4.
 | Symptom | Prüfen |
 | --- | --- |
 | Es kommt gar nichts an | `curl …/users/push/vapid-public-key` = 200? `docker compose logs meecrowave` auf `Push service responded with status`/`Failed to send`. Container hat Internet? Ist `push-subscription.json` vorhanden? Auf dem Desktop: OS-„Nicht stören“ / Fokus-Modus aus? Chrome: `chrome://settings/content/notifications`. |
-| Notification zeigt immer „Neue Nachricht“ | Gerät mit „Angemeldet bleiben“ angemeldet? Chat vorher geöffnet bzw. Chat-Liste geladen? IndexedDB `imagey-notifications` hat `keyring` und `recoveryBlob`? Session-Cookie des Kontos gültig (Sliding-Session, `SameSite=Lax`)? Konsole des Service Workers nach `Failed to load recovery key`/`Chat not found in notification keyring` durchsuchen. |
+| Notification zeigt immer „Neue Nachricht“ | Gerät mit „Angemeldet bleiben“ angemeldet? Chat vorher geöffnet bzw. Chat-Liste geladen? IndexedDB `notifications` hat `keyring` und `recoveryBlob`? Session-Cookie des Kontos gültig (Sliding-Session, `SameSite=Lax`)? Konsole des Service Workers nach `Failed to load recovery key`/`Chat not found in notification keyring` durchsuchen. |
 | Schalter fehlt / „Installiere diese App …“ | Auf iOS nur in der installierten PWA. Desktop: Production-Build? Unter `npm run dev` gibt es keinen Service Worker. |
 | Schalter lässt sich nicht aktivieren | Browser blockiert? `GET /users/push/vapid-public-key` = 404 (Server ohne Keys)? Netzwerk: `PUT` liefert `403` → Session ist nicht an das Gerät gebunden (die App bindet und wiederholt automatisch, bei Fehler Seite neu laden). |
 | `PUT` liefert `400` | Endpoint-Host nicht in `push.allowed-hosts` (Default: FCM, Mozilla, Apple, Windows). |

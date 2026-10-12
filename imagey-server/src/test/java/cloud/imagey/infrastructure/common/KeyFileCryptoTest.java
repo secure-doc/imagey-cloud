@@ -59,7 +59,7 @@ class KeyFileCryptoTest {
     @Test
     @DisplayName("witness varies with the salt for the same (issuer, kid)")
     void witnessSaltDependent() {
-        byte[] saltA = crypto.deterministicSalt(D1, F);
+        byte[] saltA = crypto.randomSalt();
         byte[] saltB = crypto.randomSalt();
         assertThat(crypto.witness(saltA, F, F)).isNotEqualTo(crypto.witness(saltB, F, F));
     }
@@ -67,7 +67,7 @@ class KeyFileCryptoTest {
     @Test
     @DisplayName("witness is deterministic and depends on issuer and kid")
     void witnessDeterministic() {
-        byte[] salt = crypto.deterministicSalt(D1, F);
+        byte[] salt = crypto.randomSalt();
         assertThat(crypto.witness(salt, F, F)).isEqualTo(crypto.witness(salt, F, F));
         assertThat(crypto.witness(salt, F, F)).isNotEqualTo(crypto.witness(salt, D1, F));
         assertThat(crypto.witness(salt, F, F)).isNotEqualTo(crypto.witness(salt, F, D1));
@@ -84,13 +84,6 @@ class KeyFileCryptoTest {
         assertThat(crypto.witnessMatches(stored, crypto.randomSalt(), F, D1)).isFalse();
         assertThat(crypto.witnessMatches("not base64!!", salt, F, D1)).isFalse();
         assertThat(crypto.witnessMatches("", salt, F, D1)).isFalse();
-    }
-
-    @Test
-    @DisplayName("deterministicSalt is 16 bytes, reproducible, and edge-unique")
-    void deterministicSalt() {
-        assertThat(crypto.deterministicSalt(D1, F)).hasSize(16).isEqualTo(crypto.deterministicSalt(D1, F));
-        assertThat(crypto.deterministicSalt(D1, F)).isNotEqualTo(crypto.deterministicSalt(D2, F));
     }
 
     @Test
