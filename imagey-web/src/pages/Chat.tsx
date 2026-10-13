@@ -49,6 +49,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     name: string;
     revision: string;
   }>();
+  // The entry of this chat in the "chats" document (undefined until it is loaded).
+  const contact = chatsDocumentInfo?.contacts.find(
+    (c) => c.userId === contactUserId,
+  );
   const { messages, appendMessage } = usePolling(
     user,
     chat?.ownerId,
@@ -65,7 +69,8 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   } = useContactProfile(
     user,
     contactUserId,
-    publicProfiles?.[contactUserId],
+    // A contact whose profile lives on another server cannot be read from here yet (F8).
+    contact?.profileHome ? undefined : publicProfiles?.[contactUserId],
     sharedKey,
   );
 
@@ -106,9 +111,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     if (!chatsDocumentInfo || !contactProfileRevision) {
       return;
     }
-    const contact = chatsDocumentInfo.contacts.find(
-      (c) => c.userId === contactUserId,
-    );
     if (!contact || contact.profileRevision === contactProfileRevision) {
       return;
     }
@@ -142,6 +144,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
       );
   }, [
     chatsDocumentInfo,
+    contact,
     contactUserId,
     contactName,
     contactAvatarId,
@@ -153,9 +156,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   // Once the chat Document itself has loaded (the inviter created it and the
   // server has filed our key entry, ADR 0015), the contact's `pending` chat key is
   // no longer needed - remove it from the "chats" document.
-  const hasPendingChatKey = !!chatsDocumentInfo?.contacts.find(
-    (c) => c.userId === contactUserId,
-  )?.pending;
+  const hasPendingChatKey = !!contact?.pending;
   useEffect(() => {
     if (!chatsDocumentInfo || chatPending !== false || !hasPendingChatKey) {
       return;
@@ -193,9 +194,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   // than the whole chatsDocumentInfo object) keeps a profile-snapshot sync
   // (which replaces chatsDocumentInfo purely to patch one contact's cached
   // name/avatar) from re-running this effect and reloading the open chat.
-  const contact = chatsDocumentInfo?.contacts.find(
-    (c) => c.userId === contactUserId,
-  );
   const chatsDocumentKey = chatsDocumentInfo?.chatsDocumentKey;
 
   // The freshly loaded public-profile name, else the contact entry's cached
@@ -217,6 +215,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     if (!contact) {
       console.error(`No chat found for contact ${contactUserId}`);
       setKeyError(true);
+      return;
+    }
+    // The chat lives on another server: not reachable from here before F8.
+    if (contact.chatOrigin) {
       return;
     }
     setChat({ ownerId: contact.owner, chatId: contact.chatId });
@@ -317,6 +319,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         {chatsLoadFailed ? (
           <div className="padding">
             Could not load your chats right now. Retrying...
+          </div>
+        ) : contact?.chatOrigin ? (
+          <div className="padding">
+            {t("Chats with contacts on other servers will follow shortly.")}
           </div>
         ) : keyError ? (
           <div className="padding">

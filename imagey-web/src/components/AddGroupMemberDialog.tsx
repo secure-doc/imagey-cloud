@@ -4,6 +4,7 @@ import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactService } from "../contact/ContactService";
 import { groupService } from "../contact/GroupService";
 import { ContactEntry } from "../document/DocumentMetadata";
+import { isForeignContact } from "../contact/foreignContact";
 import { contactDisplayName } from "../contact/contactDisplayName";
 
 interface GroupState {
@@ -40,8 +41,9 @@ export default function AddGroupMemberDialog({
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  // Contacts on other servers cannot join a group yet (F9).
   const addableContacts = contacts.filter(
-    (c) => !group.members.includes(c.userId),
+    (c) => !group.members.includes(c.userId) && !isForeignContact(c),
   );
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(
     new Set(),

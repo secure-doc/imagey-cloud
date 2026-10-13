@@ -51,4 +51,7 @@ export type ContactRequest = {
 export type ContactInfo = {
   name?: string;
   email?: string;
+  // Only from an invitee who accepted with an account on another server (ADR 0013 A11): where
+  // their profile lives. Travels encrypted, so the chat's server does not learn it.
+  home?: { origin: string; userId: string };
 };

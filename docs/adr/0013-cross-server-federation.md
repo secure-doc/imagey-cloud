@@ -770,6 +770,52 @@ key URL or key fetch above refers to this path.
   affected). Once the domain comes from an unauthenticated assertion (decision
   4), the session endpoint needs a budget per client in addition.
 
+### A11. Invitation entry and federated accept (F7, refines A1 and A2)
+
+- **The link opens a choice page, `/join`.** `GET /invitations/{token}` only
+  checks the token and redirects to `/join#token=…&invited-by=…`. The token
+  travels in the fragment, so it reaches neither a log nor a `Referer`. The
+  page offers "create an account here" and, if this server federates (the
+  federation key answers), "I already have an account on another server".
+- **Registering is a deliberate click.** "Create an account here" is a form
+  `POST /invitations/{token}/registration` answered with the session cookie and
+  a `303` into the app. Opening the link - also by a mail client's link scanner -
+  registers nobody.
+- **The server name is checked in the browser** (normalized to an origin,
+  `https` only except `*.localhost`; the federation key is fetched without
+  credentials, 5 s timeout, must hold an EC key; the own server is refused)
+  and the invitee is redirected to
+  `https://B/federation/accept#token=…&invited-by=…&from=<origin of A>`.
+- **The invitation survives a login at B.** The app stores it in
+  `localStorage` (`imagey.pendingFederatedInvitation`) before anything else
+  runs and removes the fragment from the URL; a login by mail link ends on a
+  different URL. It is dropped after accepting, declining, cancelling, a user
+  switch and after one hour (the token is a bearer secret).
+- **The invitee redeems with the address the invitation went to** (chosen from
+  the profile's addresses, free input as a way out) and reads the inviter's
+  `contactInfo` with it. The chat key is derived with the invitee's id **at A**
+  (the guest `userId`), because the inviter derives it with `request.invitee`.
+- **The profile pointer travels encrypted.** The invitee's `contactInfo`
+  gains `home: { origin, userId }`, so A learns where the invitee's profile
+  lives only through the chat key. The server schema does not change.
+- **Chat list entries** (`ContactEntry`): `chatOrigin` (where the chat lives,
+  absent = own server), `self` (own id at `chatOrigin` and the address its
+  mapping is bound to, fed back into the guest-token provider on every load)
+  and `profileHome` (from `contactInfo.home`). Until F8, pages leave such
+  entries alone (no activity lookup, no push, no group membership, a notice
+  instead of the chat).
+- **Residual risk: the inviting server is named by the link.** Anyone can craft
+  `https://B/federation/accept#…&from=https://evil.example`. If the victim
+  continues, B mints an assertion for the chosen address addressed to that
+  server, so it learns the address and the server of the victim. A signature
+  over `from` does not help: the attacker controls the key that would verify
+  it. Only a trust anchor would (a list of known servers), which a
+  decentralised design does not have. The page therefore names the server
+  prominently and warns before anything is sent. The assertion is bound to its
+  audience (A3), so it is useless anywhere else.
+- **Key-derivation labels carry no product name** (`chat-key`,
+  `invitation-key`, `device-info`, `notification-keyring`), consistent with A9.
+
 ### Consequences of this amendment
 
 - One new endpoint on the home server (A3) and one more owner-scoped endpoint

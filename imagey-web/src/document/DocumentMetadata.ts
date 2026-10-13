@@ -120,6 +120,16 @@ export interface ContactEntry {
     chatKey: JsonWebKey;
     publicProfiles: Record<string, string>;
   };
+  // ADR 0013 A11 (F7): where the chat lives, if not on this server (origin, e.g.
+  // "https://imagey.cloud"). Absent = own server (all existing entries). Then `userId` and
+  // `owner` are UserIds ON THAT SERVER.
+  chatOrigin?: string;
+  // Own UserId on `chatOrigin` (its ForeignUserMapping) and the address that mapping is bound
+  // to - needed to renew the guest session there (rememberAddress).
+  self?: { userId: string; address: string };
+  // Where the contact's public profile lives, if not on the chat's server: the contact's home
+  // server and UserId there (from the encrypted contactInfo).
+  profileHome?: { origin: string; userId: string };
 }
 
 type DocumentMetadata =

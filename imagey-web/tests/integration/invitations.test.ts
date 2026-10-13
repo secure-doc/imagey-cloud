@@ -1,7 +1,10 @@
 import { test, expect } from "./fixtures";
 import { MatchersV3 } from "@pact-foundation/pact";
 import {
+  aesGcmDecrypt,
+  BILLS_INVITATION_CHAT_ID,
   clearLocalStorage,
+  deriveChatKey,
   generateAesGcmKeyJwk,
   loginAsMary,
   prepareMarysChatsDocumentUpdate,
@@ -20,6 +23,8 @@ import {
   prepareMarysPublicProfileShare,
   prepareMarysPublicProfileShareForFreshProfile,
   runningPactRequests,
+  MARY_ID,
+  BILL_ID,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
@@ -110,6 +115,17 @@ test("accept open invitations", async ({ page }) => {
     );
     await expect(invitationPanel).toContainText("bill@imagey.cloud");
 
+    // Records the accepting PUT to check the chat key afterwards.
+    let acceptBody: string | null = null;
+    page.on("request", (request) => {
+      if (
+        request.method() === "PUT" &&
+        request.url().includes("/contact-requests/")
+      ) {
+        acceptBody = request.postData();
+      }
+    });
+
     // Act: Accept Alice
     const acceptAliceBtn = invitationPanel.getByRole("button", {
       name: "check",
@@ -127,6 +143,26 @@ test("accept open invitations", async ({ page }) => {
     await accepted;
     await expect(invitationPanel).not.toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
+
+    // The inviter (bill) derives the same chat key from mary's public key in
+    // the accept (ADR 0015 leg 3) and reads what mary told about herself.
+    const accept = JSON.parse(acceptBody!);
+    const inviterSideKey = await deriveChatKey(
+      TestData.bill.privateMainKey!,
+      accept.publicKey,
+      BILLS_INVITATION_CHAT_ID,
+      BILL_ID,
+      MARY_ID,
+    );
+    const info = JSON.parse(
+      (
+        await aesGcmDecrypt(
+          inviterSideKey,
+          Buffer.from(accept.contactInfo, "base64"),
+        )
+      ).toString(),
+    );
+    expect(info).toEqual({ name: "Mary", email: "mary@imagey.cloud" });
   });
 });
 

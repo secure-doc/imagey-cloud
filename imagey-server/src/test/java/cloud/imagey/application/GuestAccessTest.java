@@ -20,6 +20,7 @@ import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.text;
 import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
+import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static org.apache.commons.io.FileUtils.copyDirectory;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.client.Entity;
@@ -105,6 +107,36 @@ public class GuestAccessTest {
             .delete().getStatus()).isNotIn(UNAUTHORIZED.getStatusCode(), FORBIDDEN.getStatusCode());
         assertThat(request(requests + "/" + mary.id().id()).header("Authorization", bearer)
             .put(Entity.json("{}")).getStatus()).isNotIn(UNAUTHORIZED.getStatusCode(), FORBIDDEN.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("A guest accepts an invitation with its chat key entry and contact info (F7)")
+    void guestAcceptsInvitation() throws IOException {
+        File request = new File(rootPath, laura.id().id() + "/contact-requests/" + mary.id().id() + ".json");
+        Files.writeString(request.toPath(), Files.readString(request.toPath()).replace("\"RECEIVED\"", "\"INVITED\""));
+        String requests = "users/" + laura.id().id() + "/contact-requests";
+        String bearer = bearer(guestToken(laura));
+
+        Response accepted = request(requests + "/" + mary.id().id()).header("Authorization", bearer).put(Entity.json("""
+            {
+                "status": "ACCEPTED",
+                "publicKey": {
+                    "crv": "P-256", "ext": true, "key_ops": [], "kty": "EC",
+                    "x": "nwGwyL6D7-mpGv3ahjdgFz7-FxEFSZZqWio5TvGEHWc",
+                    "y": "ubcX2RHk7odTGx6g7dgJpkhEBjzJ8YQ5q0wqtQc9Umc"
+                },
+                "sharedKey": "d3JhcHBlZC1jaGF0LWtleQ==",
+                "publicProfileId": "guest-profile",
+                "contactInfo": "ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="
+            }
+            """));
+
+        assertThat(accepted.getStatus()).isIn(OK.getStatusCode(), NO_CONTENT.getStatusCode());
+        // The invitee no longer sees an accepted request in the listing; the inviter picks it up.
+        assertThat(request(requests).header("Authorization", bearer).get().readEntity(String.class)).isEqualTo("[]");
+        String stored = Files.readString(request.toPath());
+        assertThat(stored).contains("ACCEPTED").contains("d3JhcHBlZC1jaGF0LWtleQ==")
+            .contains("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw==").contains("guest-profile");
     }
 
     @Test

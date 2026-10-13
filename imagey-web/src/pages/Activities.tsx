@@ -7,6 +7,7 @@ import { activityService } from "../activity/ActivityService";
 import { documentService } from "../document/DocumentService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
 import { ContactEntry } from "../document/DocumentMetadata";
+import { rememberForeignAddresses } from "../federation/federationProvider";
 import { ActivityType } from "../activity/Activity";
 import {
   useChatsId,
@@ -44,6 +45,7 @@ export default function Activities() {
           `Expected the chats document to be a chatList, got ${chatsDocument.type}`,
         );
       }
+      rememberForeignAddresses(chatsDocument.contacts);
       setContacts(chatsDocument.contacts);
       return true;
     } catch (e) {

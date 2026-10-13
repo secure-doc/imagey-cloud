@@ -58,7 +58,7 @@ Both parties derive the same chat key independently from their main key pairs
 chatKey = HKDF-SHA-256(
     ikm  = ECDH(ownPrivateMainKey, otherPublicMainKey),
     salt = <empty>,
-    info = "imagey-chat-key" 0x00 chatId 0x00 inviterUserId 0x00 inviteeUserId)
+    info = "chat-key" 0x00 chatId 0x00 inviterUserId 0x00 inviteeUserId)
   -> AES-GCM-256, extractable
 ```
 

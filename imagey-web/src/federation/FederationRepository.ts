@@ -38,6 +38,31 @@ export const federationRepository = {
     return (await response.json()).assertion;
   },
 
+  // Own server, cookie session: the id `address` at server `domain` ("host[:port]") has on this
+  // server (A6), created if it has none yet - the UserId under which a foreign user is known
+  // here, e.g. to share a document with them.
+  registerForeignPrincipal: async (
+    userId: UserId,
+    domain: string,
+    address: Email,
+  ): Promise<UserId> => {
+    const response = await localApiClient.fetch(
+      `/users/${userId}/foreign-principals`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ domain, address }),
+      },
+    );
+    if (!response.ok) {
+      throw new HttpError(response.status);
+    }
+    return (await response.json()).userId;
+  },
+
   // Foreign server, no credentials and no Authorization: the assertion is the
   // credential. The invitation token is sent on first contact only. Every refusal is
   // the same 401 (nothing to tell a caller more), 429 means "too fast".

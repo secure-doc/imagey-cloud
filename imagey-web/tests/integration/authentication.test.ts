@@ -296,10 +296,11 @@ test("new user registers via invite link and accepts the invitation", async ({
   // AuthenticationService.register / InvitationFilter).
 
   // The emailed link itself is a real provider interaction: GET
-  // /invitations/<token> answers 302 back into the SPA with just the inviter
-  // and email as query params. Pinning it here (rather than hand-building the
-  // redirect URL) keeps the server responsible for the redirect shape - see
-  // InvitationFilter / ContactService.invite.
+  // /invitations/<token> answers 302 to the choice page /join, which carries
+  // token and inviter in the fragment. Pinning it here keeps the server
+  // responsible for the redirect shape - see InvitationFilter /
+  // ContactService.invite. The form POST that follows ("create an account
+  // here") is a navigation answered by the server tests and E2E (E2).
   provider
     .addInteraction()
     .given("mary has invited joe")
@@ -310,12 +311,13 @@ test("new user registers via invite link and accepts the invitation", async ({
         "/invitations/[^/?]+",
         "/invitations/pact-invitation-token",
       ),
+      (r) => r.query({ "invited-by": "d20cf443-4f96-418f-a957-c8cbef8677c3" }),
     )
     .willRespondWith(302, (r) =>
       r.headers({
         Location: MatchersV3.regex(
-          "/\\?email=joe@imagey\\.cloud&userId=35c34cb3-559d-4001-a67b-23259e45e69e&inviter=d20cf443-4f96-418f-a957-c8cbef8677c3",
-          `/?email=joe@imagey.cloud&userId=35c34cb3-559d-4001-a67b-23259e45e69e&inviter=d20cf443-4f96-418f-a957-c8cbef8677c3`,
+          "/join#token=[\\w.-]+&invited-by=d20cf443-4f96-418f-a957-c8cbef8677c3",
+          "/join#token=pact-invitation-token&invited-by=d20cf443-4f96-418f-a957-c8cbef8677c3",
         ),
       }),
     );
@@ -577,9 +579,36 @@ test("new user registers via invite link and accepts the invitation", async ({
 
       // Follow the emailed link; the mock server answers 302 and the browser
       // lands on the SPA with ?email/?inviter set.
-      await page.goto("/invitations/pact-invitation-token");
+      // The own server does not federate here, so the choice has one option.
+      await page.route("**/users/federation/key", (route) =>
+        route.fulfill({ status: 404 }),
+      );
+      // The registration form POST is answered like the server does (303
+      // with the session cookie and the redirect into the SPA).
+      let registrationBody: string | null = null;
+      await page.route("**/invitations/*/registration", (route) => {
+        registrationBody = route.request().postData();
+        return route.fulfill({
+          status: 303,
+          headers: {
+            Location:
+              "/?email=joe@imagey.cloud&userId=35c34cb3-559d-4001-a67b-23259e45e69e&inviter=d20cf443-4f96-418f-a957-c8cbef8677c3",
+          },
+        });
+      });
+
+      await page.goto(
+        "/invitations/pact-invitation-token?invited-by=d20cf443-4f96-418f-a957-c8cbef8677c3",
+      );
+      await expect(page).toHaveURL(/\/join#token=pact-invitation-token/);
+      await page
+        .getByRole("button", { name: "Create an account here" })
+        .click();
       await expect(page).toHaveURL(
         /inviter=d20cf443-4f96-418f-a957-c8cbef8677c3/,
+      );
+      expect(registrationBody).toBe(
+        "invited-by=d20cf443-4f96-418f-a957-c8cbef8677c3",
       );
 
       const passwordInput = page.getByLabel("Password", { exact: true });

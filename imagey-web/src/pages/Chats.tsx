@@ -24,6 +24,7 @@ import { notificationKeyringService } from "../notification/NotificationKeyringS
 import NotificationBanner from "../notification/NotificationBanner";
 import { useLastActivity } from "../chat/messageHooks";
 import { formatChatListDate } from "../chat/messageTime";
+import { rememberForeignAddresses } from "../federation/federationProvider";
 
 export default function Chats({ id }: { id: string }) {
   return (
@@ -159,6 +160,7 @@ export function ChatsList({
         );
       }
       onLoadError?.(false);
+      rememberForeignAddresses(loaded.contacts);
       setChatsDocument({
         contacts: loaded.contacts,
         groups: loaded.groups ?? [],
@@ -537,11 +539,14 @@ function ContactListItem({
             <div>{contact.email}</div>
           )}
         </div>
-        <LastActivityLabel
-          owner={contact.owner}
-          chatId={contact.chatId}
-          liveActivity={liveActivity}
-        />
+        {/* No push or polling across servers yet (F8, ADR 0013 A8). */}
+        {!contact.chatOrigin && (
+          <LastActivityLabel
+            owner={contact.owner}
+            chatId={contact.chatId}
+            liveActivity={liveActivity}
+          />
+        )}
       </NavLink>
     </li>
   );

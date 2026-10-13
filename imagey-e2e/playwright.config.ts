@@ -4,6 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // scripts/run-e2e.mjs starts the Docker stack and sets E2E_BASE_URL (server A), E2E_BASE_URL_B (server B) and E2E_MAIL_URL.
 export default defineConfig({
   testDir: "tests",
+  globalSetup: "./tests/support/global-setup.ts",
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

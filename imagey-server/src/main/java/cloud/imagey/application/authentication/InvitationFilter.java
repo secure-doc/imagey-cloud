@@ -17,9 +17,15 @@
 package cloud.imagey.application.authentication;
 
 import static cloud.imagey.domain.token.TokenService.ONE_HOUR;
+import static jakarta.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 import static jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN;
+import static jakarta.servlet.http.HttpServletResponse.SC_METHOD_NOT_ALLOWED;
+import static jakarta.servlet.http.HttpServletResponse.SC_NOT_FOUND;
+import static jakarta.servlet.http.HttpServletResponse.SC_SEE_OTHER;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -59,22 +65,55 @@ public class InvitationFilter extends HttpFilter {
     @Override
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        LOG.info("Registration via invitation started");
-        Token invitationToken = extractToken(request.getRequestURI());
+        String[] segments = segmentsAfterPrefix(request.getRequestURI());
+        boolean registration = segments.length == 2 && "registration".equals(segments[1]);
+        if (!isKnownRoute(request, response, segments.length, registration)) {
+            return;
+        }
+        Token invitationToken = new Token(segments[0]);
         Optional<DecodedToken> decoded = tokenService.decode(invitationToken);
+        String invitedBy = request.getParameter("invited-by");
         if (decoded.isEmpty() || !decoded.get().isOfType(TokenType.INVITATION)) {
             LOG.warn("Invalid invitation token");
             response.sendError(SC_FORBIDDEN);
-            return;
+        } else if (invitedBy == null || invitedBy.isBlank()) {
+            response.sendError(SC_BAD_REQUEST);
+        } else if (registration) {
+            register(response, new Email(decoded.get().jwt().getSubject()), new UserId(invitedBy));
+        } else {
+            // Opening the link (also by a mail client's link scanner) creates no account: the invitee
+            // chooses first where to register. The token travels in the fragment, so it neither reaches
+            // an access log nor a Referer header of the SPA route.
+            response.sendRedirect("/join#token=" + encode(invitationToken.token()) + "&invited-by=" + encode(invitedBy));
         }
-        Email email = new Email(decoded.get().jwt().getSubject());
+    }
+
+    // GET /invitations/{token} and POST /invitations/{token}/registration; anything else is answered here.
+    private boolean isKnownRoute(HttpServletRequest request, HttpServletResponse response, int segments, boolean registration)
+            throws IOException {
+        if (segments != 1 && !registration) {
+            response.sendError(SC_NOT_FOUND);
+            return false;
+        }
+        String allowed = registration ? "POST" : "GET";
+        if (!allowed.equals(request.getMethod())) {
+            response.setHeader("Allow", allowed);
+            response.sendError(SC_METHOD_NOT_ALLOWED);
+            return false;
+        }
+        return true;
+    }
+
+    private void register(HttpServletResponse response, Email email, UserId inviter) throws IOException {
+        LOG.info("Registration via invitation started");
         UserId userId = userMappingService.registerUser(email);
         User user = new User(userId);
-        UserId inviter = new UserId(request.getParameter("invited-by"));
         userService.create(user);
         Token authenticationToken = tokenService.generateAuthenticationToken(user, ONE_HOUR);
         response.setHeader("Set-Cookie", tokenService.sessionAuthenticationCookie(authenticationToken));
-        response.sendRedirect(buildRedirect(email, userId, inviter));
+        // 303: the browser follows a form POST with a GET.
+        response.setStatus(SC_SEE_OTHER);
+        response.setHeader("Location", buildRedirect(email, userId, inviter));
         LOG.info("User registered");
     }
 
@@ -82,11 +121,16 @@ public class InvitationFilter extends HttpFilter {
     // public main key off the invitee's own contact-request entry
     // (GET /users/{invitee}/contact-requests) - it does not travel in this URL.
     private String buildRedirect(Email email, UserId userId, UserId inviter) {
-        return "/?email=" + email.address() + "&userId=" + userId.id() + "&inviter=" + inviter.id();
+        return "/?email=" + encode(email.address()) + "&userId=" + encode(userId.id()) + "&inviter=" + encode(inviter.id());
     }
 
-    private Token extractToken(String requestUri) {
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    // "/invitations/{token}" -> [token], "/invitations/{token}/registration" -> [token, "registration"].
+    private String[] segmentsAfterPrefix(String requestUri) {
         String invitationPart = "/invitations/";
-        return new Token(requestUri.substring(requestUri.indexOf(invitationPart) + invitationPart.length()));
+        return requestUri.substring(requestUri.indexOf(invitationPart) + invitationPart.length()).split("/", -1);
     }
 }
