@@ -39,7 +39,13 @@ interface SharedDocumentMessageProps {
   // received in a group's own conversation rather than a 1:1 chat. A non-
   // owner reader then reaches the document through a two-hop Access-Path
   // (FolderContext.buildGroupAccessPath) instead of the chat's direct grant.
-  group?: { groupId: string; groupOwnerId: string; groupKey: JsonWebKey };
+  group?: {
+    groupId: string;
+    groupOwnerId: string;
+    groupKey: JsonWebKey;
+    // The own id on the group's server (F9), the default is the own id here.
+    selfId?: string;
+  };
 }
 
 // The detail page's query parameter for a document on another server (empty for the own one).
@@ -116,7 +122,7 @@ export function SharedDocumentMessage({
     ? chatAccessPath
     : group
       ? buildGroupAccessPath(
-          user,
+          group.selfId ?? user,
           documentId,
           owner,
           group.groupId,

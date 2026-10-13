@@ -29,7 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Base64;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.client.Entity;
@@ -48,6 +50,11 @@ import org.junit.jupiter.api.Test;
 
 import cloud.imagey.UserFactory;
 import cloud.imagey.domain.document.DocumentId;
+import cloud.imagey.domain.document.DocumentRepository;
+import cloud.imagey.domain.encryption.EncryptedContent;
+import cloud.imagey.domain.encryption.EncryptedSharedKey;
+import cloud.imagey.domain.encryption.EncryptedSymmetricKey;
+import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.token.Token;
 import cloud.imagey.domain.token.TokenService;
 import cloud.imagey.domain.user.DomainName;
@@ -70,9 +77,12 @@ public class GuestAccessTest {
     private String rootPath;
     @Inject
     private TokenService tokenService;
+    @Inject
+    private DocumentRepository documentRepository;
 
     private final User mary = UserFactory.mary();
     private final User laura = UserFactory.laura();
+    private final User joe = UserFactory.joe();
 
     @BeforeEach
     void initializeState() throws IOException {
@@ -137,6 +147,38 @@ public class GuestAccessTest {
         String stored = Files.readString(request.toPath());
         assertThat(stored).contains("ACCEPTED").contains("d3JhcHBlZC1jaGF0LWtleQ==")
             .contains("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw==").contains("guest-profile");
+    }
+
+    @Test
+    @DisplayName("A guest member of a group reads a document of a local member shared into it by Access-Path (F9)")
+    void guestReadsDocumentSharedIntoGroup() {
+        // The group is joe's document, laura (the guest) has a direct grant on it; mary shared a
+        // document into the group with one key entry {issuer: joe, kid: group}.
+        DocumentId group = new DocumentId("group-f9");
+        DocumentId shared = new DocumentId("shared-f9");
+        documentRepository.persist(joe, group, new EncryptedContent("group".getBytes()));
+        documentRepository.create(joe, group, sharedKey(laura, laura.id().id(), "Z3JvdXA="));
+        documentRepository.persist(mary, shared, new EncryptedContent("shared".getBytes()));
+        documentRepository.create(mary, shared, sharedKey(joe, group.id(), "c2hhcmVk"));
+        String document = "users/" + mary.id().id() + "/documents/" + shared.id();
+        String bearer = bearer(guestToken(laura));
+        String accessPath = accessPath("""
+            {"chain":[
+                {"doc":"%s","owner":"%s","wrappedBy":"%s"},
+                {"doc":"%s","owner":"%s","wrappedBy":"%s"}
+            ]}
+            """.formatted(shared.id(), mary.id().id(), group.id(), group.id(), joe.id().id(), group.id()));
+
+        // Without the chain, or for someone who is no member of the group, there is no access (checked
+        // first: a granted access is cached for the document and caller).
+        assertThat(request(document).header("Authorization", bearer).get().getStatus())
+            .isEqualTo(FORBIDDEN.getStatusCode());
+        assertThat(request(document).header("Authorization", bearer(guestToken(UserFactory.bill())))
+            .header("Access-Path", accessPath).get().getStatus()).isEqualTo(FORBIDDEN.getStatusCode());
+
+        Response withPath = request(document).header("Authorization", bearer).header("Access-Path", accessPath).get();
+
+        assertThat(withPath.getStatus()).isEqualTo(OK.getStatusCode());
     }
 
     @Test
@@ -211,6 +253,14 @@ public class GuestAccessTest {
             .header("Authorization", bearer(guestToken(laura))).get();
 
         assertThat(response.getHeaderString("Set-Cookie")).isNull();
+    }
+
+    private static EncryptedSharedKey sharedKey(User issuer, String kid, String wrapped) {
+        return new EncryptedSharedKey(issuer, new Kid(kid), new EncryptedSymmetricKey(wrapped));
+    }
+
+    private static String accessPath(String json) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes(StandardCharsets.UTF_8));
     }
 
     private Token guestToken(User user) {

@@ -1,6 +1,9 @@
 import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
-import { messageService } from "../chat/MessageService";
+import { repositoriesFor } from "../api/repositoriesFor";
+import { servicesFor } from "../api/servicesFor";
+import { federationProvider } from "../federation/federationProvider";
+import { placeOf } from "../federation/whereabouts";
 import { BaseMetadata, GroupEntry } from "../document/DocumentMetadata";
 import {
   documentRepository,
@@ -24,10 +27,30 @@ const MAX_GROUP_UPDATE_RETRIES = 3;
 // updateGroupMetadata below for why this can't go through updateChatList.
 const MAX_GROUP_CREATE_RETRIES = 3;
 
+// Thrown when a document is to be shared into a group on another server (ADR 0019
+// amendment, F9): only the group's own server can check the two-hop Access-Path, and a guest
+// has no tree there to put the key entry in.
+// Thrown when joining a group on another server would need another address than the one this
+// account is already known by there (only one is kept per server).
+export class OtherAddressInUseError extends Error {
+  constructor(origin: string) {
+    super("This account is already known by another address at " + origin);
+    this.name = "OtherAddressInUseError";
+  }
+}
+
+export class FederatedGroupShareUnsupported extends Error {
+  constructor() {
+    super("Sharing into a group on another server is not supported");
+    this.name = "FederatedGroupShareUnsupported";
+  }
+}
+
 type GroupMetadataState = {
   name: string;
   members: string[];
   publicProfiles: Record<string, string>;
+  memberNames?: Record<string, string>;
 };
 
 type GroupDocumentState = {
@@ -50,7 +73,8 @@ function appendGroup(existing: GroupEntry[], entry: GroupEntry): GroupEntry[] {
 // documentService.loadDocument key round-trip entirely (there is no new key
 // to fetch: the caller already holds it). `ownerId` is whose tree the group
 // lives in - always the caller for the owner, always someone else for a
-// member. Used both for GroupChat.tsx's initial full load (name/members/
+// member. `origin` is the group's server if it is not the own one (F9): then the member reads it
+// as a guest. Used both for GroupChat.tsx's initial full load (name/members/
 // publicProfiles) and, for the owner, by updateGroupMetadata's 412 retry
 // below (ContactService.reloadChatList is the equivalent for the "chats"
 // document).
@@ -58,11 +82,11 @@ export async function loadGroupContent(
   ownerId: string,
   groupId: string,
   groupKey: JsonWebKey,
+  origin?: string,
 ): Promise<{ metadata: GroupMetadataState; revision: string | null }> {
-  const { content, etag } = await documentRepository.loadDocument(
-    ownerId,
-    groupId,
-  );
+  const { content, etag } = await repositoriesFor(
+    origin,
+  ).documents.loadDocument(ownerId, groupId);
   const decrypted = await cryptoService.decryptDocument(groupKey, content);
   const payload = JSON.parse(new TextDecoder().decode(decrypted));
   return {
@@ -70,6 +94,7 @@ export async function loadGroupContent(
       name: payload.name,
       members: payload.members ?? [],
       publicProfiles: payload.publicProfiles ?? {},
+      ...(payload.memberNames ? { memberNames: payload.memberNames } : {}),
     },
     revision: etag,
   };
@@ -87,6 +112,7 @@ async function updateGroupMetadata(
     name: group.name,
     members: group.members,
     publicProfiles: group.publicProfiles,
+    memberNames: group.memberNames,
   };
   let currentRevision = group.revision;
   for (let attempt = 1; attempt <= MAX_GROUP_UPDATE_RETRIES; attempt++) {
@@ -101,6 +127,7 @@ async function updateGroupMetadata(
           type: "group",
           members: updated.members,
           publicProfiles: updated.publicProfiles,
+          ...(updated.memberNames ? { memberNames: updated.memberNames } : {}),
         },
         currentRevision,
       );
@@ -260,9 +287,20 @@ export const groupService = {
       // 1:1 chat's metadata (ContactService.loadChatKey) - absent members show
       // as "Unknown member" until they share it themselves.
       publicProfileId?: string;
-      // The 1:1 chat the invitation is posted into.
+      // The member's display name, for a member whose profile is not reachable through the
+      // group (F9: the contact lives on another server) - then no `publicProfileId` is given.
+      memberName?: string;
+      // The 1:1 chat the invitation is posted into, and the server it lives on if that is not
+      // the own one (then the invitation says where the group is) with the own id there.
       chatOwnerId: string;
       chatId: string;
+      chatOrigin?: string;
+      chatSelfId?: string;
+      // The address the member is registered under here, told in the invitation if the chat is
+      // elsewhere: the guest session on this server is bound to it.
+      memberAddress?: string;
+      // The id the invitation's push goes to (the contact on the chat's server).
+      notifyId?: string;
       // The 1:1 chat's own key (ContactService.loadChatKey) - both the
       // transport for the group key and, once filed as a key entry under the
       // group, the member's direct grant (ADR 0009).
@@ -280,6 +318,9 @@ export const groupService = {
             [member.userId]: member.publicProfileId,
           }
         : current.publicProfiles,
+      memberNames: member.memberName
+        ? { ...current.memberNames, [member.userId]: member.memberName }
+        : current.memberNames,
     }));
     await documentService.shareDocument(
       userId,
@@ -287,8 +328,8 @@ export const groupService = {
       member.userId,
       member.pairChatKey,
     );
-    await messageService.sendEncryptedMessage(
-      userId,
+    await servicesFor(member.chatOrigin).messages.sendEncryptedMessage(
+      member.chatSelfId ?? userId,
       member.chatOwnerId,
       member.chatId,
       JSON.stringify({
@@ -296,9 +337,18 @@ export const groupService = {
         groupId: group.documentId,
         owner: userId,
         name: updated.name,
+        // The group stays on our server: say so if that is not the chat's.
+        ...(member.chatOrigin
+          ? {
+              origin: window.location.origin,
+              ...(member.memberAddress
+                ? { address: member.memberAddress }
+                : {}),
+            }
+          : {}),
       }),
       member.pairChatKey,
-      [member.userId],
+      [member.notifyId ?? member.userId],
     );
     return updated;
   },
@@ -346,16 +396,21 @@ export const groupService = {
     groupOwnerId: string,
     groupId: string,
     pairChatKey: JsonWebKey,
+    // The group's server, if it is not the own one (F9): our key entry is filed under our id
+    // THERE.
+    origin?: string,
   ): Promise<{
     key: JsonWebKey;
     name: string;
     members: string[];
     publicProfiles: Record<string, string>;
+    place: Awaited<ReturnType<typeof placeOf>>;
   }> => {
-    const group = await documentService.loadDocument(
+    const place = await placeOf(origin, userId);
+    const group = await servicesFor(origin).documents.loadDocument(
       groupOwnerId,
       groupId,
-      userId,
+      place.selfId,
       pairChatKey,
     );
     if (group.type !== "group") {
@@ -366,6 +421,7 @@ export const groupService = {
       name: group.name,
       members: group.members,
       publicProfiles: group.publicProfiles,
+      place,
     };
   },
 
@@ -380,19 +436,56 @@ export const groupService = {
     groupId: string,
     pairChatKey: JsonWebKey,
     chatsDocument: ChatsDocumentState,
-    ownPublicProfile: PublicProfile,
+    ownPublicProfile: PublicProfile | undefined,
+    // The group's server, if it is not the own one (F9), and the address the own account is
+    // known by there, if known: a member from another server joins as a guest, and does not
+    // share the own profile into the group (its other members cannot reach it).
+    origin?: string,
+    address?: string,
   ): Promise<{ list: ChatList; revision: string | null }> => {
-    const group = await groupService.loadGroupKey(
-      userId,
-      groupOwnerId,
-      groupId,
-      pairChatKey,
-    );
+    // The guest session is bound to this address: it is remembered for the first access (and
+    // taken back if that fails), unless the account is known by another one there already.
+    let remembered = false;
+    if (origin && address) {
+      const provider = federationProvider();
+      const inUse = provider.addressInUse(origin);
+      if (inUse && inUse !== address) {
+        throw new OtherAddressInUseError(origin);
+      }
+      if (!inUse) {
+        provider.rememberAddress(origin, address);
+        remembered = true;
+      }
+    }
+    let group;
+    try {
+      group = await groupService.loadGroupKey(
+        userId,
+        groupOwnerId,
+        groupId,
+        pairChatKey,
+        origin,
+      );
+    } catch (e) {
+      if (remembered && origin) {
+        federationProvider().forgetAddress(origin);
+      }
+      throw e;
+    }
     const groupEntry: GroupEntry = {
       groupId,
       owner: groupOwnerId,
       name: group.name,
       groupKey: group.key,
+      ...(group.place.origin
+        ? {
+            chatOrigin: group.place.origin,
+            self: {
+              userId: group.place.selfId,
+              ...(address ? { address } : {}),
+            },
+          }
+        : {}),
     };
     const { list, revision } = await updateChatList(
       userId,
@@ -402,14 +495,16 @@ export const groupService = {
         groups: appendGroup(current.groups, groupEntry),
       }),
     );
-    await documentService.shareDocument(
-      userId,
-      { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
-      userId,
-      group.key,
-      groupOwnerId,
-      groupId,
-    );
+    if (!group.place.origin && ownPublicProfile) {
+      await documentService.shareDocument(
+        userId,
+        { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
+        userId,
+        group.key,
+        groupOwnerId,
+        groupId,
+      );
+    }
     return { list, revision };
   },
 
@@ -423,13 +518,19 @@ export const groupService = {
     groupOwnerId: string,
     groupId: string,
     groupKey: JsonWebKey,
-  ): Promise<void> =>
-    documentService.shareDocument(
+    // The group's server, if it is not the own one: sharing is not possible there (F9).
+    origin?: string,
+  ): Promise<void> => {
+    if (origin) {
+      throw new FederatedGroupShareUnsupported();
+    }
+    return documentService.shareDocument(
       userId,
       document,
       userId,
       groupKey,
       groupOwnerId,
       groupId,
-    ),
+    );
+  },
 };

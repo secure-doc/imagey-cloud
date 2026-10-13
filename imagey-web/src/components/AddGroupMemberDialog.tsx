@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import { contactService } from "../contact/ContactService";
 import { groupService } from "../contact/GroupService";
 import { ContactEntry } from "../document/DocumentMetadata";
-import { isForeignContact } from "../contact/foreignContact";
+import {
+  isAddableToGroup,
+  knownMemberId,
+  memberOf,
+} from "../contact/groupMember";
 import { contactDisplayName } from "../contact/contactDisplayName";
 
 interface GroupState {
@@ -14,6 +17,7 @@ interface GroupState {
   name: string;
   members: string[];
   publicProfiles: Record<string, string>;
+  memberNames?: Record<string, string>;
 }
 
 interface AddGroupMemberDialogProps {
@@ -41,15 +45,16 @@ export default function AddGroupMemberDialog({
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
-  // Contacts on other servers cannot join a group yet (F9).
-  const addableContacts = contacts.filter(
-    (c) => !group.members.includes(c.userId) && !isForeignContact(c),
-  );
+  const addableContacts = contacts.filter((c) => {
+    const memberId = knownMemberId(c);
+    return !memberId || !group.members.includes(memberId);
+  });
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(
     new Set(),
   );
   const [isAdding, setIsAdding] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [alreadyMembers, setAlreadyMembers] = useState<string[]>([]);
 
   const toggleContact = (contactUserId: string) => {
     setSelectedContacts((prev) => {
@@ -66,6 +71,8 @@ export default function AddGroupMemberDialog({
   const handleAdd = async () => {
     setIsAdding(true);
     setFailed(false);
+    setAlreadyMembers([]);
+    const skipped: ContactEntry[] = [];
     let current = group;
     try {
       for (const contactUserId of selectedContacts) {
@@ -73,29 +80,34 @@ export default function AddGroupMemberDialog({
         if (!contact) {
           continue;
         }
-        const { key: pairChatKey, publicProfiles } =
-          await contactService.loadChatKey(
-            user,
-            contact,
-            chatsId,
-            chatsDocumentKey,
-          );
-        const updated = await groupService.addMember(user, current, {
-          userId: contactUserId,
-          publicProfileId: publicProfiles[contactUserId],
-          chatOwnerId: contact.owner,
-          chatId: contact.chatId,
-          pairChatKey,
-        });
+        const member = await memberOf(user, contact, chatsId, chatsDocumentKey);
+        // A contact on another server shows their id here only once it is looked up: one who
+        // is a member already is neither shared with nor invited a second time.
+        if (current.members.includes(member.userId)) {
+          skipped.push(contact);
+          continue;
+        }
+        const updated = await groupService.addMember(user, current, member);
         current = {
           ...current,
           members: updated.members,
           publicProfiles: updated.publicProfiles,
+          memberNames: updated.memberNames,
           revision: updated.revision ?? current.revision,
         };
       }
       onAdded(current);
-      onClose();
+      if (skipped.length === 0) {
+        onClose();
+      } else {
+        // Say why nothing (or not everything) happened, and leave the rest to choose.
+        setAlreadyMembers(
+          skipped.map((c) =>
+            contactDisplayName(c.userId, c, t("Unknown contact")),
+          ),
+        );
+        setSelectedContacts(new Set());
+      }
     } catch (e) {
       console.error("Failed to add group member", e);
       onAdded(current);
@@ -121,11 +133,16 @@ export default function AddGroupMemberDialog({
                 key={contact.userId}
                 className="row padding"
                 style={{ cursor: "pointer" }}
+                title={
+                  isAddableToGroup(contact)
+                    ? undefined
+                    : t("The address of this contact is missing")
+                }
               >
                 <input
                   type="checkbox"
                   checked={selectedContacts.has(contact.userId)}
-                  disabled={isAdding}
+                  disabled={isAdding || !isAddableToGroup(contact)}
                   onChange={() => toggleContact(contact.userId)}
                 />
                 <span>
@@ -137,6 +154,13 @@ export default function AddGroupMemberDialog({
                 </span>
               </label>
             ))}
+          </div>
+        )}
+        {alreadyMembers.length > 0 && (
+          <div className="padding">
+            {t("Already a member: {{names}}", {
+              names: alreadyMembers.join(", "),
+            })}
           </div>
         )}
         {failed && (

@@ -189,7 +189,8 @@ export const notificationKeyringService = {
     }
 
     for (const group of chatList.groups) {
-      if (keyring.chats[group.groupId]) {
+      // No push across servers (ADR 0013 A8), as for the contacts above.
+      if (group.chatOrigin || keyring.chats[group.groupId]) {
         continue;
       }
       try {

@@ -26,13 +26,21 @@ export interface ConversationViewProps {
   notify: string[];
   share: (document: DocumentMetadata) => Promise<void>;
   shareDisabled?: boolean;
+  shareDisabledHint?: string;
   // The 1:1 chat's counterpart - passed through to SharedDocumentMessage so
   // it can open the image detail view. Omitted for a group conversation.
   contactUserId?: string;
   // Group context (ADR 0019 decision 4), passed through to
   // SharedDocumentMessage for its Access-Path resolution - omitted for a 1:1
   // chat.
-  group?: { groupId: string; groupOwnerId: string; groupKey: JsonWebKey };
+  group?: {
+    groupId: string;
+    groupOwnerId: string;
+    groupKey: JsonWebKey;
+    // The own id on the group's server (`chatOrigin`) - the sharer id the Access-Path is
+    // relative to; the default is `userId`.
+    selfId?: string;
+  };
   // Renders a "group-invitation" message - only ever posted into a 1:1 chat,
   // so omitted by a group's own conversation. A message that parses as an
   // invitation but has no renderer (should not happen) falls back to plain
@@ -41,6 +49,8 @@ export interface ConversationViewProps {
     groupId: string;
     owner: string;
     name: string;
+    origin?: string | null;
+    address?: string;
   }) => ReactNode;
   // Renders a sender label (name/avatar) above someone else's message - only
   // used in a group conversation (see useGroupMemberProfiles); a 1:1 chat has
@@ -66,6 +76,7 @@ export function ConversationView({
   notify,
   share,
   shareDisabled,
+  shareDisabledHint,
   contactUserId,
   group,
   renderInvitation,
@@ -159,6 +170,7 @@ export function ConversationView({
         notify={notify}
         share={share}
         shareDisabled={shareDisabled}
+        shareDisabledHint={shareDisabledHint}
       />
     </>
   );

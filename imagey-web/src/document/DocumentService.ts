@@ -695,6 +695,7 @@ export async function decryptDocument(
         type: "group",
         members: payload.members,
         publicProfiles: payload.publicProfiles,
+        memberNames: payload.memberNames,
       };
     case "folder":
       return {

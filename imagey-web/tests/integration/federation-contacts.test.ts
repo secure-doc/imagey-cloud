@@ -141,10 +141,11 @@ test("a contact whose profile lives here has it loaded", async ({ page }) => {
     .toBeGreaterThan(0);
 });
 
-test("contacts on other servers cannot be put into a group yet", async ({
+test("contacts on other servers can be put into a group if their id here is known", async ({
   page,
 }) => {
   await routeChats(page, [
+    // the chat is at A and no address is known: no id here can be looked up
     alice,
     bob({ origin: "https://b.test", userId: "x" }),
     localLaura,
@@ -155,9 +156,10 @@ test("contacts on other servers cannot be put into a group yet", async ({
   await page.getByRole("button", { name: "group_add" }).click();
 
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("Laura")).toBeVisible();
-  await expect(dialog.getByText("Alice")).toHaveCount(0);
-  await expect(dialog.getByText("Bob")).toHaveCount(0);
+  // bob lives here and only has his profile elsewhere
+  await expect(dialog.getByRole("checkbox", { name: "Bob" })).toBeEnabled();
+  await expect(dialog.getByRole("checkbox", { name: "Laura" })).toBeEnabled();
+  await expect(dialog.getByRole("checkbox", { name: "Alice" })).toBeDisabled();
 });
 
 // What the inviter learns from the invitee's contactInfo when picking the accepted request up.

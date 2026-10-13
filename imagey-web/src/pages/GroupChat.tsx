@@ -17,6 +17,8 @@ import { useGroupMemberProfiles } from "../hooks/useGroupMemberProfiles";
 import AddGroupMemberDialog from "../components/AddGroupMemberDialog";
 import { contactDisplayName } from "../contact/contactDisplayName";
 import { notificationKeyringService } from "../notification/NotificationKeyringService";
+import { ChatBell } from "../notification/ChatBell";
+import { chatPlace } from "../federation/whereabouts";
 
 // A group's own conversation (ADR 0019): structurally the 1:1 chat view
 // (Chat.tsx) with three differences - the group key comes from either the
@@ -45,16 +47,29 @@ export default function GroupChat({ groupId }: { groupId: string }) {
     name: string;
     members: string[];
     publicProfiles: Record<string, string>;
+    memberNames?: Record<string, string>;
     revision: string | null;
   }>();
   const [loadError, setLoadError] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
 
+  // Where the group lives and who we are there (F9): a group of another server is read and
+  // written as a guest, under the own id THERE.
+  const groupEntry = chatsDocumentInfo?.groups.find(
+    (g) => g.groupId === groupId,
+  );
+  const place = useMemo(
+    () => (groupEntry ? chatPlace(groupEntry, user) : { selfId: user }),
+    [groupEntry, user],
+  );
+  const chatOrigin = place.origin;
+  const selfId = place.selfId;
   const { messages, appendMessage } = usePolling(
-    user,
+    selfId,
     group?.ownerId,
     groupId,
     group?.key,
+    chatOrigin,
   );
   const liveActivity = useLiveActivity(groupId, messages);
 
@@ -94,7 +109,8 @@ export default function GroupChat({ groupId }: { groupId: string }) {
     }
     setLoadError(false);
     let cancelled = false;
-    const isOwner = entry.owner === user;
+    // The owner's tree is on the own server: a group on another server is never ours.
+    const isOwner = entry.owner === user && !entry.chatOrigin;
     (async () => {
       try {
         // The owner's own load already returns the full decrypted metadata
@@ -118,6 +134,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
               name: doc.name,
               members: doc.members,
               publicProfiles: doc.publicProfiles,
+              memberNames: doc.memberNames,
               revision: doc.revision,
             });
           }
@@ -130,6 +147,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
           entry.owner,
           groupId,
           entry.groupKey,
+          entry.chatOrigin,
         );
         if (!cancelled) {
           setGroup({
@@ -138,6 +156,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
             name: content.metadata.name,
             members: content.metadata.members,
             publicProfiles: content.metadata.publicProfiles,
+            memberNames: content.metadata.memberNames,
             revision: content.revision,
           });
         }
@@ -157,7 +176,8 @@ export default function GroupChat({ groupId }: { groupId: string }) {
   // a no-op unless push is active on this device (see
   // notificationKeyringService.isActive).
   useEffect(() => {
-    if (!group || !authentication.keyPairs?.deviceKeyPair) {
+    // No push across servers (ADR 0013 A8): the keyring is for local chats only.
+    if (!group || !authentication.keyPairs?.deviceKeyPair || chatOrigin) {
       return;
     }
     notificationKeyringService
@@ -172,22 +192,30 @@ export default function GroupChat({ groupId }: { groupId: string }) {
       .catch((e) =>
         console.warn("Failed to remember group for notifications", e),
       );
-  }, [group, groupId, user, authentication.keyPairs?.deviceKeyPair]);
+  }, [
+    group,
+    groupId,
+    user,
+    chatOrigin,
+    authentication.keyPairs?.deviceKeyPair,
+  ]);
 
   useTitle(group?.name ?? "", "");
 
   const memberProfiles = useGroupMemberProfiles(
-    user,
+    selfId,
     group?.ownerId ?? "",
     groupId,
     group?.key,
     group?.publicProfiles,
+    chatOrigin,
   );
 
-  const isOwner = !!group && group.ownerId === user;
+  const isOwner = !!group && group.ownerId === user && !chatOrigin;
   const actionIcons = useMemo(
-    () =>
-      isOwner
+    () => [
+      <ChatBell key="bell" chatOrigin={chatOrigin} />,
+      ...(isOwner
         ? [
             <button
               key="add-member"
@@ -197,16 +225,18 @@ export default function GroupChat({ groupId }: { groupId: string }) {
               <i>person_add</i>
             </button>,
           ]
-        : [],
-    [isOwner],
+        : []),
+    ],
+    [isOwner, chatOrigin],
   );
   useActionIcons(actionIcons);
 
   const memberLabel = useCallback(
     (memberId: string) =>
       memberProfiles[memberId]?.name ||
+      group?.memberNames?.[memberId] ||
       contactDisplayName(memberId, {}, t("Unknown member")),
-    [memberProfiles, t],
+    [memberProfiles, group?.memberNames, t],
   );
 
   return (
@@ -238,12 +268,19 @@ export default function GroupChat({ groupId }: { groupId: string }) {
         ) : (
           <ConversationView
             userId={user}
+            selfId={selfId}
+            chatOrigin={chatOrigin}
+            foreignOrigins={chatOrigin ? [chatOrigin] : []}
             ownerId={group.ownerId}
             chatId={groupId}
             sharedKey={group.key}
             messages={messages}
             onMessageSent={(newMessage) => appendMessage(newMessage)}
-            notify={group.members.filter((member) => member !== user)}
+            notify={group.members.filter((member) => member !== selfId)}
+            shareDisabled={!!chatOrigin}
+            shareDisabledHint={t(
+              "In groups on other servers you cannot share images yet",
+            )}
             share={(document) =>
               groupService.shareDocumentIntoGroup(
                 user,
@@ -251,12 +288,14 @@ export default function GroupChat({ groupId }: { groupId: string }) {
                 group.ownerId,
                 groupId,
                 group.key,
+                chatOrigin,
               )
             }
             group={{
               groupId,
               groupOwnerId: group.ownerId,
               groupKey: group.key,
+              selfId,
             }}
             renderSender={(senderId) => (
               <div
@@ -294,6 +333,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
             name: group.name,
             members: group.members,
             publicProfiles: group.publicProfiles,
+            memberNames: group.memberNames,
           }}
           onClose={() => setShowAddMember(false)}
           onAdded={(updated) =>
@@ -303,6 +343,7 @@ export default function GroupChat({ groupId }: { groupId: string }) {
                     ...prev,
                     members: updated.members,
                     publicProfiles: updated.publicProfiles,
+                    memberNames: updated.memberNames,
                     revision: updated.revision,
                   }
                 : prev,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router";
+import { OtherAddressInUseError } from "../contact/GroupService";
 
 interface GroupInvitationMessageProps {
   name: string;
@@ -24,15 +25,18 @@ export function GroupInvitationMessage({
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [otherAddress, setOtherAddress] = useState(false);
 
   const handleJoin = async () => {
     setBusy(true);
     setFailed(false);
+    setOtherAddress(false);
     try {
       await onJoin();
     } catch (e) {
       console.error("Failed to join group", e);
       setFailed(true);
+      setOtherAddress(e instanceof OtherAddressInUseError);
     } finally {
       setBusy(false);
     }
@@ -41,11 +45,18 @@ export function GroupInvitationMessage({
   return (
     <div className="group-invitation">
       <div>{t("Group invitation: {{name}}", { name })}</div>
+      {otherAddress && (
+        <div className="error">
+          {t(
+            "You are known by another address on that server. Ask for a new invitation to that address, or use the other one.",
+          )}
+        </div>
+      )}
       {alreadyJoined ? (
         <NavLink to={`/chats/groups/${groupId}`} className="button">
           {t("Open")}
         </NavLink>
-      ) : (
+      ) : otherAddress ? null : (
         <button disabled={busy} onClick={handleJoin}>
           {busy ? (
             <progress className="circle small"></progress>

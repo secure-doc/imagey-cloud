@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import {
-  contactService,
-  ChatsDocumentState,
-  ChatList,
-} from "../contact/ContactService";
+import { ChatsDocumentState, ChatList } from "../contact/ContactService";
 import { groupService } from "../contact/GroupService";
 import { publicProfileService } from "../profile/publicProfileService";
 import { ContactEntry } from "../document/DocumentMetadata";
-import { isForeignContact } from "../contact/foreignContact";
+import { isAddableToGroup, memberOf } from "../contact/groupMember";
 import { contactDisplayName } from "../contact/contactDisplayName";
 
 interface CreateGroupDialogProps {
@@ -25,7 +21,7 @@ interface CreateGroupDialogProps {
 // followed by one addMember call per selection, sequential so each builds on
 // the previous member's already-updated group metadata/revision.
 export default function CreateGroupDialog({
-  contacts: allContacts,
+  contacts,
   chatsDocument,
   chatsId,
   onClose,
@@ -34,8 +30,6 @@ export default function CreateGroupDialog({
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
-  // Contacts on other servers cannot join a group yet (F9).
-  const contacts = allContacts.filter((c) => !isForeignContact(c));
   const settings = authentication.settings;
   const [groupName, setGroupName] = useState("");
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(
@@ -88,7 +82,7 @@ export default function CreateGroupDialog({
     // from the local chat list (it would otherwise be re-created under a
     // new groupId on the next "Create" click, orphaning this one).
     onCreated(created.list, created.revision);
-    let group = {
+    let group: Parameters<typeof groupService.addMember>[1] = {
       documentId: created.groupId,
       key: created.groupKey,
       // Genuinely unknown until the group Document's first real load - see
@@ -106,24 +100,16 @@ export default function CreateGroupDialog({
         if (!contact) {
           continue;
         }
-        const { key: pairChatKey, publicProfiles } =
-          await contactService.loadChatKey(
-            user,
-            contact,
-            chatsId,
-            chatsDocument.key,
-          );
-        const updated = await groupService.addMember(user, group, {
-          userId: contactUserId,
-          publicProfileId: publicProfiles[contactUserId],
-          chatOwnerId: contact.owner,
-          chatId: contact.chatId,
-          pairChatKey,
-        });
+        const updated = await groupService.addMember(
+          user,
+          group,
+          await memberOf(user, contact, chatsId, chatsDocument.key),
+        );
         group = {
           ...group,
           members: updated.members,
           publicProfiles: updated.publicProfiles,
+          memberNames: updated.memberNames,
           revision: updated.revision ?? group.revision,
         };
       }
@@ -158,11 +144,16 @@ export default function CreateGroupDialog({
                 key={contact.userId}
                 className="row padding"
                 style={{ cursor: "pointer" }}
+                title={
+                  isAddableToGroup(contact)
+                    ? undefined
+                    : t("The address of this contact is missing")
+                }
               >
                 <input
                   type="checkbox"
                   checked={selectedContacts.has(contact.userId)}
-                  disabled={isCreating}
+                  disabled={isCreating || !isAddableToGroup(contact)}
                   onChange={() => toggleContact(contact.userId)}
                 />
                 <span>

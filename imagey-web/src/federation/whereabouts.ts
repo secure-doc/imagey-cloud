@@ -31,17 +31,23 @@ export async function placeOf(
 // does. A shared document (message `origin`) or a detail page (`?origin=`) naming any other server
 // is refused, as loading it would log us in there with an address of ours (ADR 0013 A12).
 export function foreignOriginsOf(
-  contact: Pick<ContactEntry, "chatOrigin" | "profileHome">,
+  contact: Pick<ContactEntry, "chatOrigin"> & {
+    profileHome?: ContactEntry["profileHome"];
+  },
 ): string[] {
   return [contact.chatOrigin, contact.profileHome?.origin].filter(
     (origin): origin is string => !!origin,
   );
 }
 
-// Chat and messages of a contact. Synchronous: the own id there is part of the entry.
-export function chatPlace(contact: ContactEntry, user: UserId): Place {
-  return contact.chatOrigin
-    ? { origin: contact.chatOrigin, selfId: contact.self?.userId ?? user }
+// Chat and messages of a contact or a group (F9). Synchronous: the own id there is part of the
+// entry.
+export function chatPlace(
+  entry: { chatOrigin?: string; self?: { userId: string } },
+  user: UserId,
+): Place {
+  return entry.chatOrigin
+    ? { origin: entry.chatOrigin, selfId: entry.self?.userId ?? user }
     : { selfId: user };
 }
 

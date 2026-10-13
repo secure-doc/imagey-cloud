@@ -161,7 +161,7 @@ export function ChatsList({
         );
       }
       onLoadError?.(false);
-      rememberForeignAddresses(loaded.contacts);
+      rememberForeignAddresses(loaded.contacts, loaded.groups);
       setChatsDocument({
         contacts: loaded.contacts,
         groups: loaded.groups ?? [],
@@ -505,9 +505,11 @@ function GroupListItem({
         <div className="max">
           <h6 className="small">{group.name}</h6>
         </div>
+        <ChatBell chatOrigin={group.chatOrigin} />
         <LastActivityLabel
           owner={group.owner}
           chatId={group.groupId}
+          origin={group.chatOrigin}
           liveActivity={liveActivity}
         />
       </NavLink>

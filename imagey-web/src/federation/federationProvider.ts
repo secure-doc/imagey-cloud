@@ -1,5 +1,5 @@
 import { FederationUnavailableError } from "../api/GuestTokenProvider";
-import { ContactEntry } from "../document/DocumentMetadata";
+import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
 import { FederationGuestTokenProvider } from "./federationGuestTokenProvider";
 
 // The provider App installed for the signed-in user (it is also the GuestTokenProvider of
@@ -19,15 +19,25 @@ export function federationProvider(): FederationGuestTokenProvider {
   return current;
 }
 
+// The address the account is known by at `origin` right now (none without a provider).
+export function addressInUse(origin: string): string | undefined {
+  return current?.addressInUse(origin);
+}
+
 // After a reload the provider has forgotten which address an account uses at which server (ADR
 // 0013 A11): the chat list still knows (ContactEntry.self). Without a provider, nothing to tell.
-export function rememberForeignAddresses(contacts: ContactEntry[]): void {
+export function rememberForeignAddresses(
+  contacts: ContactEntry[],
+  groups: GroupEntry[] = [],
+): void {
   if (!current) {
     return;
   }
-  for (const contact of contacts) {
-    if (contact.chatOrigin && contact.self) {
-      current.rememberAddress(contact.chatOrigin, contact.self.address);
+  // Only one address is kept per server: the contacts come last, so that they win over a group
+  // (the chats are older than the groups of the same server).
+  for (const entry of [...groups, ...contacts]) {
+    if (entry.chatOrigin && entry.self?.address) {
+      current.rememberAddress(entry.chatOrigin, entry.self.address);
     }
   }
 }

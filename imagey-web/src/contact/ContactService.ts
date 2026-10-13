@@ -672,11 +672,34 @@ export const contactService = {
     };
   },
 
+  // The id of `contact` on THIS server (F9: the member id of a group on this server), or
+  // undefined if there is no address to look it up with. Registering is idempotent, so nothing
+  // is stored; resolveShareGrantee stores the result.
+  localIdOf: async (
+    userId: UserId,
+    contact: ContactEntry,
+  ): Promise<UserId | undefined> => {
+    if (!contact.chatOrigin) {
+      return contact.userId;
+    }
+    if (contact.localUserId) {
+      return contact.localUserId;
+    }
+    if (!contact.email) {
+      return undefined;
+    }
+    return federationRepository.registerForeignPrincipal(
+      userId,
+      new URL(contact.chatOrigin).host,
+      contact.email,
+    );
+  },
+
   // The grantee of a document we share into the chat with `contact` - their id ON OUR SERVER,
   // where the document stays (F8). A contact of this server is that id itself. For one whose chat
   // lives elsewhere it is their ForeignUserMapping here; entries from before F8 do not carry it
-  // yet, so it is looked up (registering is idempotent) and stored. Resolves to undefined if
-  // there is no address to register (ADR 0013 decision 10) - then nothing can be shared.
+  // yet, so it is looked up (localIdOf) and stored. Resolves to undefined if there is no address
+  // to register (ADR 0013 decision 10) - then nothing can be shared.
   resolveShareGrantee: async (
     userId: UserId,
     chatsDocument: ChatsDocumentState,
@@ -685,20 +708,13 @@ export const contactService = {
     | { grantee: UserId; contacts?: ContactEntry[]; revision?: string | null }
     | undefined
   > => {
-    if (!contact.chatOrigin) {
-      return { grantee: contact.userId };
-    }
-    if (contact.localUserId) {
-      return { grantee: contact.localUserId };
-    }
-    if (!contact.email) {
+    const grantee = await contactService.localIdOf(userId, contact);
+    if (!grantee) {
       return undefined;
     }
-    const grantee = await federationRepository.registerForeignPrincipal(
-      userId,
-      new URL(contact.chatOrigin).host,
-      contact.email,
-    );
+    if (!contact.chatOrigin || contact.localUserId) {
+      return { grantee };
+    }
     const { contacts, revision } = await updateContact(
       userId,
       chatsDocument,
