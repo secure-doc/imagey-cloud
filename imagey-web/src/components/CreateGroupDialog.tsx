@@ -9,6 +9,7 @@ import {
 import { groupService } from "../contact/GroupService";
 import { publicProfileService } from "../profile/publicProfileService";
 import { ContactEntry } from "../document/DocumentMetadata";
+import { isForeignContact } from "../contact/foreignContact";
 import { contactDisplayName } from "../contact/contactDisplayName";
 
 interface CreateGroupDialogProps {
@@ -24,7 +25,7 @@ interface CreateGroupDialogProps {
 // followed by one addMember call per selection, sequential so each builds on
 // the previous member's already-updated group metadata/revision.
 export default function CreateGroupDialog({
-  contacts,
+  contacts: allContacts,
   chatsDocument,
   chatsId,
   onClose,
@@ -33,6 +34,8 @@ export default function CreateGroupDialog({
   const { t } = useTranslation();
   const authentication = useAuthentication();
   const user = authentication.user;
+  // Contacts on other servers cannot join a group yet (F9).
+  const contacts = allContacts.filter((c) => !isForeignContact(c));
   const settings = authentication.settings;
   const [groupName, setGroupName] = useState("");
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(

@@ -242,6 +242,11 @@ export async function enterDisplayName(
   await expect(prompt).toHaveCount(0);
 }
 
+// The invitation link leads to a choice page (ADR 0013 A11); this takes "create an account here".
+export async function registerHere(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Create an account here" }).click();
+}
+
 export interface Person extends User {
   name: string;
 }
@@ -260,6 +265,7 @@ export async function inviteNewUser(
   await inviteContact(inviter.page, email, inviterName);
   const link = await waitForMailLink(email, /^\/invitations\//, baseURL());
   await device.page.goto(link);
+  await registerHere(device.page);
   await setPassword(device.page, "register", { displayName: name });
   await openChats(device.page);
   if (inviterOnChats) {

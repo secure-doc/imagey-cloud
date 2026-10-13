@@ -82,7 +82,7 @@ compute it independently from their main key pairs:
 chatKey = HKDF-SHA-256(
     ikm  = ECDH(ownPrivateMainKey, otherPublicMainKey),
     salt = <empty>,
-    info = "imagey-chat-key" 0x00 chatId 0x00 inviterUserId 0x00 inviteeUserId)
+    info = "chat-key" 0x00 chatId 0x00 inviterUserId 0x00 inviteeUserId)
   -> AES-GCM-256 (extractable, stored as JWK)
 ```
 
@@ -110,11 +110,15 @@ they are not the durable contact list; once the handshake completes
    B and is not stored. A's public main key is kept on the request itself,
    so accepting it never needs a separate public-key fetch. If B has no
    account yet, the server emails B an `/invitations/{token}` link (`token`
-   carries B's email as subject); following it, `InvitationFilter` mints B's
-   UserId and redirects into the SPA with `?email=B&userId=<B's
+   carries B's email as subject); following it opens a choice page
+   (`/join`, the token in the fragment). If B chooses to register here, a
+   form `POST /invitations/{token}/registration` makes `InvitationFilter`
+   mint B's UserId and redirect into the SPA with `?email=B&userId=<B's
    UserId>&inviter=<A's UserId>`, and accepting the request is the last step
    of B's registration (see `RegistrationDialog` /
-   `AuthenticationService.register`).
+   `AuthenticationService.register`). A B with an account on another server
+   accepts there instead (ADR 0013 A11): the `contactInfo` B sends back then
+   also carries `home: { origin, userId }`, where B's profile lives.
 2. **Accept Request:** User B (the invitee) fetches their pending requests
    via `GET /users/{B-userId}/contact-requests` and accepts, or - if B just
    registered via an invite link as described above - accepts as the last

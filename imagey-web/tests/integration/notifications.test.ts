@@ -1217,6 +1217,79 @@ test("notificationKeyringService: sync/rememberChat/rememberNames on an active (
   expect(outcome.name).toBe("Laura");
 });
 
+test("notificationKeyringService.fillMissing leaves out chats on other servers", async ({
+  page,
+}) => {
+  await stubPushApis(page);
+  await page.reload();
+  await page.route("**/push/vapid-public-key", (route) =>
+    route.fulfill({ contentType: "text/plain", body: FAKE_VAPID_KEY }),
+  );
+  await page.route("**/push-subscription", (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  await setupMarysDevice(page);
+  const privateDeviceKey = await cryptoService.decryptPrivatePasswordKey(
+    TestData.mary.devices[0].encryptedPrivateDeviceKey,
+    TestData.mary.password,
+  );
+  const recoveryBlob = await cryptoService.encryptPrivatePasswordKey(
+    privateDeviceKey,
+    "any-recovery-key",
+  );
+  await page.evaluate(
+    ({ deviceId, key }) =>
+      localStorage.setItem(`imagey.devices[${deviceId}].recovery-key`, key),
+    { deviceId: DEVICE_ID, key: recoveryBlob },
+  );
+  const documentRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/documents/")) {
+      documentRequests.push(request.url());
+    }
+  });
+
+  const chats = await page.evaluate(
+    async ({ userId, publicDeviceKey, privateDeviceKey }) => {
+      const deviceKeyPair = {
+        publicKey: publicDeviceKey,
+        privateKey: privateDeviceKey,
+      };
+      await window.pushSubscriptionService.enable(userId, deviceKeyPair);
+      await window.notificationKeyringService.fillMissing(
+        userId,
+        deviceKeyPair,
+        {
+          contacts: [
+            {
+              userId: "alice-on-a",
+              chatId: "chat-alice",
+              owner: "alice-on-a",
+              name: "Alice",
+              profileRevision: "",
+              chatOrigin: "https://a.test",
+            },
+          ],
+          groups: [],
+        },
+        "chats-id",
+        { kty: "oct", k: "AAAA" },
+      );
+      return (
+        await window.notificationKeyringService.load(userId, deviceKeyPair)
+      )?.chats;
+    },
+    {
+      userId: MARY_ID,
+      publicDeviceKey: TestData.mary.devices[0].publicDeviceKey,
+      privateDeviceKey,
+    },
+  );
+
+  expect(chats).toEqual({});
+  expect(documentRequests).toEqual([]);
+});
+
 test("notificationKeyringService keeps every entry when several updates run at once", async ({
   page,
 }) => {

@@ -15,6 +15,10 @@ import AppBar from "./components/AppBar";
 import Settings from "./pages/Settings";
 import Profile from "./pages/ProfilePage";
 import Devices from "./pages/Devices";
+import Join from "./pages/Join";
+import FederationAccept from "./pages/FederationAccept";
+import PendingFederatedInvitationRedirect from "./federation/PendingFederatedInvitationRedirect";
+import { setFederationProvider } from "./federation/federationProvider";
 import NotificationSettings from "./notification/NotificationSettings";
 import { pushSubscriptionService } from "./notification/PushSubscriptionService";
 import { setGuestTokenProvider } from "./api/repositoriesFor";
@@ -114,9 +118,12 @@ function App() {
   useEffect(() => {
     // Not before somebody is signed in: until then the provider is not ours to set.
     if (user) {
-      setGuestTokenProvider(
-        createFederationGuestTokenProvider(() => ({ userId: user, email })),
-      );
+      const provider = createFederationGuestTokenProvider(() => ({
+        userId: user,
+        email,
+      }));
+      setGuestTokenProvider(provider);
+      setFederationProvider(provider);
     }
   }, [user, email]);
 
@@ -139,6 +146,11 @@ function App() {
         .then((s) => setSettings(s));
     }
   }, [user, keyPairs, settings]);
+
+  // The landing page of an emailed invitation needs no session (ADR 0013 A11).
+  if (window.location.pathname === "/join") {
+    return <Join />;
+  }
 
   if (!user || !keyPairs) {
     return (
@@ -180,6 +192,7 @@ function App() {
           <DetailContext.Provider value={{ details, registerDetail }}>
             <ActionBarContextProvider>
               <BrowserRouter>
+                <PendingFederatedInvitationRedirect />
                 <AppBar />
                 <Navigation className="left max l" />
                 <Navigation className="left m" />
@@ -214,6 +227,10 @@ function App() {
                   <Route
                     path="chats/groups/:groupId"
                     element={<GroupChatRoute />}
+                  />
+                  <Route
+                    path="federation/accept"
+                    element={<FederationAccept />}
                   />
                   <Route path="images/:id" element={<Image />} />
                   <Route path="media/:id" element={<Media />} />

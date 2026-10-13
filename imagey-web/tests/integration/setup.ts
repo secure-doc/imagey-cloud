@@ -145,9 +145,7 @@ export async function encryptInvitationContactInfo(
       name: "HKDF",
       hash: "SHA-256",
       salt: new Uint8Array(0),
-      info: new TextEncoder().encode(
-        ["imagey-invitation-key", chatId].join("\u0000"),
-      ),
+      info: new TextEncoder().encode(["invitation-key", chatId].join("\u0000")),
     },
     hkdfKey,
     { name: "AES-GCM", length: 256 },
@@ -163,7 +161,11 @@ export async function encryptInvitationContactInfo(
 // The invitee's name/address on an ACCEPTED contact request, encrypted under
 // the chat key (see contactService.acceptContactRequest).
 export async function encryptChatContactInfo(
-  info: { name?: string; email?: string },
+  info: {
+    name?: string;
+    email?: string;
+    home?: { origin: string; userId: string };
+  },
   chatKey: JsonWebKey,
 ): Promise<string> {
   const encrypted = await aesGcmEncrypt(
@@ -216,11 +218,9 @@ export async function decryptMarysDeviceInfo(
       hash: "SHA-256",
       salt: new Uint8Array(0),
       info: new TextEncoder().encode(
-        [
-          "imagey-device-info",
-          "d20cf443-4f96-418f-a957-c8cbef8677c3",
-          deviceId,
-        ].join("\u0000"),
+        ["device-info", "d20cf443-4f96-418f-a957-c8cbef8677c3", deviceId].join(
+          "\u0000",
+        ),
       ),
     },
     hkdfKey,
@@ -278,7 +278,7 @@ export async function deriveChatKey(
       hash: "SHA-256",
       salt: new Uint8Array(0),
       info: new TextEncoder().encode(
-        ["imagey-chat-key", chatId, inviterId, inviteeId].join("\u0000"),
+        ["chat-key", chatId, inviterId, inviteeId].join("\u0000"),
       ),
     },
     hkdfKey,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { guestSessionStore } from "../api/GuestSessionStore";
+import { clearPendingFederatedInvitation } from "../federation/pendingInvitation";
 import { deviceRepository } from "../device/DeviceRepository";
 import EmailDialog from "./EmailDialog";
 import { AuthenticationStatus } from "./AuthenticationStatus";
@@ -120,6 +121,7 @@ export default function AuthenticationComponent({
     }
     deviceRepository.removeUser();
     guestSessionStore.clear();
+    clearPendingFederatedInvitation();
     setUserId(undefined);
     setEmail(undefined);
   };

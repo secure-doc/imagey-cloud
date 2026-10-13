@@ -20,6 +20,7 @@ import static cloud.imagey.domain.token.TokenService.ONE_HOUR;
 import static jakarta.ws.rs.client.ClientBuilder.newClient;
 import static jakarta.ws.rs.client.Entity.json;
 import static jakarta.ws.rs.core.Response.Status.FOUND;
+import static jakarta.ws.rs.core.Response.Status.SEE_OTHER;
 import static org.apache.commons.io.FileUtils.copyDirectory;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +38,9 @@ import jakarta.inject.Inject;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
+import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.Form;
 import jakarta.ws.rs.core.Response;
 
 import org.apache.meecrowave.Meecrowave;
@@ -145,21 +148,42 @@ public class InvitationTest {
         MimeMessage[] receivedMessages = greenMail.getReceivedMessages();
         assertThat(receivedMessages).hasSize(1);
 
-        // When
+        String[] usersBefore = new File(rootPath).list();
+
+        // When: opening the link only leads to the choice page
         String link = extractLink(receivedMessages[0]);
-        Response response = newClient()
+        Response opened = newClient()
             .target(link)
             .request()
             .header("Origin", "https://secure-doc.store")
             .get();
 
+        // Then: no account, no cookie - and the token travels in the fragment
+        assertThat(opened.getStatus()).isEqualTo(FOUND.getStatusCode());
+        assertThat(opened.getHeaderString("Set-Cookie")).isNull();
+        URI choice = opened.getLocation();
+        assertThat(choice.getPath()).isEqualTo("/join");
+        assertThat(choice.getQuery()).isNull();
+        Map<String, String> fragment = parseQuery(choice.getRawFragment());
+        assertThat(fragment.keySet()).containsExactlyInAnyOrder("token", "invited-by");
+        assertThat(fragment).containsEntry("invited-by", UserFactory.MARY_ID.id());
+        assertThat(tokenService.decode(new Token(fragment.get("token")))).isPresent();
+        assertThat(new File(rootPath).list()).as("no account created by opening the link")
+            .containsExactlyInAnyOrder(usersBefore);
+
+        // When: the invitee chooses to register here
+        Response response = newClient()
+            .target(link.substring(0, link.indexOf('?')) + "/registration")
+            .request()
+            .header("Origin", "https://secure-doc.store")
+            .post(Entity.form(new Form("invited-by", UserFactory.MARY_ID.id())));
+
         // Then
-        assertThat(response.getStatus()).isEqualTo(FOUND.getStatusCode());
+        assertThat(response.getStatus()).isEqualTo(SEE_OTHER.getStatusCode());
         String cookie = response.getHeaderString("Set-Cookie");
         String token = cookie.substring(0, cookie.indexOf(';'));
         String tokenKey = token.substring(0, token.indexOf('='));
         String tokenValue = token.substring(tokenKey.length() + 1);
-        assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         assertThat(tokenKey.trim()).isEqualToIgnoringCase("token");
         Optional<DecodedToken> decodedToken = tokenService.decode(new Token(tokenValue));
         // The session cookie now carries the invitee's freshly minted userId, not their email.
@@ -223,6 +247,47 @@ public class InvitationTest {
         assertThat(response.getStatus()).isEqualTo(jakarta.ws.rs.core.Response.Status.FORBIDDEN.getStatusCode());
     }
 
+
+    @Test
+    @DisplayName("The redirect into the app encodes address and inviter")
+    public void redirectIsEncoded() {
+        Token token = tokenService.generateInvitationToken(new Email("anna+test@x.de"), ONE_HOUR);
+
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/invitations/" + token.token() + "/registration")
+            .request()
+            .post(Entity.form(new Form("invited-by", "x&email=evil#")));
+
+        assertThat(response.getStatus()).isEqualTo(SEE_OTHER.getStatusCode());
+        String raw = response.getLocation().getRawQuery();
+        assertThat(raw).contains("email=anna%2Btest%40x.de").contains("inviter=x%26email%3Devil%23");
+        assertThat(parseQuery(raw)).containsEntry("email", "anna+test@x.de").containsEntry("inviter", "x&email=evil#");
+    }
+
+    @Test
+    @DisplayName("Registration with an invalid token fails")
+    public void registrationWithInvalidTokenFails() {
+        Response response = newClient()
+            .target("http://localhost:" + config.getHttpPort() + "/invitations/invalid.token.value/registration")
+            .request()
+            .post(Entity.form(new Form("invited-by", UserFactory.MARY_ID.id())));
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getHeaderString("Set-Cookie")).isNull();
+    }
+
+    @Test
+    @DisplayName("Invitation endpoints accept only their own method and known paths")
+    public void methodsAndPaths() {
+        Token token = tokenService.generateInvitationToken(new Email("luise@imagey.cloud"), ONE_HOUR);
+        String base = "http://localhost:" + config.getHttpPort() + "/invitations/" + token.token();
+
+        assertThat(newClient().target(base).queryParam("invited-by", "x").request().post(Entity.form(new Form())).getStatus())
+            .isEqualTo(405);
+        assertThat(newClient().target(base + "/registration").request().get().getStatus()).isEqualTo(405);
+        assertThat(newClient().target(base + "/other").request().get().getStatus()).isEqualTo(404);
+        assertThat(newClient().target(base).request().get().getStatus()).as("invited-by missing").isEqualTo(400);
+    }
 
     private String extractLink(MimeMessage message) throws IOException, MessagingException {
         String registrationMail = ((MimeMultipart)message.getContent()).getBodyPart(1).getContent().toString();

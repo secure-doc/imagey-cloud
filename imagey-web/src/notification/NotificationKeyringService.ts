@@ -161,7 +161,8 @@ export const notificationKeyringService = {
     }
 
     for (const contact of chatList.contacts) {
-      if (keyring.chats[contact.chatId]) {
+      // No push across servers (ADR 0013 A8): the chat is not reachable from here yet.
+      if (contact.chatOrigin || keyring.chats[contact.chatId]) {
         continue;
       }
       try {

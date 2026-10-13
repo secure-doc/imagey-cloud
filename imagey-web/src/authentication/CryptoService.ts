@@ -121,7 +121,7 @@ export const cryptoService = {
     inviteeId: string,
   ): Promise<JsonWebKey> =>
     deriveAgreedKey(ownPrivateKey, otherPublicKey, [
-      "imagey-chat-key",
+      "chat-key",
       chatId,
       inviterId,
       inviteeId,
@@ -141,7 +141,7 @@ export const cryptoService = {
     deviceId: string,
   ): Promise<JsonWebKey> =>
     deriveAgreedKey(ownPrivateKey, otherPublicKey, [
-      "imagey-device-info",
+      "device-info",
       userId,
       deviceId,
     ]),
@@ -158,7 +158,7 @@ export const cryptoService = {
     deviceId: string,
   ): Promise<JsonWebKey> =>
     deriveAgreedKey(privateDeviceKey, publicDeviceKey, [
-      "imagey-notification-keyring",
+      "notification-keyring",
       userId,
       deviceId,
     ]),
@@ -186,7 +186,7 @@ export const cryptoService = {
         hash: "SHA-256",
         salt: new Uint8Array(0),
         info: new TextEncoder().encode(
-          ["imagey-invitation-key", chatId].join("\u0000"),
+          ["invitation-key", chatId].join("\u0000"),
         ),
       },
       hkdfKey,

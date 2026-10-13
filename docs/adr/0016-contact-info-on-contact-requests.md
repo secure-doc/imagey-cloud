@@ -30,13 +30,15 @@ public profile (docs/plans/chat-public-profile.md). But:
 ## Decision
 
 `ContactExchange` gains an optional `contactInfo`: the JSON
-`{"name": ..., "email": ...}` of the **sender of the latest transition**,
+`{"name": ..., "email": ..., "home": {"origin": ..., "userId": ...}}` (`home`
+only from an invitee who accepted with an account on another server, ADR 0013
+A11; clients ignore a `home` that is no secure origin) of the **sender of the latest transition**,
 AES-GCM encrypted by their client and opaque to the server (same semantics as
 `publicKey`/`publicProfileId`):
 
 | Status | Sender | Key |
 |---|---|---|
-| `INVITED` | Inviter | `HKDF-SHA-256(ikm = lowercase(inviteeEmail), salt = <empty>, info = "imagey-invitation-key" 0x00 chatId)` |
+| `INVITED` | Inviter | `HKDF-SHA-256(ikm = lowercase(inviteeEmail), salt = <empty>, info = "invitation-key" 0x00 chatId)` |
 | `ACCEPTED` | Invitee | the chat key (ADR 0015 decision 1) |
 
 `RECEIVED` and `DENIED` keep the value of the transition before them.

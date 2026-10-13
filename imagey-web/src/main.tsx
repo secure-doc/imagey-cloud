@@ -25,6 +25,7 @@ import { createMessageRepository } from "./chat/MessageRepository";
 import { createContactRepository } from "./contact/ContactRepository";
 import { FederationUnavailableError } from "./api/GuestTokenProvider";
 import { createTranslator } from "./notification/notificationTranslations";
+import { capturePendingFederatedInvitation } from "./federation/pendingInvitation";
 
 declare global {
   interface Window {
@@ -87,6 +88,7 @@ if (import.meta.env.DEV) {
 }
 
 registerServiceWorker();
+capturePendingFederatedInvitation();
 
 initAppName().then(() => {
   document.title = getAppName();

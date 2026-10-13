@@ -4,7 +4,10 @@ import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { PublicProfile } from "../profile/PublicProfile";
 import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
 import { ContactInfo, ContactRequest } from "./ContactRequest";
-import { contactRepository } from "./ContactRepository";
+import { contactRepository, ContactRepository } from "./ContactRepository";
+import { parseOrigin } from "../api/RemoteApiClient";
+import { repositoriesFor } from "../api/repositoriesFor";
+import { federationRepository } from "../federation/FederationRepository";
 import {
   documentRepository,
   HttpError,
@@ -117,7 +120,22 @@ function makePlaceholderContactEntry(
     name: info.name ?? "",
     ...(info.email ? { email: info.email } : {}),
     profileRevision: "",
+    // Where the contact's profile lives, if they accepted with an account on another server.
+    ...(info.home ? { profileHome: info.home } : {}),
   };
+}
+
+// The `home` of a ContactInfo comes from the other party: only a well-formed origin and id pass.
+function parseHome(home: unknown): ContactInfo["home"] {
+  const { origin, userId } = (home ?? {}) as Record<string, unknown>;
+  if (typeof origin !== "string" || typeof userId !== "string" || !userId) {
+    return undefined;
+  }
+  try {
+    return { origin: parseOrigin(origin), userId };
+  } catch {
+    return undefined;
+  }
 }
 
 async function encryptContactInfo(
@@ -146,6 +164,7 @@ async function decryptContactInfo(
           : undefined,
       email:
         typeof info.email === "string" ? info.email || undefined : undefined,
+      home: parseHome(info.home),
     };
   } catch (e) {
     console.error("Failed to decrypt contact info", e);
@@ -242,6 +261,26 @@ async function updateContact(
   return { contacts: list.contacts, revision };
 }
 
+// Accepting an invitation with an account on another server (ADR 0013 A11): the exchange lives
+// on the inviter's server, while keys, chat list and the shared profile stay on the own one.
+export interface AcceptContext {
+  // Where the exchange lives (the inviter's server) - the own repository for a local accept.
+  contacts: ContactRepository;
+  // Own UserId THERE. The inviter derives the chat key with it as `invitee`, so must we.
+  selfId: UserId;
+  // Whom to share the own public profile with HERE (the inviter's id on the own server), if
+  // known; without one the profile is not shared.
+  profileGrantee?: UserId;
+  // What the invitation says about the inviter, if the caller has read it already.
+  inviterInfo?: ContactInfo;
+  // The inviter's server, if it is not the own one.
+  chatOrigin?: string;
+  // The address the invitation was redeemed with.
+  selfAddress?: string;
+  // Where the own profile lives: the own server and the own UserId there.
+  home?: { origin: string; userId: string };
+}
+
 export const contactService = {
   // Inviter side, leg 1: encrypts our own name/address for the invitee, who
   // can read it before accepting (see ContactRequest.contactInfo).
@@ -287,6 +326,11 @@ export const contactService = {
     ownPublicProfile: PublicProfile,
     settings: Settings,
     mainKeyPair: JsonWebKeyPair,
+    context: AcceptContext = {
+      contacts: contactRepository,
+      selfId: userId,
+      profileGrantee: invitation.inviter,
+    },
   ): Promise<ContactEntry> => {
     const {
       inviter: contactId,
@@ -294,6 +338,8 @@ export const contactService = {
       publicKey: inviterPublicKey,
       publicProfileId: inviterPublicProfileId,
     } = invitation;
+    const { selfId } = context;
+    const selfAddress = context.selfAddress ?? ownEmail;
     try {
       const chatsDocument = await documentService.loadDocument(
         userId,
@@ -312,7 +358,7 @@ export const contactService = {
         inviterPublicKey,
         chatId,
         contactId,
-        userId,
+        selfId,
       );
       const wrappedChatKey = await cryptoService.encryptKey(
         chatKey,
@@ -322,7 +368,7 @@ export const contactService = {
       // docs/plans/chat-public-profile.md §3.3) - the inviter writes them into
       // the chat's metadata in leg 3; until then we keep them in `pending`.
       const publicProfiles = makePublicProfiles(
-        userId,
+        selfId,
         ownPublicProfile.documentId,
         contactId,
         inviterPublicProfileId,
@@ -333,9 +379,16 @@ export const contactService = {
           contactId,
           chatId,
           contactId,
-          await contactService.readInvitationInfo(invitation, ownEmail),
+          context.inviterInfo ??
+            (await contactService.readInvitationInfo(invitation, selfAddress)),
         ),
         pending: { chatKey, publicProfiles },
+        ...(context.chatOrigin && selfAddress
+          ? {
+              chatOrigin: context.chatOrigin,
+              self: { userId: selfId, address: selfAddress },
+            }
+          : {}),
       };
       await documentService.updateDocumentMetadata(
         userId,
@@ -356,15 +409,20 @@ export const contactService = {
       // ppId, wrapped with the chat key - the same mechanism documentService.shareDocument uses for
       // any other document shared into a chat. Done before the accept so a failure leaves the
       // request INVITED and the whole step can be retried.
-      await documentService.shareDocument(
-        userId,
-        { documentId: ownPublicProfile.documentId, key: ownPublicProfile.key },
-        contactId,
-        chatKey,
-      );
+      if (context.profileGrantee) {
+        await documentService.shareDocument(
+          userId,
+          {
+            documentId: ownPublicProfile.documentId,
+            key: ownPublicProfile.key,
+          },
+          context.profileGrantee,
+          chatKey,
+        );
+      }
 
-      await contactRepository.acceptContactRequest(
-        userId,
+      await context.contacts.acceptContactRequest(
+        selfId,
         contactId,
         mainKeyPair.publicKey,
         wrappedChatKey,
@@ -372,7 +430,11 @@ export const contactService = {
         // Our own name/address for the inviter, who can read it with the
         // chat key they derive in leg 3.
         await encryptContactInfo(
-          { name: ownPublicProfile.name, email: ownEmail },
+          {
+            name: ownPublicProfile.name,
+            email: selfAddress,
+            ...(context.home ? { home: context.home } : {}),
+          },
           chatKey,
         ),
       );
@@ -387,6 +449,53 @@ export const contactService = {
       );
       throw e;
     }
+  },
+
+  // Invitee side, leg 2 for an invitation of ANOTHER server (ADR 0013 A11): `invitation` was
+  // read at `from` with the guest session (`selfId` is the invitee's UserId there). Records the
+  // inviter as a foreign principal on the own server - under the address from their contactInfo,
+  // without which the profile is not shared, the accept itself still works -, accepts at `from`
+  // and remembers the address the guest session renews with.
+  acceptForeignInvitation: async (
+    userId: UserId,
+    from: string,
+    selfId: UserId,
+    selfAddress: string,
+    inviter: ContactInfo,
+    invitation: Pick<
+      ContactRequest,
+      "inviter" | "chatId" | "publicKey" | "publicProfileId" | "contactInfo"
+    >,
+    ownPublicProfile: PublicProfile,
+    settings: Settings,
+    mainKeyPair: JsonWebKeyPair,
+  ): Promise<ContactEntry> => {
+    const origin = parseOrigin(from);
+    const profileGrantee = inviter.email
+      ? await federationRepository.registerForeignPrincipal(
+          userId,
+          new URL(origin).host,
+          inviter.email,
+        )
+      : undefined;
+    const contact = await contactService.acceptContactRequest(
+      userId,
+      invitation,
+      selfAddress,
+      ownPublicProfile,
+      settings,
+      mainKeyPair,
+      {
+        contacts: repositoriesFor(origin).contacts,
+        selfId,
+        profileGrantee,
+        chatOrigin: origin,
+        selfAddress,
+        inviterInfo: inviter,
+        home: { origin: window.location.origin, userId },
+      },
+    );
+    return contact;
   },
 
   // Inviter side, leg 3 of the handshake (ADR 0015): pick up a request the

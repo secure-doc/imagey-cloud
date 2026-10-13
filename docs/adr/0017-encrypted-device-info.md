@@ -35,7 +35,7 @@ device has to be able to read and change that description later.
    ```
    HKDF-SHA-256(ikm  = ECDH(main key pair, device key pair),
                 salt = <empty>,
-                info = "imagey-device-info" 0x00 userId 0x00 deviceId)
+                info = "device-info" 0x00 userId 0x00 deviceId)
    ```
 
    ECDH is symmetric, so the key can be computed from either side:
