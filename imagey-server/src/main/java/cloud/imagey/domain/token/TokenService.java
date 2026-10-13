@@ -78,9 +78,6 @@ public class TokenService {
      */
     public static final String GUEST_CLAIM = "guest";
 
-    /** Lifetime of a guest session: 15 minutes (ADR 0013 decision 4). */
-    public static final long GUEST_SESSION = 15 * 60 * 1000;
-
     /** {@code Max-Age} (seconds) of the persistent "keep me logged in" cookie. */
     public static final long TRUSTED_COOKIE_MAX_AGE_SECONDS = ONE_MONTH / 1000;
 
@@ -149,12 +146,10 @@ public class TokenService {
      * <p>The subject must be the <em>local</em> id of the guest (the {@code ForeignUserMapping} id
      * of F4), never an id the other server claims: the session is identified by the subject alone,
      * so a claimed id equal to a local user's would be that user. See docs/plans/federation.md, F4.
+     *
+     * <p>The lifetime comes from {@code FederationSettings.guestSessionTtl()} (15 minutes by
+     * default, ADR 0013 decision 4).
      */
-    public Token generateGuestToken(User user, DomainName homeDomain) {
-        return generateGuestToken(user, homeDomain, GUEST_SESSION);
-    }
-
-    /** Like {@link #generateGuestToken(User, DomainName)} with an explicit lifetime. */
     public Token generateGuestToken(User user, DomainName homeDomain, long validityInMilliseconds) {
         String host = homeDomain.value().replaceFirst("^https?://", "");
         return generate(user.id().id(), TokenType.AUTHENTICATION, validityInMilliseconds,

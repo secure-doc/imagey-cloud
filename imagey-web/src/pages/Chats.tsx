@@ -23,6 +23,7 @@ import { useSettingsKey } from "../contexts/SettingsContext";
 import { notificationKeyringService } from "../notification/NotificationKeyringService";
 import NotificationBanner from "../notification/NotificationBanner";
 import { useLastActivity } from "../chat/messageHooks";
+import { ChatBell } from "../notification/ChatBell";
 import { formatChatListDate } from "../chat/messageTime";
 import { rememberForeignAddresses } from "../federation/federationProvider";
 
@@ -461,14 +462,17 @@ function InvitationListItem({
 function LastActivityLabel({
   owner,
   chatId,
+  origin,
   liveActivity,
 }: {
   owner: string;
   chatId: string;
+  // The server the chat lives on (undefined = own server).
+  origin?: string;
   liveActivity?: { chatId: string; date: Date };
 }) {
   const { i18n } = useTranslation();
-  const loaded = useLastActivity(owner, chatId);
+  const loaded = useLastActivity(owner, chatId, origin);
   const lastActivity =
     liveActivity?.chatId === chatId ? liveActivity.date : loaded;
   return lastActivity ? (
@@ -539,14 +543,13 @@ function ContactListItem({
             <div>{contact.email}</div>
           )}
         </div>
-        {/* No push or polling across servers yet (F8, ADR 0013 A8). */}
-        {!contact.chatOrigin && (
-          <LastActivityLabel
-            owner={contact.owner}
-            chatId={contact.chatId}
-            liveActivity={liveActivity}
-          />
-        )}
+        <ChatBell chatOrigin={contact.chatOrigin} />
+        <LastActivityLabel
+          owner={contact.owner}
+          chatId={contact.chatId}
+          origin={contact.chatOrigin}
+          liveActivity={liveActivity}
+        />
       </NavLink>
     </li>
   );

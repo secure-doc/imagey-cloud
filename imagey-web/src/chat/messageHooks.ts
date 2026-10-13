@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Message } from "./Message";
-import { messageService } from "./MessageService";
-import { messageRepository } from "./MessageRepository";
+import { servicesFor } from "../api/servicesFor";
+import { repositoriesFor } from "../api/repositoriesFor";
 
+// `userId` is the own id on the chat's server (`origin`, undefined = own server): the sender
+// of own messages there.
 export function usePolling(
   userId: string,
   ownerId: string | undefined,
   chatId: string | undefined,
   sharedKey?: JsonWebKey,
+  origin?: string,
 ) {
   const [messages, setMessages] = useState<Message[]>();
 
@@ -17,7 +20,7 @@ export function usePolling(
   // leaking one contact's plaintext messages into another's thread.
   useEffect(() => {
     setMessages(undefined);
-  }, [ownerId, chatId]);
+  }, [ownerId, chatId, origin]);
 
   useEffect(() => {
     let mounted = true;
@@ -28,7 +31,9 @@ export function usePolling(
 
       while (mounted) {
         try {
-          const newMessages = await messageService.receiveDecryptedMessages(
+          const newMessages = await servicesFor(
+            origin,
+          ).messages.receiveDecryptedMessages(
             userId,
             ownerId,
             chatId,
@@ -69,7 +74,7 @@ export function usePolling(
     return () => {
       mounted = false;
     };
-  }, [userId, ownerId, chatId, sharedKey]);
+  }, [userId, ownerId, chatId, sharedKey, origin]);
 
   // A sent message can already have arrived via the running long poll before
   // the POST response does - append it only if polling hasn't added it yet.
@@ -104,17 +109,18 @@ export function useLiveActivity(
 export function useLastActivity(
   ownerId: string,
   chatId: string,
+  origin?: string,
 ): Date | undefined {
   const [lastActivity, setLastActivity] = useState<Date>();
   useEffect(() => {
     let mounted = true;
-    messageRepository
-      .fetchLastActivity(ownerId, chatId)
+    repositoriesFor(origin)
+      .messages.fetchLastActivity(ownerId, chatId)
       .then((date) => mounted && setLastActivity(date))
       .catch((e) => console.warn("Failed to load the last activity", e));
     return () => {
       mounted = false;
     };
-  }, [ownerId, chatId]);
+  }, [ownerId, chatId, origin]);
   return lastActivity;
 }

@@ -1,3 +1,5 @@
+import { normalizeOrigin } from "../api/RemoteApiClient";
+
 // A message's raw content is a plain string; two structured conventions are
 // sniffed off a `startsWith` prefix (a `JSON.parse` up front would throw on
 // every ordinary text message): "shared-document" (an image shared into the
@@ -6,8 +8,25 @@
 // to parse - is plain text.
 export type ParsedMessageContent =
   | { type: "text"; content: string }
-  | { type: "shared-document"; documentId: string; owner: string }
+  | {
+      type: "shared-document";
+      documentId: string;
+      owner: string;
+      // Where the document lives, relative to the reader (F8): absent = on the chat's server,
+      // null = on the own server, else the origin of that other server (the sender's home
+      // when the chat is elsewhere).
+      origin?: string | null;
+    }
   | { type: "group-invitation"; groupId: string; owner: string; name: string };
+
+// The `origin` of a message comes from the other party: only a well-formed one passes. The own
+// origin is normalized to null, as the document then is local.
+function parseDocumentOrigin(origin: unknown): string | null {
+  if (typeof origin !== "string") {
+    throw new TypeError("Invalid origin");
+  }
+  return normalizeOrigin(origin) ?? null;
+}
 
 export function parseMessageContent(content: string): ParsedMessageContent {
   if (content.startsWith('{"type":"shared-document"')) {
@@ -17,6 +36,9 @@ export function parseMessageContent(content: string): ParsedMessageContent {
         type: "shared-document",
         documentId: payload.documentId,
         owner: payload.owner,
+        ...(payload.origin !== undefined
+          ? { origin: parseDocumentOrigin(payload.origin) }
+          : {}),
       };
     } catch {
       // fall through to plain text

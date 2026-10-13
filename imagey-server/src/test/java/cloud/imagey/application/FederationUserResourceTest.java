@@ -159,7 +159,8 @@ public class FederationUserResourceTest {
     }
 
     private String guestBearer() {
-        return "Bearer " + tokenService.generateGuestToken(UserFactory.mary(), new DomainName("foreign.test")).token();
+        return "Bearer "
+            + tokenService.generateGuestToken(UserFactory.mary(), new DomainName("foreign.test"), TokenService.ONE_HOUR).token();
     }
 
     private Cookie maryCookie() {

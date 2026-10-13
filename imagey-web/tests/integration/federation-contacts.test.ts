@@ -16,8 +16,9 @@ import {
 import { BILL_ID } from "./testdata";
 import type {} from "../../src/main";
 
-// Contacts that live on another server (ADR 0013 A11, F7): until F8 the pages that exist must
-// cope with them, and the inviter must learn where the invitee's profile lives.
+// Contacts that live on another server (ADR 0013 A11, F7): the inviter must learn where the
+// invitee's profile lives, and a contact whose profile cannot be reached stays usable. Chat across
+// the server boundary: federated-chat.test.ts (F8).
 
 const CHATS_ID = TestData.mary.settings!.chats;
 const A = "https://a.test";
@@ -116,39 +117,10 @@ async function routeChats(page: Page, contacts: Contact[]) {
   return requests;
 }
 
-test("the chat list does not ask for the activity of a chat on another server", async ({
+test("a contact whose profile cannot be read on its server is shown from its snapshot", async ({
   page,
 }) => {
-  const requests = await routeChats(page, [alice, localLaura]);
-
-  await loginAsMaryAt(page, "/chats");
-
-  await expect(page.getByText("Alice", { exact: true })).toBeVisible();
-  await expect(page.getByText("Laura", { exact: true })).toBeVisible();
-  // Laura's chat is asked for its newest message, Alice's - at A - is not.
-  await expect
-    .poll(() => requests.filter((r) => r.includes("chat-laura")).length)
-    .toBeGreaterThan(0);
-  expect(requests.filter((r) => r.includes(CHAT_ALICE))).toEqual([]);
-});
-
-test("a chat on another server says that it will follow", async ({ page }) => {
-  const requests = await routeChats(page, [alice]);
-
-  await loginAsMaryAt(page, `/chats/${ALICE_A}`);
-
-  await expect(
-    page.getByText("Chats with contacts on other servers will follow shortly."),
-  ).toBeVisible();
-  expect(
-    requests.filter((r) => r.includes(CHAT_ALICE) || r.includes("/messages")),
-  ).toEqual([]);
-});
-
-test("a contact whose profile lives on another server is shown from its snapshot", async ({
-  page,
-}) => {
-  const requests = await routeChats(page, [
+  await routeChats(page, [
     bob({ origin: "https://b.test", userId: "bob-on-b" }),
   ]);
 
@@ -156,7 +128,6 @@ test("a contact whose profile lives on another server is shown from its snapshot
 
   await expect(page.getByLabel("Type a message")).toBeVisible();
   await expect(page.getByText("Bob", { exact: true }).first()).toBeVisible();
-  expect(requests.filter((r) => r.includes(BOBS_PROFILE))).toEqual([]);
 });
 
 test("a contact whose profile lives here has it loaded", async ({ page }) => {

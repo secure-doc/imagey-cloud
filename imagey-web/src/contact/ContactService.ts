@@ -8,6 +8,8 @@ import { contactRepository, ContactRepository } from "./ContactRepository";
 import { parseOrigin } from "../api/RemoteApiClient";
 import { repositoriesFor } from "../api/repositoriesFor";
 import { federationRepository } from "../federation/FederationRepository";
+import { chatPlace } from "../federation/whereabouts";
+import { servicesFor } from "../api/servicesFor";
 import {
   documentRepository,
   HttpError,
@@ -387,6 +389,9 @@ export const contactService = {
           ? {
               chatOrigin: context.chatOrigin,
               self: { userId: selfId, address: selfAddress },
+              ...(context.profileGrantee
+                ? { localUserId: context.profileGrantee }
+                : {}),
             }
           : {}),
       };
@@ -631,6 +636,8 @@ export const contactService = {
   }> => {
     let document;
     try {
+      // On another server we are a guest there: the key entry hangs under our id on that server.
+      const place = chatPlace(contact, user);
       document =
         contact.owner === user
           ? await documentService.loadDocument(
@@ -639,10 +646,10 @@ export const contactService = {
               chatsId,
               chatsDocumentKey,
             )
-          : await documentService.loadDocument(
+          : await servicesFor(place.origin).documents.loadDocument(
               contact.owner,
               contact.chatId,
-              user,
+              place.selfId,
               chatsDocumentKey,
             );
     } catch (e) {
@@ -663,6 +670,42 @@ export const contactService = {
       publicProfiles: document.publicProfiles,
       pending: false,
     };
+  },
+
+  // The grantee of a document we share into the chat with `contact` - their id ON OUR SERVER,
+  // where the document stays (F8). A contact of this server is that id itself. For one whose chat
+  // lives elsewhere it is their ForeignUserMapping here; entries from before F8 do not carry it
+  // yet, so it is looked up (registering is idempotent) and stored. Resolves to undefined if
+  // there is no address to register (ADR 0013 decision 10) - then nothing can be shared.
+  resolveShareGrantee: async (
+    userId: UserId,
+    chatsDocument: ChatsDocumentState,
+    contact: ContactEntry,
+  ): Promise<
+    | { grantee: UserId; contacts?: ContactEntry[]; revision?: string | null }
+    | undefined
+  > => {
+    if (!contact.chatOrigin) {
+      return { grantee: contact.userId };
+    }
+    if (contact.localUserId) {
+      return { grantee: contact.localUserId };
+    }
+    if (!contact.email) {
+      return undefined;
+    }
+    const grantee = await federationRepository.registerForeignPrincipal(
+      userId,
+      new URL(contact.chatOrigin).host,
+      contact.email,
+    );
+    const { contacts, revision } = await updateContact(
+      userId,
+      chatsDocument,
+      contact.userId,
+      (current) => ({ ...current, localUserId: grantee }),
+    );
+    return { grantee, contacts, revision };
   },
 
   // Patches one contact's denormalized public-profile snapshot (name/avatarId

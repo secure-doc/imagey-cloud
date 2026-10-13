@@ -801,9 +801,9 @@ key URL or key fetch above refers to this path.
 - **Chat list entries** (`ContactEntry`): `chatOrigin` (where the chat lives,
   absent = own server), `self` (own id at `chatOrigin` and the address its
   mapping is bound to, fed back into the guest-token provider on every load)
-  and `profileHome` (from `contactInfo.home`). Until F8, pages leave such
-  entries alone (no activity lookup, no push, no group membership, a notice
-  instead of the chat).
+  and `profileHome` (from `contactInfo.home`). Chat, messages, profiles and
+  shared images across the boundary work since F8 (A12); group membership
+  and push stay out until F9.
 - **Residual risk: the inviting server is named by the link.** Anyone can craft
   `https://B/federation/accept#…&from=https://evil.example`. If the victim
   continues, B mints an assertion for the chosen address addressed to that
@@ -815,6 +815,52 @@ key URL or key fetch above refers to this path.
   audience (A3), so it is useless anywhere else.
 - **Key-derivation labels carry no product name** (`chat-key`,
   `invitation-key`, `device-info`, `notification-keyring`), consistent with A9.
+
+### A12. Federated chat (F8, refines decision 7 and A8)
+
+- **Where, and who we are there.** Every access to a document or a message needs
+  two things: the server to talk to and the own `UserId` on it (the `kid` when
+  loading a key, the sender of own messages). The own id on a foreign server
+  is the id of the guest session there (`GuestSession.userId`), obtained
+  through the same single-flight renewal the requests use. For the chat it is
+  part of the entry (`ContactEntry.self.userId`).
+- **Messages are read and written as a guest of the chat's server.** The chat
+  lives on the inviter's server; the invitee polls and posts there with the
+  guest token. The sender the server stamps is the guest id, so the view tells
+  own messages by that id, not by the id on the home server.
+- **A document stays with its sharer.** Sharing is always a key entry on the
+  sharer's server, `kid`/`issuer` = the contact's id **there**, wrapped with the
+  chat key. For a contact whose chat is elsewhere that is the contact's
+  `ForeignUserMapping` on the own server: `ContactEntry.localUserId`. Entries
+  from before F8 do not carry it; it is looked up on first use (registering is
+  idempotent) and stored. Without an address of the contact (decision 10 of
+  F7) nothing can be shared into that chat.
+- **`origin` in a `shared-document` message** names the server of the
+  document if it is not the chat's: the sender's home when the chat is
+  elsewhere. It is **relative to the reader**: absent means "on the chat's
+  server", the reader's own origin means "local". It comes from the other party
+  and must be a well-formed origin (https, or `*.localhost`), else the message
+  is shown as text. Even then it is only followed to a server the contact is
+  known to live on (`chatOrigin`, `profileHome.origin`): any other would make
+  the client log in there with an address of the user.
+- **Detail view and download** carry the same `origin` as query parameter
+  (checked the same way, against the contact of `?chat=`), so a deep link or
+  reload resolves the document again.
+  A loaded document remembers its server (`origin`), so thumbnails and downloads
+  reach the right one.
+- **Profiles are read live.** The invitee reads the inviter's public profile
+  on the chat's server (`kid` = the guest id there), the inviter reads the
+  invitee's on its home server (`ContactEntry.profileHome`) as a guest of that
+  server; both grants already exist since the accept.
+- **The bell (A8)** is shown if push is active on the device: normal for a chat
+  on the own server, struck through for a chat on another server. The
+  notification keyring continues to skip such chats.
+- **Guest-token lifetime is configurable** (`federation.guest-session.ttl`,
+  ISO-8601, default `PT15M`) so the end-to-end test can make the renewal
+  during polling actually happen. The default is the 15 minutes of A4; a value
+  that is not a positive duration stops the server at startup.
+- **Not in F8:** groups with members on other servers (F9) and push across
+  servers.
 
 ### Consequences of this amendment
 

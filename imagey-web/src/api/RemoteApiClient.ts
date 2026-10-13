@@ -1,6 +1,7 @@
 import { ApiClient } from "./ApiClient";
-import { guestSessionStore } from "./GuestSessionStore";
+import { GuestSession, guestSessionStore } from "./GuestSessionStore";
 import {
+  FederationUnavailableError,
   GuestTokenProvider,
   unavailableGuestTokenProvider,
 } from "./GuestTokenProvider";
@@ -29,6 +30,23 @@ export function parseOrigin(origin: string): string {
   return url.origin;
 }
 
+// Whether `origin` is the origin of this app. Checked before parseOrigin, which rejects plain
+// http (also for the own origin). `self` rather than `window`: also true in the service worker.
+export function isOwnOrigin(origin: string): boolean {
+  return new URL(origin).origin === self.location.origin;
+}
+
+// The own origin is no foreign server: undefined. Any other must pass parseOrigin (throws if not).
+export function normalizeOrigin(origin: string): string | undefined {
+  return isOwnOrigin(origin) ? undefined : parseOrigin(origin);
+}
+
+export interface RemoteApiClient extends ApiClient {
+  // The valid guest session at this server: the stored one, else a renewed one (the same
+  // single-flight renewal the requests use). Rejects if the user changed meanwhile.
+  session(): Promise<GuestSession>;
+}
+
 // Talks to another server with a guest bearer token and no cookies (ADR 0013
 // decisions 4 and 6): renews once on 401, never on 403.
 export function createRemoteApiClient(
@@ -36,19 +54,21 @@ export function createRemoteApiClient(
   provider: GuestTokenProvider = unavailableGuestTokenProvider,
   store = guestSessionStore,
   now: () => number = Date.now,
-): ApiClient {
+): RemoteApiClient {
   const serverOrigin = parseOrigin(origin);
   let lifetime: number | undefined; // of the last renewed session, ms
   const margin = () =>
     lifetime === undefined
       ? RENEW_MARGIN_MS
       : Math.min(RENEW_MARGIN_MS, lifetime / 2);
-  let renewing: { generation: number; promise: Promise<string> } | undefined;
+  let renewing:
+    | { generation: number; promise: Promise<GuestSession> }
+    | undefined;
 
   // Single-flight: concurrent renewals share one promise. A renewal that started
   // before store.clear() (logout) is neither joined nor stored: its token belongs
   // to the previous user.
-  const renew = (): Promise<string> => {
+  const renew = (): Promise<GuestSession> => {
     const generation = store.generation();
     if (renewing?.generation === generation) {
       return renewing.promise;
@@ -58,7 +78,7 @@ export function createRemoteApiClient(
       if (store.generation() === generation) {
         store.set({ ...session, origin: serverOrigin });
       }
-      return session.token;
+      return { ...session, origin: serverOrigin };
     });
     const current = { generation, promise };
     renewing = current;
@@ -80,16 +100,19 @@ export function createRemoteApiClient(
     ) {
       return Promise.resolve(session.token);
     }
-    return renew();
+    return renew().then((renewed) => renewed.token);
   };
 
-  const currentToken = async (): Promise<string> => {
+  const currentSession = async (): Promise<GuestSession> => {
     const session = store.get(serverOrigin);
     if (!session || session.expiresAt - now() < margin()) {
       return renew();
     }
-    return session.token;
+    return session;
   };
+
+  const currentToken = async (): Promise<string> =>
+    (await currentSession()).token;
 
   const send = (url: string, init: RequestInit | undefined, token: string) => {
     const headers = new Headers(init?.headers);
@@ -103,6 +126,16 @@ export function createRemoteApiClient(
   };
 
   return {
+    session: async () => {
+      const generation = store.generation();
+      const session = await currentSession();
+      if (store.generation() !== generation) {
+        throw new FederationUnavailableError(
+          "The user changed while the session was renewed",
+        );
+      }
+      return session;
+    },
     fetch: async (path, init) => {
       // Judge the URL the browser will request: fetch normalizes "/users/../x".
       const url = new URL(path, serverOrigin);

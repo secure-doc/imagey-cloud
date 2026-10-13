@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useUser } from "../contexts/AuthenticationContext";
 import {
   FolderContext,
@@ -6,7 +6,9 @@ import {
   useKey,
 } from "../contexts/FolderContext";
 import { useDocumentsId } from "../contexts/SettingsContext";
-import { documentService } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
+import { normalizeOrigin } from "../api/RemoteApiClient";
+import { foreignOriginsOf, placeOf } from "../federation/whereabouts";
 import Document from "../document/Document";
 import { DetailInfo } from "../contexts/DetailContext";
 import { useChatKey } from "./useChatKey";
@@ -24,6 +26,8 @@ export function useResolvedDetail<T extends DetailInfo>(
   folder: string | null,
   chat: string | null,
   ownerParam: string | null,
+  // The server of a document shared from another one (F8), as given in the URL.
+  originParam: string | null,
   toInfo: (
     doc: Document,
     accessPath: string | undefined,
@@ -40,32 +44,69 @@ export function useResolvedDetail<T extends DetailInfo>(
     !!folder && folder !== documentsId && !folders[folder]?.parentId;
 
   const owner = folder ? user : (ownerParam ?? "");
-  const isOwner = owner === user;
+  // From the URL, so untrusted: only a well-formed origin passes, the own one counts as none.
+  const origin = useMemo(() => {
+    if (!originParam || folder) {
+      return { value: undefined, valid: true };
+    }
+    try {
+      return { value: normalizeOrigin(originParam), valid: true };
+    } catch {
+      return { value: undefined, valid: false };
+    }
+  }, [originParam, folder]);
+  const isOwner = origin.value === undefined && owner === user;
 
   // Both keys are resolved unconditionally (rules of hooks) and the one that
   // matches the entry point is used. Only a non-owner needs the chat key: the
   // owner reaches the document through their own root folder.
   const folderKey = useKey(folder ?? "");
   const rootFolderKey = useKey(documentsId);
-  const { key: chatKey, failed: chatKeyFailed } = useChatKey(
-    needsResolving && !isOwner ? chat : null,
-  );
+  const {
+    key: chatKey,
+    contact,
+    failed: chatKeyFailed,
+  } = useChatKey(needsResolving && !isOwner ? chat : null);
 
-  const parentId = folder ? folder : isOwner ? documentsId : user;
+  // The origin of a document in the URL is only followed to a server the contact of the chat is
+  // known to live on (foreignOriginsOf): any other would log us in there with an address of ours.
+  const originRefused =
+    !!origin.value &&
+    !!contact &&
+    !foreignOriginsOf(contact).includes(origin.value);
+  const originAllowed = !origin.value || (!!contact && !originRefused);
+
   const parentKey = folder ? folderKey : isOwner ? rootFolderKey : chatKey;
   const accessPath = useAccessPath(id, owner);
 
   const [loaded, setLoaded] = useState<{ id: string; info?: T }>();
 
   const canResolve =
-    needsResolving && !folderUnresolvable && !!(folder || (chat && ownerParam));
+    needsResolving &&
+    !folderUnresolvable &&
+    origin.valid &&
+    !!(folder || (chat && ownerParam));
   useEffect(() => {
-    if (!canResolve || !parentKey) {
+    if (!canResolve || !parentKey || !originAllowed) {
       return;
     }
     let cancelled = false;
-    documentService
-      .loadDocument(owner, id, parentId, parentKey, undefined, accessPath)
+    (async () => {
+      // The key entry of a document shared with us hangs under our id on ITS server.
+      const parentId = folder
+        ? folder
+        : isOwner
+          ? documentsId
+          : (await placeOf(origin.value, user)).selfId;
+      return servicesFor(origin.value).documents.loadDocument(
+        owner,
+        id,
+        parentId,
+        parentKey,
+        undefined,
+        accessPath,
+      );
+    })()
       .then((doc) => {
         if (cancelled) {
           return;
@@ -76,7 +117,21 @@ export function useResolvedDetail<T extends DetailInfo>(
     return () => {
       cancelled = true;
     };
-  }, [canResolve, owner, id, parentId, parentKey, accessPath, chat, toInfo]);
+  }, [
+    canResolve,
+    owner,
+    id,
+    folder,
+    isOwner,
+    documentsId,
+    user,
+    origin,
+    parentKey,
+    originAllowed,
+    accessPath,
+    chat,
+    toInfo,
+  ]);
 
   if (registered) {
     return { info: registered, failed: false };
@@ -85,7 +140,11 @@ export function useResolvedDetail<T extends DetailInfo>(
     return { info: loaded.info, failed: false };
   }
   return {
-    failed: !canResolve || loaded?.id === id || (!!chat && chatKeyFailed),
+    failed:
+      !canResolve ||
+      originRefused ||
+      loaded?.id === id ||
+      (!!chat && chatKeyFailed),
   };
 }
 

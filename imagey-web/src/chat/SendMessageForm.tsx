@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Message } from "./Message";
-import { messageService } from "./MessageService";
+import { servicesFor } from "../api/servicesFor";
 import { documentService } from "../document/DocumentService";
 import { useDocumentsId, useSettingsKey } from "../contexts/SettingsContext";
 
@@ -10,6 +10,11 @@ import ImageComponent from "../components/ImageComponent";
 
 interface SendMessageFormProps {
   userId: string;
+  // The own id on the chat's server (`chatOrigin`) - the sender of the messages there;
+  // `userId` (the own id here) is the owner of the documents shared into the chat.
+  selfId?: string;
+  // The server the chat lives on (undefined = own server).
+  chatOrigin?: string;
   ownerId: string;
   chatId: string;
   sharedKey: JsonWebKey;
@@ -23,16 +28,21 @@ interface SendMessageFormProps {
   // (groupService.shareDocumentIntoGroup, ADR 0019 decision 4). The message
   // itself is always the same "shared-document" convention either way.
   share: (document: DocumentMetadata) => Promise<void>;
+  // Sharing is not possible (a contact on another server without a known address, F8).
+  shareDisabled?: boolean;
 }
 
 export function SendMessageForm({
   userId,
+  selfId = userId,
+  chatOrigin,
   ownerId,
   chatId,
   sharedKey,
   onMessageSent,
   notify,
   share,
+  shareDisabled = false,
 }: SendMessageFormProps) {
   const { t } = useTranslation();
   const documentsId = useDocumentsId();
@@ -67,8 +77,10 @@ export function SendMessageForm({
     const messageText = inputMessage;
     setInputMessage("");
     try {
-      const newMessage = await messageService.sendEncryptedMessage(
-        userId,
+      const newMessage = await servicesFor(
+        chatOrigin,
+      ).messages.sendEncryptedMessage(
+        selfId,
         ownerId,
         chatId,
         messageText,
@@ -91,10 +103,14 @@ export function SendMessageForm({
         type: "shared-document",
         documentId: document.documentId,
         owner: userId,
+        // The document stays on our server: say so if that is not the chat's.
+        ...(chatOrigin ? { origin: window.location.origin } : {}),
       });
 
-      const newMessage = await messageService.sendEncryptedMessage(
-        userId,
+      const newMessage = await servicesFor(
+        chatOrigin,
+      ).messages.sendEncryptedMessage(
+        selfId,
         ownerId,
         chatId,
         payload,
@@ -117,6 +133,12 @@ export function SendMessageForm({
           <button
             type="button"
             className="circle transparent"
+            disabled={shareDisabled}
+            title={
+              shareDisabled
+                ? t("Sharing is not possible for this contact")
+                : undefined
+            }
             onClick={() => setShowDialog(true)}
           >
             <i>attach_file</i>

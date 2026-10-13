@@ -16,6 +16,7 @@
  */
 package cloud.imagey.domain.federation;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -46,10 +47,10 @@ import cloud.imagey.domain.user.UserRepository;
 @ApplicationScoped
 public class GuestSessionService {
 
-    private static final long MILLIS_PER_SECOND = 1000;
-
     @Inject
     private TokenService tokenService;
+    @Inject
+    private FederationSettings settings;
     @Inject
     private UserMappingService userMappingService;
     @Inject
@@ -61,8 +62,9 @@ public class GuestSessionService {
 
     public Session establish(VerifiedAssertion assertion, Optional<Token> invitationToken) {
         UserId guest = invitationToken.isPresent() ? redeemInvitation(assertion, invitationToken.get()) : renew(assertion);
-        Token token = tokenService.generateGuestToken(new User(guest), new DomainName(assertion.iss()));
-        return new Session(token, guest, TokenService.GUEST_SESSION / MILLIS_PER_SECOND);
+        Duration ttl = settings.guestSessionTtl();
+        Token token = tokenService.generateGuestToken(new User(guest), new DomainName(assertion.iss()), ttl.toMillis());
+        return new Session(token, guest, ttl.toSeconds());
     }
 
     private UserId renew(VerifiedAssertion assertion) {

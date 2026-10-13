@@ -1,4 +1,4 @@
-import { documentService } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
 import { NewDocumentMetadata } from "../document/DocumentMetadata";
 import { useImageBlob } from "../hooks/useImageBlob";
 import { ImageThumbnail } from "./ImageThumbnail";
@@ -24,7 +24,12 @@ export default function ImageComponent({
 }) {
   const mimeType = "mimeType" in image ? image.mimeType : undefined;
   const { objectUrl, error } = useImageBlob(
-    () => documentService.loadContent(image, contentId, accessPath),
+    () =>
+      servicesFor(image.origin).documents.loadContent(
+        image,
+        contentId,
+        accessPath,
+      ),
     mimeType,
     [image, contentId, accessPath],
   );
