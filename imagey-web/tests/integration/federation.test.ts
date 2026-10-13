@@ -259,6 +259,50 @@ test("a remembered address is used for renewing, whatever the account's own addr
   expect(JSON.parse(local[0].body!).email).toBe("alias@work.test");
 });
 
+test("the address in use is the remembered one, else the account's once a session exists", async ({
+  page,
+}) => {
+  await stubLocal(page);
+  await stubRemote(page, () => session("g1"));
+  await installProvider(page);
+  const inUse = () =>
+    page.evaluate((origin) => window.fedProvider.addressInUse(origin), REMOTE);
+
+  expect(await inUse()).toBeUndefined();
+
+  await page.evaluate((origin) => window.fedProvider.renew(origin), REMOTE);
+  await page.evaluate(
+    (origin) =>
+      window.remoteApi.guestSessionStore.set({
+        origin: new URL(origin).origin,
+        token: "g1",
+        userId: "mary-on-remote",
+        expiresAt: Date.now() + 60_000,
+      }),
+    REMOTE,
+  );
+  expect(await inUse()).toBe(MARY_EMAIL);
+
+  await page.evaluate(
+    (origin) => window.fedProvider.rememberAddress(origin, "alias@work.test"),
+    REMOTE,
+  );
+  expect(await inUse()).toBe("alias@work.test");
+
+  await page.evaluate(
+    (origin) => window.fedProvider.forgetAddress(origin),
+    REMOTE,
+  );
+  // the session minted with the address goes with it
+  expect(await inUse()).toBeUndefined();
+  expect(
+    await page.evaluate(
+      (origin) => window.remoteApi.guestSessionStore.get(origin),
+      new URL(REMOTE).origin,
+    ),
+  ).toBeUndefined();
+});
+
 test("without an address there is no federation, and no request", async ({
   page,
 }) => {

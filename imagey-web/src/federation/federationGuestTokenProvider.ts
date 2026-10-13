@@ -18,6 +18,12 @@ export interface FederationGuestTokenProvider extends GuestTokenProvider {
   ): Promise<GuestSession>;
   // The address this account uses at `origin` (F7/F8 set it from the ContactEntry).
   rememberAddress(origin: string, email: Email): void;
+  // Takes back rememberAddress, e.g. when the first access with it failed - and the session
+  // minted with it.
+  forgetAddress(origin: string): void;
+  // The address this account is known by at `origin` right now: the remembered one, else the
+  // account's own if a session exists (it was minted with that). Only one is kept per server.
+  addressInUse(origin: string): Email | undefined;
 }
 
 // Gets guest sessions by asking the own server for an assertion and redeeming it at
@@ -90,6 +96,19 @@ export function createFederationGuestTokenProvider(
       const server = parseOrigin(origin);
       remembered(server);
       addresses.set(server, email);
+    },
+    forgetAddress: (origin) => {
+      const server = parseOrigin(origin);
+      remembered(server);
+      addresses.delete(server);
+      store.delete(server);
+    },
+    addressInUse: (origin) => {
+      const server = parseOrigin(origin);
+      return (
+        remembered(server) ??
+        (store.get(server) ? identity()?.email : undefined)
+      );
     },
   };
 }

@@ -17,6 +17,9 @@ export const guestSessionStore = {
   set: (session: GuestSession): void => {
     sessions.set(session.origin, session);
   },
+  delete: (origin: string): void => {
+    sessions.delete(origin);
+  },
   generation: (): number => generation,
   // All origins.
   clear: (): void => {

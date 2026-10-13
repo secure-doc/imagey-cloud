@@ -17,7 +17,18 @@ export type ParsedMessageContent =
       // when the chat is elsewhere).
       origin?: string | null;
     }
-  | { type: "group-invitation"; groupId: string; owner: string; name: string };
+  | {
+      type: "group-invitation";
+      groupId: string;
+      owner: string;
+      name: string;
+      // Where the group lives, relative to the reader (F9), like `shared-document`: absent =
+      // on the chat's server, null = on the own server, else the origin of that other server.
+      origin?: string | null;
+      // The address the inviter registered the reader under on the group's server (F9), if the
+      // group is not on the chat's server: the guest session there is bound to it.
+      address?: string;
+    };
 
 // The `origin` of a message comes from the other party: only a well-formed one passes. The own
 // origin is normalized to null, as the document then is local.
@@ -26,6 +37,16 @@ function parseDocumentOrigin(origin: unknown): string | null {
     throw new TypeError("Invalid origin");
   }
   return normalizeOrigin(origin) ?? null;
+}
+
+// Only a well-formed address is taken over; anything else is dropped (the invitation still
+// counts, the reader's own address is then used).
+function parseAddress(address: unknown): string | undefined {
+  return typeof address === "string" &&
+    address.length <= 254 &&
+    /^\S+@\S+\.\S+$/.test(address)
+    ? address
+    : undefined;
 }
 
 export function parseMessageContent(content: string): ParsedMessageContent {
@@ -46,11 +67,16 @@ export function parseMessageContent(content: string): ParsedMessageContent {
   } else if (content.startsWith('{"type":"group-invitation"')) {
     try {
       const payload = JSON.parse(content);
+      const address = parseAddress(payload.address);
       return {
         type: "group-invitation",
         groupId: payload.groupId,
         owner: payload.owner,
         name: payload.name,
+        ...(payload.origin !== undefined
+          ? { origin: parseDocumentOrigin(payload.origin) }
+          : {}),
+        ...(address ? { address } : {}),
       };
     } catch {
       // fall through to plain text

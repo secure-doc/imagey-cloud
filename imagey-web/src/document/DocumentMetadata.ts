@@ -48,6 +48,10 @@ export interface GroupMetadata extends BaseMetadata {
   // ChatMetadata.publicProfiles, populated as members share their profile
   // into the group.
   publicProfiles: Record<string, string>;
+  // Display names of members whose public profile is not reachable through the group (their
+  // home server is not the group's, ADR 0019 amendment, F9). Written by the owner from his
+  // ContactEntry.
+  memberNames?: Record<string, string>;
 }
 
 // A chat-list entry for a group the user owns or has joined, with a
@@ -61,6 +65,12 @@ export interface GroupEntry {
   // is the closest analogue): the group's own Document key, so opening the
   // group needs no detour through the 1:1 chat that carried the invitation.
   groupKey?: JsonWebKey;
+  // ADR 0019 amendment (F9), like ContactEntry: the group's server, if it is not the own one
+  // (absent = own server). Then `owner` is a UserId ON THAT SERVER.
+  chatOrigin?: string;
+  // Own UserId on `chatOrigin` (its ForeignUserMapping) and the address that mapping is bound
+  // to, if known - needed to renew the guest session there (rememberAddress).
+  self?: { userId: string; address?: string };
 }
 
 export interface FolderMetadata extends BaseMetadata {

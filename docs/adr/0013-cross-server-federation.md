@@ -803,7 +803,7 @@ key URL or key fetch above refers to this path.
   mapping is bound to, fed back into the guest-token provider on every load)
   and `profileHome` (from `contactInfo.home`). Chat, messages, profiles and
   shared images across the boundary work since F8 (A12); group membership
-  and push stay out until F9.
+  stay out until F9 (A13); push stays out.
 - **Residual risk: the inviting server is named by the link.** Anyone can craft
   `https://B/federation/accept#…&from=https://evil.example`. If the victim
   continues, B mints an assertion for the chosen address addressed to that
@@ -859,8 +859,26 @@ key URL or key fetch above refers to this path.
   ISO-8601, default `PT15M`) so the end-to-end test can make the renewal
   during polling actually happen. The default is the 15 minutes of A4; a value
   that is not a positive duration stops the server at startup.
-- **Not in F8:** groups with members on other servers (F9) and push across
+- **Not in F8:** groups with members on other servers (F9, A13) and push across
   servers.
+
+### A13. Federated groups (F9, refines decision 7 and A11)
+
+- **A group lives on one server** (its owner's); members from another server
+  are guests there, with the own id on it from the guest session
+  (`GroupEntry.self`). Details: ADR 0019, amendment of 2026-10-13.
+- **An access path is never checked across servers.** It names documents of one
+  server and is verified there, against witnesses only that server holds. A
+  member from another server therefore cannot share into the group (the
+  document would stay on their server, out of reach of the check); the
+  contribution as a guest on the group's server is the way out (decision 8,
+  F10).
+- **The member id is the id on the group's server.** For a contact whose chat
+  lives elsewhere it is their `ForeignUserMapping` on the own server
+  (`localUserId`), looked up with their address as for shares (A12).
+- **`origin` in a `group-invitation`** has the semantics of A12 and the same
+  check against the servers the contact is known to live on.
+- **Not in F9:** push across servers and contributions of foreign members.
 
 ### Consequences of this amendment
 

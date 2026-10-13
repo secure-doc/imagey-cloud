@@ -175,3 +175,39 @@ that member's server, as for 1:1 chats today.
   rotating the group key (key epochs, messages tagged with their epoch) so
   removed members cannot read new content. Transferring or deleting a group
   and member admin rights are also left open.
+
+## Amendment (2026-10-13, F9): federated members
+
+Refines decision 7. Implementation plan: `docs/plans/f9-federated-groups.md`.
+
+- **Every contact can be added**, also one on another server, in both
+  directions: the 1:1 chat that carries the invitation may live at the creator
+  or at the contact. The member id in the group is the contact's id **on the
+  group's server** (`ContactEntry.userId` for a local contact,
+  `ContactEntry.localUserId` otherwise, looked up with the contact's address
+  like a share grantee).
+- **The group's server is part of the entry.** `GroupEntry` carries
+  `chatOrigin` (absent = own server) and `self` (own id there and the address
+  its mapping is bound to, if known), as `ContactEntry` does. A member from
+  another server reads and writes the group as a guest.
+- **The invitation says where the group is** (`origin`, relative to the reader
+  like in a `shared-document`) if that is not the server of the 1:1 chat. It
+  is only followed to a server the contact is known to live on. It also
+  carries `address`, the address the inviter registered the member under on
+  the group's server (the guest session there is bound to it); the reader
+  remembers it before the first access and keeps it in `GroupEntry.self`. A
+  malformed address is dropped, then the account's own is used. The assertion
+  endpoint only signs addresses the user owns, so a foreign one ends in a 403.
+- **Names travel in the group.** `GroupMetadata.memberNames` is the owner's
+  snapshot of the display names of members whose public profile is not
+  reachable through the group. The display order is: loaded profile, snapshot,
+  "Unknown member". It is encrypted with the group key like the rest.
+- **Deliberate limit:** a member whose home server is not the group's server
+  cannot share images or a profile into the group, and so has no avatar there.
+  The access path of a share has two hops (document under the sharer, group
+  under the owner); only the server that holds both can check it. Reading
+  stays possible for everything on the group's server. The way out is
+  contributing as a guest on the group's server (ADR 0013 decision 8, F10).
+  The button is disabled with a hint; `shareDocumentIntoGroup` refuses.
+- **Push** across servers stays out (ADR 0013 A8): the bell of such a group is
+  struck through and the notification keyring skips it.

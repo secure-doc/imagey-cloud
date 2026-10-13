@@ -30,6 +30,8 @@ interface SendMessageFormProps {
   share: (document: DocumentMetadata) => Promise<void>;
   // Sharing is not possible (a contact on another server without a known address, F8).
   shareDisabled?: boolean;
+  // Why, as the button's tooltip.
+  shareDisabledHint?: string;
 }
 
 export function SendMessageForm({
@@ -43,6 +45,7 @@ export function SendMessageForm({
   notify,
   share,
   shareDisabled = false,
+  shareDisabledHint,
 }: SendMessageFormProps) {
   const { t } = useTranslation();
   const documentsId = useDocumentsId();
@@ -136,7 +139,8 @@ export function SendMessageForm({
             disabled={shareDisabled}
             title={
               shareDisabled
-                ? t("Sharing is not possible for this contact")
+                ? (shareDisabledHint ??
+                  t("Sharing is not possible for this contact"))
                 : undefined
             }
             onClick={() => setShowDialog(true)}

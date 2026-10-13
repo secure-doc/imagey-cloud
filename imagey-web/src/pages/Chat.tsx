@@ -23,6 +23,7 @@ import { useChatsId } from "../contexts/SettingsContext";
 import { useContactProfile } from "../hooks/useContactProfile";
 import { notificationKeyringService } from "../notification/NotificationKeyringService";
 import { ChatBell } from "../notification/ChatBell";
+import { addressInUse } from "../federation/federationProvider";
 import {
   chatPlace,
   foreignOriginsOf,
@@ -363,15 +364,37 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   // chatsDocumentInfo so the sidebar and this message's "Open" state refresh
   // immediately, without a full reload.
   const handleJoinGroup = useCallback(
-    async (invitation: { groupId: string; owner: string }) => {
+    async (invitation: {
+      groupId: string;
+      owner: string;
+      origin?: string | null;
+      address?: string;
+    }) => {
       if (!chatsDocumentInfo || !sharedKey) {
         return;
       }
-      const { publicProfile } =
-        await publicProfileService.loadProfileAndEnsurePublicProfile(
-          user,
-          settings,
-        );
+      // Where the group lives (F9): as the message says, relative to the chat. It comes from
+      // the other party, so only a server they are known to live on is contacted.
+      const groupOrigin =
+        invitation.origin === undefined
+          ? chatOrigin
+          : (invitation.origin ?? undefined);
+      if (
+        groupOrigin !== undefined &&
+        groupOrigin !== chatOrigin &&
+        !foreignOrigins.includes(groupOrigin)
+      ) {
+        throw new Error("Group on an unexpected server: " + groupOrigin);
+      }
+      // Only for a group on this server: a guest does not share a profile there (F9).
+      const publicProfile = groupOrigin
+        ? undefined
+        : (
+            await publicProfileService.loadProfileAndEnsurePublicProfile(
+              user,
+              settings,
+            )
+          ).publicProfile;
       const { list, revision } = await groupService.joinGroup(
         user,
         invitation.owner,
@@ -386,10 +409,31 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           groups: chatsDocumentInfo.groups,
         },
         publicProfile,
+        groupOrigin,
+        // The address we are known by there: on the chat's server the one of the chat, else the
+        // one the inviter registered us under (told in the invitation), else the one in use there
+        // already, else the account's own.
+        groupOrigin
+          ? ((groupOrigin === chatOrigin
+              ? contact?.self?.address
+              : invitation.address) ??
+              addressInUse(groupOrigin) ??
+              authentication.email)
+          : undefined,
       );
       updateChatsListRef.current?.(list, revision);
     },
-    [chatsDocumentInfo, sharedKey, user, settings, chatsId],
+    [
+      chatsDocumentInfo,
+      sharedKey,
+      user,
+      settings,
+      chatsId,
+      chatOrigin,
+      foreignOrigins,
+      contact?.self?.address,
+      authentication.email,
+    ],
   );
 
   return (

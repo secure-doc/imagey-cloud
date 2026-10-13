@@ -23,6 +23,9 @@ export function useGroupMemberProfiles(
   groupId: string,
   groupKey: JsonWebKey | undefined,
   publicProfiles: Record<string, string> | undefined,
+  // The group's server, if it is not the own one (F9): `userId` is then the own id THERE, and
+  // the profiles are read as a guest.
+  origin?: string,
 ): Record<string, GroupMemberProfile> {
   const [profiles, setProfiles] = useState<Record<string, GroupMemberProfile>>(
     {},
@@ -70,6 +73,7 @@ export function useGroupMemberProfiles(
           groupKey,
           accessPath,
           groupId,
+          origin,
         );
         if (!loaded) {
           return [memberId, {} as GroupMemberProfile] as const;
@@ -109,7 +113,7 @@ export function useGroupMemberProfiles(
     return () => {
       cancelled = true;
     };
-  }, [userId, groupOwnerId, groupId, groupKey, membersKey]);
+  }, [userId, groupOwnerId, groupId, groupKey, membersKey, origin]);
 
   // Release whichever URLs are currently displayed once the hook itself goes
   // away - a per-run effect cleanup above would revoke them as soon as

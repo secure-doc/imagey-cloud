@@ -49,7 +49,7 @@ export function useChatKey(contactUserId: string | null): {
       }
       // A page reached by a deep link has not seen the chat list: tell the guest-token provider
       // which address each foreign server knows us by before any session is renewed.
-      rememberForeignAddresses(chats.contacts);
+      rememberForeignAddresses(chats.contacts, chats.groups);
       const contact = chats.contacts.find((c) => c.userId === contactUserId);
       if (!contact) {
         throw new Error(`No chat found for contact ${contactUserId}`);

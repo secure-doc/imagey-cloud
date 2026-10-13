@@ -45,7 +45,7 @@ export default function Activities() {
           `Expected the chats document to be a chatList, got ${chatsDocument.type}`,
         );
       }
-      rememberForeignAddresses(chatsDocument.contacts);
+      rememberForeignAddresses(chatsDocument.contacts, chatsDocument.groups);
       setContacts(chatsDocument.contacts);
       return true;
     } catch (e) {
