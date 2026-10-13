@@ -101,15 +101,18 @@ export async function registerUser(
 export async function login(
   page: Page,
   email: string,
-  { keepLoggedIn = false } = {},
+  { keepLoggedIn = false, server = "a" as Server } = {},
 ): Promise<void> {
   const mails = await mailCount(email);
   await page.goto("/");
   await page.getByPlaceholder("email@imagey.cloud").fill(email);
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
-  const link = await waitForMailLink(email, /^\/authentications\//, baseURL(), {
-    after: mails,
-  });
+  const link = await waitForMailLink(
+    email,
+    /^\/authentications\//,
+    serverURL(server),
+    { after: mails },
+  );
   await page.goto(link);
   await setPassword(page, "unlock", { keepLoggedIn });
 }

@@ -1,3 +1,4 @@
+import { resetPushEnabled } from "./usePushEnabled";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
@@ -51,6 +52,7 @@ export default function NotificationSettings() {
         await pushSubscriptionService.disable(user, deviceKeyPair);
       }
       setEnabled(checked);
+      resetPushEnabled();
       setSupport(pushSubscriptionService.support());
     } catch (e) {
       console.error("Failed to update notification settings", e);

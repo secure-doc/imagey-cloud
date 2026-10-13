@@ -116,7 +116,8 @@ test("F4/F5: a user of server B redeems an invitation of server A with an assert
     invitationToken,
   );
   expect(first.status).toBe(200);
-  expect(first.body.expiresIn).toBe(900);
+  // the stack configures 20 s (federation.guest-session.ttl), see docker-compose.yml
+  expect(first.body.expiresIn).toBe(20);
   const bobAtA = first.body.userId!;
   // The id at A is not the id at B: nobody can claim an id of another server.
   expect(bobAtA).not.toBe(bobId);

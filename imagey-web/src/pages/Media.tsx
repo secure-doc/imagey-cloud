@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { MediaInfo, useDetailInfo } from "../contexts/DetailContext";
 import Document from "../document/Document";
-import { documentService } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
 import {
   isPlayableMedia,
   MAX_INLINE_MEDIA_BYTES,
@@ -37,6 +37,7 @@ const toMediaInfo = (
         contentId: doc.contentId,
         size: doc.size,
         accessPath,
+        origin: doc.origin,
       }
     : undefined;
 
@@ -59,6 +60,7 @@ export default function Media() {
     folder,
     chat,
     params.get("owner"),
+    params.get("origin"),
     toMediaInfo,
   );
   useTitle(info?.name);
@@ -123,8 +125,8 @@ function MediaView({ info }: { info: MediaInfo }) {
       return;
     }
     let cancelled = false;
-    documentService
-      .loadFileContent(
+    servicesFor(info.origin)
+      .documents.loadFileContent(
         info.owner,
         info.documentId,
         info.contentId,
@@ -149,7 +151,7 @@ function MediaView({ info }: { info: MediaInfo }) {
   const loadForDownload = () =>
     blob
       ? Promise.resolve(blob)
-      : documentService.loadFileContent(
+      : servicesFor(info.origin).documents.loadFileContent(
           info.owner,
           info.documentId,
           info.contentId,

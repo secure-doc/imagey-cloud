@@ -634,3 +634,172 @@ test("a provider with a short TTL does not renew on every request", async ({
     "Bearer t1",
   ]);
 });
+
+// The place of something on a foreign server (F8): the id there comes from the guest session.
+
+test("session() hands out the stored session without a renewal", async ({
+  page,
+}) => {
+  await page.evaluate(
+    (origin) =>
+      window.remoteApi.guestSessionStore.set({
+        origin,
+        token: "stored",
+        userId: "me-stored",
+        expiresAt: Date.now() + 600_000,
+      }),
+    REMOTE,
+  );
+
+  const session = await page.evaluate(
+    (origin) => window.remoteApi.repositoriesFor(origin).session!(),
+    REMOTE,
+  );
+
+  expect(session).toMatchObject({ token: "stored", userId: "me-stored" });
+  expect(await renews(page)).toBe(0);
+});
+
+test("session() renews an expiring session and returns the new id", async ({
+  page,
+}) => {
+  await page.evaluate(
+    (origin) =>
+      window.remoteApi.guestSessionStore.set({
+        origin,
+        token: "old",
+        userId: "me-old",
+        expiresAt: Date.now() + 30_000,
+      }),
+    REMOTE,
+  );
+
+  const session = await page.evaluate(
+    (origin) => window.remoteApi.repositoriesFor(origin).session!(),
+    REMOTE,
+  );
+
+  expect(session).toMatchObject({ token: "t1", userId: "me-on-remote" });
+  expect(await renews(page)).toBe(1);
+});
+
+test("session() and a request share a single renewal", async ({ page }) => {
+  await stubRemote(page, () => ok);
+
+  await page.evaluate(async (origin) => {
+    const repositories = window.remoteApi.repositoriesFor(origin);
+    await Promise.all([
+      repositories.session!(),
+      repositories.documents.loadDocument("u", "d"),
+    ]);
+  }, REMOTE);
+
+  expect(await renews(page)).toBe(1);
+});
+
+test("session() does not hand out the id of a user who logged out meanwhile", async ({
+  page,
+}) => {
+  const outcome = await page.evaluate(async (origin) => {
+    const pending = window.remoteApi.repositoriesFor(origin).session!();
+    window.remoteApi.guestSessionStore.clear();
+    return pending.then(
+      () => "session",
+      (e) => e.name,
+    );
+  }, REMOTE);
+
+  expect(outcome).toBe("FederationUnavailableError");
+});
+
+test("the place on the own server is the own id, on a foreign one the id of the session", async ({
+  page,
+}) => {
+  await page.evaluate(
+    (origin) =>
+      window.remoteApi.guestSessionStore.set({
+        origin,
+        token: "t",
+        userId: "me-at-remote",
+        expiresAt: Date.now() + 600_000,
+      }),
+    REMOTE,
+  );
+
+  const places = await page.evaluate(
+    async (origin) => ({
+      own: await window.remoteApi.placeOf(undefined, "me"),
+      ownByOrigin: await window.remoteApi.placeOf(location.origin, "me"),
+      foreign: await window.remoteApi.placeOf(origin, "me"),
+    }),
+    REMOTE,
+  );
+
+  expect(places).toEqual({
+    own: { selfId: "me" },
+    ownByOrigin: { selfId: "me" },
+    foreign: { origin: REMOTE, selfId: "me-at-remote" },
+  });
+});
+
+test("services are cached per server and stamp their origin on a loaded document", async ({
+  page,
+}) => {
+  const same = await page.evaluate(
+    (origin) => ({
+      sameRemote:
+        window.remoteApi.servicesFor(origin).documents ===
+        window.remoteApi.servicesFor(origin + "/").documents,
+      sameOwn:
+        window.remoteApi.servicesFor().documents ===
+        window.remoteApi.servicesFor(location.origin).documents,
+      different:
+        window.remoteApi.servicesFor(origin).documents !==
+        window.remoteApi.servicesFor().documents,
+    }),
+    REMOTE,
+  );
+  expect(same).toEqual({ sameRemote: true, sameOwn: true, different: true });
+});
+
+// What a message says about where an image shared into the chat lives (F8).
+test("parseMessageContent reads the origin of a shared document", async ({
+  page,
+}) => {
+  const parsed = await page.evaluate(() => {
+    const shared = (extra: object) =>
+      window.remoteApi.parseMessageContent(
+        JSON.stringify({
+          type: "shared-document",
+          documentId: "d",
+          owner: "o",
+          ...extra,
+        }),
+      );
+    return {
+      relativeToChat: shared({}),
+      foreign: shared({ origin: "https://other.test/" }),
+      own: shared({ origin: location.origin }),
+      notAnOrigin: shared({ origin: "nonsense" }),
+      insecure: shared({ origin: "http://other.test" }),
+      withPath: shared({ origin: "https://other.test/x" }),
+      notAString: shared({ origin: 7 }),
+    };
+  });
+
+  expect(parsed.relativeToChat).toEqual({
+    type: "shared-document",
+    documentId: "d",
+    owner: "o",
+  });
+  expect(parsed.foreign).toMatchObject({ origin: "https://other.test" });
+  expect(parsed.own).toMatchObject({ origin: null });
+  for (const invalid of [
+    parsed.notAnOrigin,
+    parsed.insecure,
+    parsed.withPath,
+    parsed.notAString,
+  ]) {
+    expect(invalid.type).toBe("text");
+  }
+});

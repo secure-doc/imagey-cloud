@@ -10,6 +10,8 @@ interface DetailBase {
   documentKey: JsonWebKey;
   mimeType?: string;
   accessPath?: string;
+  // The server the document lives on, if not the own one (F8).
+  origin?: string;
 }
 
 export interface ImageInfo extends DetailBase {

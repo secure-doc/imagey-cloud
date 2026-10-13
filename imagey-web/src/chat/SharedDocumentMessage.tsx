@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useContext } from "react";
 import { useNavigate } from "react-router";
 import { DetailContext } from "../contexts/DetailContext";
-import { documentService } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
+import { placeOf } from "../federation/whereabouts";
 import Document from "../document/Document";
 import ImageComponent from "../components/ImageComponent";
 import FileComponent from "../components/FileComponent";
@@ -20,6 +21,14 @@ import { isPlayableMedia } from "../document/mediaTypes";
 interface SharedDocumentMessageProps {
   documentId: string;
   owner: string;
+  // Where the document lives, as the message says (see parseMessageContent): absent = on the
+  // chat's server (`chatOrigin`), null = on the own one.
+  origin?: string | null;
+  // The server the chat lives on (undefined = own server).
+  chatOrigin?: string;
+  // The foreign servers the contact may name (see foreignOriginsOf); any other origin in a
+  // message is not loaded.
+  foreignOrigins?: string[];
   // The 1:1 chat's key - required unless `group` is given.
   chatKey?: JsonWebKey;
   // The 1:1 chat's counterpart - enables opening the image detail view
@@ -33,9 +42,16 @@ interface SharedDocumentMessageProps {
   group?: { groupId: string; groupOwnerId: string; groupKey: JsonWebKey };
 }
 
+// The detail page's query parameter for a document on another server (empty for the own one).
+const originParam = (origin?: string) =>
+  origin ? `&origin=${encodeURIComponent(origin)}` : "";
+
 export function SharedDocumentMessage({
   documentId,
   owner,
+  origin,
+  chatOrigin,
+  foreignOrigins = [],
   chatKey,
   contactUserId,
   group,
@@ -64,13 +80,37 @@ export function SharedDocumentMessage({
   // which result to use.
   const documentsId = useDocumentsId();
   const rootFolderKey = useKey(documentsId);
-  const isOwner = user === owner;
+  // undefined = own server. The owner is only the owner on the server they are on.
+  const docOrigin = origin === undefined ? chatOrigin : (origin ?? undefined);
+  const isOwner = docOrigin === undefined && user === owner;
+  // The origin comes from the other party: a server they are not known to live on is not
+  // contacted (it would get a guest login with an address of ours).
+  const originAllowed =
+    docOrigin === undefined ||
+    docOrigin === chatOrigin ||
+    foreignOrigins.includes(docOrigin);
   // A 1:1 chat share is a direct grant (issuer == kid == viewer), so this
   // resolves to undefined and no header is sent; kept so a future folder-
   // share view goes through one code path.
   const chatAccessPath = useAccessPath(documentId, owner);
 
-  const parentId = isOwner ? documentsId : group ? group.groupId : user;
+  // Who we are on the document's server: the grantee ("kid") of the chat key's entry there.
+  const [selfOnServer, setSelfOnServer] = useState<string>();
+  useEffect(() => {
+    if (isOwner || group || !originAllowed) {
+      return;
+    }
+    let cancelled = false;
+    setSelfOnServer(undefined);
+    placeOf(docOrigin, user)
+      .then((place) => !cancelled && setSelfOnServer(place.selfId))
+      .catch(() => !cancelled && setError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, group, originAllowed, docOrigin, user]);
+
+  const parentId = isOwner ? documentsId : group ? group.groupId : selfOnServer;
   const parentKey = isOwner ? rootFolderKey : group ? group.groupKey : chatKey;
   const accessPath = isOwner
     ? chatAccessPath
@@ -89,9 +129,9 @@ export function SharedDocumentMessage({
   const { open: openFile, element: openFileElement } = useOpenDocument();
 
   useEffect(() => {
-    if (user && parentId && parentKey) {
-      documentService
-        .loadDocument(
+    if (user && parentId && parentKey && originAllowed) {
+      servicesFor(docOrigin)
+        .documents.loadDocument(
           owner,
           documentId,
           parentId,
@@ -102,9 +142,18 @@ export function SharedDocumentMessage({
         .then((doc) => setDocument(doc))
         .catch(() => setError(true));
     }
-  }, [user, owner, documentId, parentId, parentKey, accessPath]);
+  }, [
+    user,
+    owner,
+    docOrigin,
+    originAllowed,
+    documentId,
+    parentId,
+    parentKey,
+    accessPath,
+  ]);
 
-  if (error) {
+  if (error || !originAllowed) {
     return <div className="error">{t("Error loading shared document")}</div>;
   }
 
@@ -125,12 +174,13 @@ export function SharedDocumentMessage({
             smallImageId: document.smallImageId,
             mimeType: document.mimeType,
             contentId: document.contentId,
+            origin: document.origin,
             accessPath,
           });
           navigate(
             `/images/${document.documentId}?chat=${encodeURIComponent(
               contactUserId,
-            )}&owner=${encodeURIComponent(document.owner)}`,
+            )}&owner=${encodeURIComponent(document.owner)}${originParam(document.origin)}`,
           );
         }
       : undefined;
@@ -152,12 +202,13 @@ export function SharedDocumentMessage({
               mimeType: doc.mimeType,
               contentId: doc.contentId,
               size: doc.size,
+              origin: doc.origin,
               accessPath,
             });
             navigate(
               `/media/${doc.documentId}?chat=${encodeURIComponent(
                 contactUserId,
-              )}&owner=${encodeURIComponent(doc.owner)}`,
+              )}&owner=${encodeURIComponent(doc.owner)}${originParam(doc.origin)}`,
             );
           }
         : undefined;
@@ -170,7 +221,11 @@ export function SharedDocumentMessage({
             openMedia ??
             (() =>
               openFile(doc.name, doc.mimeType, () =>
-                documentService.loadContent(doc, doc.contentId, accessPath),
+                servicesFor(doc.origin).documents.loadContent(
+                  doc,
+                  doc.contentId,
+                  accessPath,
+                ),
               ))
           }
         />

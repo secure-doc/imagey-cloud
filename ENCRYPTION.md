@@ -216,6 +216,15 @@ entry wrapped under the "chats" Document's key), and for every member over the
    the creator owning it). Members who join later can therefore read documents
    shared before they joined, like the message history.
 
+**Sharing into a chat across servers** (ADR 0013 A12): the document stays on
+the server of the sharer, and so does the key entry: `{ issuer: C, kid: C,
+sharedKey: wrap(documentKey, chatKey) }` where `C` is the contact's id *on the
+sharer's server* (for a contact whose account is elsewhere, its foreign-principal
+mapping there), not the id on the chat's server. The reader loads the document
+from the sharer's server as a guest, with their own guest id there as `kid`.
+The message says where the document lives (`origin`) when that is not the
+chat's server.
+
 The server sees no difference between a group and a 1:1 chat; no additional
 endpoints or roles exist. Removing members and leaving a group are not
 supported yet: they need deletable key entries, invalidation of the

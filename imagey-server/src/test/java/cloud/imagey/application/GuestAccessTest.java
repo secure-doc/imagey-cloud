@@ -214,7 +214,7 @@ public class GuestAccessTest {
     }
 
     private Token guestToken(User user) {
-        return tokenService.generateGuestToken(user, HOME);
+        return tokenService.generateGuestToken(user, HOME, 15 * 60 * 1000);
     }
 
     private Token guestToken(User user, long validity) {

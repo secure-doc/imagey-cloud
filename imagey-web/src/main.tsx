@@ -20,6 +20,10 @@ import { guestSessionStore } from "./api/GuestSessionStore";
 import { createFederationGuestTokenProvider } from "./federation/federationGuestTokenProvider";
 import { federationRepository } from "./federation/FederationRepository";
 import { repositoriesFor, setGuestTokenProvider } from "./api/repositoriesFor";
+import { resetPushEnabled } from "./notification/usePushEnabled";
+import { servicesFor } from "./api/servicesFor";
+import { placeOf } from "./federation/whereabouts";
+import { parseMessageContent } from "./chat/parseMessageContent";
 import { createDocumentRepository } from "./document/DocumentRepository";
 import { createMessageRepository } from "./chat/MessageRepository";
 import { createContactRepository } from "./contact/ContactRepository";
@@ -40,6 +44,7 @@ declare global {
     notificationKeyringService: typeof notificationKeyringService;
     pushSubscriptionService: typeof pushSubscriptionService;
     pushSubscriptionRepository: typeof pushSubscriptionRepository;
+    resetPushEnabled: typeof resetPushEnabled;
     createTranslator: typeof createTranslator;
     federation: {
       federationRepository: typeof federationRepository;
@@ -52,6 +57,9 @@ declare global {
       createContactRepository: typeof createContactRepository;
       guestSessionStore: typeof guestSessionStore;
       repositoriesFor: typeof repositoriesFor;
+      servicesFor: typeof servicesFor;
+      placeOf: typeof placeOf;
+      parseMessageContent: typeof parseMessageContent;
       setGuestTokenProvider: typeof setGuestTokenProvider;
       FederationUnavailableError: typeof FederationUnavailableError;
     };
@@ -70,6 +78,7 @@ if (import.meta.env.DEV) {
   window.notificationKeyringService = notificationKeyringService;
   window.pushSubscriptionService = pushSubscriptionService;
   window.pushSubscriptionRepository = pushSubscriptionRepository;
+  window.resetPushEnabled = resetPushEnabled;
   window.createTranslator = createTranslator;
   window.federation = {
     federationRepository,
@@ -82,6 +91,9 @@ if (import.meta.env.DEV) {
     createContactRepository,
     guestSessionStore,
     repositoriesFor,
+    servicesFor,
+    placeOf,
+    parseMessageContent,
     setGuestTokenProvider,
     FederationUnavailableError,
   };

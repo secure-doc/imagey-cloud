@@ -8,7 +8,14 @@ import DocumentMetadata from "../document/DocumentMetadata";
 import { dayKey, formatDaySeparator, formatMessageTime } from "./messageTime";
 
 export interface ConversationViewProps {
+  // The own id on the own server (owner of the documents shared into the chat) ...
   userId: string;
+  // ... and on the chat's server (`chatOrigin`, undefined = the own one), where messages are
+  // sent under it; the default is `userId` (F8).
+  selfId?: string;
+  chatOrigin?: string;
+  // The foreign servers the contact may name in shared documents (foreignOriginsOf).
+  foreignOrigins?: string[];
   ownerId: string;
   chatId: string;
   sharedKey: JsonWebKey;
@@ -18,6 +25,7 @@ export interface ConversationViewProps {
   // to SendMessageForm.
   notify: string[];
   share: (document: DocumentMetadata) => Promise<void>;
+  shareDisabled?: boolean;
   // The 1:1 chat's counterpart - passed through to SharedDocumentMessage so
   // it can open the image detail view. Omitted for a group conversation.
   contactUserId?: string;
@@ -47,6 +55,9 @@ export interface ConversationViewProps {
 // Path) and, in a group, who sent a given message.
 export function ConversationView({
   userId,
+  selfId = userId,
+  chatOrigin,
+  foreignOrigins,
   ownerId,
   chatId,
   sharedKey,
@@ -54,6 +65,7 @@ export function ConversationView({
   onMessageSent,
   notify,
   share,
+  shareDisabled,
   contactUserId,
   group,
   renderInvitation,
@@ -82,7 +94,7 @@ export function ConversationView({
             dayKey(m.timestamp) !== dayKey(messages[index - 1].timestamp)
               ? formatDaySeparator(m.timestamp, i18n.language, t)
               : undefined;
-          const isMine = m.sender === userId;
+          const isMine = m.sender === selfId;
           const parsed = parseMessageContent(m.content);
           return (
             <Fragment key={m.id}>
@@ -108,6 +120,9 @@ export function ConversationView({
                   <SharedDocumentMessage
                     documentId={parsed.documentId}
                     owner={parsed.owner}
+                    origin={parsed.origin}
+                    chatOrigin={chatOrigin}
+                    foreignOrigins={foreignOrigins}
                     chatKey={group ? undefined : sharedKey}
                     contactUserId={contactUserId}
                     group={group}
@@ -135,12 +150,15 @@ export function ConversationView({
       <hr className="divider" />
       <SendMessageForm
         userId={userId}
+        selfId={selfId}
+        chatOrigin={chatOrigin}
         ownerId={ownerId}
         chatId={chatId}
         sharedKey={sharedKey}
         onMessageSent={onMessageSent}
         notify={notify}
         share={share}
+        shareDisabled={shareDisabled}
       />
     </>
   );

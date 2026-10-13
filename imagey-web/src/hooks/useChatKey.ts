@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useChatsId, useSettingsKey } from "../contexts/SettingsContext";
 import { contactService } from "../contact/ContactService";
+import { ContactEntry } from "../document/DocumentMetadata";
+import { rememberForeignAddresses } from "../federation/federationProvider";
 import { documentService } from "../document/DocumentService";
 
 // Resolves the shared key of the chat with `contactUserId` on its own (loads the
@@ -11,6 +13,8 @@ import { documentService } from "../document/DocumentService";
 // `contactUserId` leaves the hook idle.
 export function useChatKey(contactUserId: string | null): {
   key?: JsonWebKey;
+  // The entry of the contact, for what it says about where things live.
+  contact?: ContactEntry;
   failed: boolean;
 } {
   const { user } = useAuthentication();
@@ -19,6 +23,7 @@ export function useChatKey(contactUserId: string | null): {
   const [result, setResult] = useState<{
     contactUserId: string;
     key?: JsonWebKey;
+    contact?: ContactEntry;
     failed: boolean;
   }>();
 
@@ -27,9 +32,9 @@ export function useChatKey(contactUserId: string | null): {
       return;
     }
     let cancelled = false;
-    const finish = (key?: JsonWebKey) => {
+    const finish = (key?: JsonWebKey, contact?: ContactEntry) => {
       if (!cancelled) {
-        setResult({ contactUserId, key, failed: !key });
+        setResult({ contactUserId, key, contact, failed: !key });
       }
     };
     (async () => {
@@ -42,6 +47,9 @@ export function useChatKey(contactUserId: string | null): {
       if (chats.type !== "chatList") {
         throw new Error(`Expected a chatList, got ${chats.type}`);
       }
+      // A page reached by a deep link has not seen the chat list: tell the guest-token provider
+      // which address each foreign server knows us by before any session is renewed.
+      rememberForeignAddresses(chats.contacts);
       const contact = chats.contacts.find((c) => c.userId === contactUserId);
       if (!contact) {
         throw new Error(`No chat found for contact ${contactUserId}`);
@@ -52,7 +60,7 @@ export function useChatKey(contactUserId: string | null): {
         chatsId,
         chats.key,
       );
-      finish(key);
+      finish(key, contact);
     })().catch((e) => {
       console.error("Failed to resolve chat key", e);
       finish();
@@ -64,5 +72,9 @@ export function useChatKey(contactUserId: string | null): {
 
   // Ignore a result that belongs to a previous contact.
   const current = result?.contactUserId === contactUserId ? result : undefined;
-  return { key: current?.key, failed: current?.failed ?? false };
+  return {
+    key: current?.key,
+    contact: current?.contact,
+    failed: current?.failed ?? false,
+  };
 }

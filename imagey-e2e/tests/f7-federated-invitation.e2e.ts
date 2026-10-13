@@ -1,57 +1,21 @@
-import { type Page } from "@playwright/test";
 import { test, expect } from "./support/fixtures";
-import { mailCount, waitForMailLink } from "./support/mailbox";
 import {
-  baseURL,
+  A_HOST,
+  inviteFromA,
+  logInAtB,
+  openInvitationAtA,
+} from "./support/federation";
+import {
   enterDisplayName,
-  inviteContact,
   newDevice,
   openChats,
   registerHere,
   registerUser,
-  serverURL,
   setPassword,
-  type User,
 } from "./support/users";
 
 // F7 (docs/plans/f7-federated-invitation.md): alice has an account on A, the invitees have one
 // on B. They accept A's invitation from B and both sides see each other in the chat list.
-
-const A_HOST = new URL(baseURL()).host;
-const B_HOST = new URL(serverURL("b")).host;
-
-// Opens the mailed link of A in `page`, chooses "I already have an account on another server"
-// and types B. Ends on B's page for the invitation (B's login is up to the caller).
-async function openInvitationAtA(page: Page, link: string): Promise<void> {
-  await page.goto(link);
-  await expect(page).toHaveURL(/\/join#token=/);
-  await page.getByLabel("Server").fill(B_HOST);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL(`${serverURL("b")}/federation/accept**`);
-}
-
-// Alice is new in every test, so her first invitation asks for her display name.
-// B does not know the user after the registration (the app stores the account only on a later
-// visit), so arriving from A it asks for the address and mails a login link; the invitation waits
-// in storage until the login led back into the app.
-async function logInAtB(page: Page, email: string): Promise<void> {
-  const mails = await mailCount(email);
-  await page.getByPlaceholder("email@imagey.cloud").fill(email);
-  await page.getByRole("button", { name: "Confirm", exact: true }).click();
-  const loginLink = await waitForMailLink(
-    email,
-    /^\/authentications\//,
-    serverURL("b"),
-    { after: mails },
-  );
-  await page.goto(loginLink);
-  await setPassword(page, "unlock");
-}
-
-async function inviteFromA(alice: User, invitee: User): Promise<string> {
-  await inviteContact(alice.page, invitee.email, "Alice");
-  return waitForMailLink(invitee.email, /^\/invitations\//, baseURL());
-}
 
 test("F7: bob accepts alice's invitation with his account on B and both see each other", async ({
   browser,

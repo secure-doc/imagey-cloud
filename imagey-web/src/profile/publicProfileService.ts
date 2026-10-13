@@ -5,6 +5,7 @@ import {
   documentRepository,
   PreconditionFailedError,
 } from "../document/DocumentRepository";
+import { servicesFor } from "../api/servicesFor";
 import { documentService } from "../document/DocumentService";
 import { imageService } from "../image/ImageService";
 import { Profile } from "./Profile";
@@ -155,6 +156,9 @@ export const publicProfileService = {
     chatKey: JsonWebKey,
     accessPath?: string,
     kidOverride?: string,
+    // The server the profile lives on (undefined = own server), if it is not the own one: then
+    // `contactUserId` is the contact's id THERE and `kidOverride` ours (F8).
+    origin?: string,
   ): Promise<
     | {
         name?: string;
@@ -165,7 +169,8 @@ export const publicProfileService = {
     | undefined
   > => {
     try {
-      const document = await documentService.loadDocument(
+      const documents = servicesFor(origin).documents;
+      const document = await documents.loadDocument(
         contactUserId,
         publicProfileId,
         kidOverride ?? userId,
@@ -179,7 +184,7 @@ export const publicProfileService = {
       let avatarBlob: Blob | undefined;
       if (document.avatarId) {
         try {
-          const content = await documentService.loadContent(
+          const content = await documents.loadContent(
             document,
             document.avatarId,
             accessPath,

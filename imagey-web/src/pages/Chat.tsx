@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthentication } from "../contexts/AuthenticationContext";
-import { useBackButton, useTitle } from "../contexts/ActionBarContext";
+import {
+  useActionIcons,
+  useBackButton,
+  useTitle,
+} from "../contexts/ActionBarContext";
 import { contactService } from "../contact/ContactService";
 import { groupService } from "../contact/GroupService";
 import { publicProfileService } from "../profile/publicProfileService";
 import { contactDisplayName } from "../contact/contactDisplayName";
-import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
+import DocumentMetadata, {
+  ContactEntry,
+  GroupEntry,
+} from "../document/DocumentMetadata";
 import { documentService } from "../document/DocumentService";
 import { ConversationView } from "../chat/ConversationView";
 import { GroupInvitationMessage } from "../chat/GroupInvitationMessage";
@@ -15,6 +22,13 @@ import { ChatsList } from "./Chats";
 import { useChatsId } from "../contexts/SettingsContext";
 import { useContactProfile } from "../hooks/useContactProfile";
 import { notificationKeyringService } from "../notification/NotificationKeyringService";
+import { ChatBell } from "../notification/ChatBell";
+import {
+  chatPlace,
+  foreignOriginsOf,
+  Place,
+  profilePlace,
+} from "../federation/whereabouts";
 
 type ChatsListUpdate = (
   list: { contacts: ContactEntry[]; groups: GroupEntry[] },
@@ -53,13 +67,49 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const contact = chatsDocumentInfo?.contacts.find(
     (c) => c.userId === contactUserId,
   );
+  // Where the chat lives and who we are there (F8): another server for a chat we were invited
+  // to from elsewhere.
+  const chatOrigin = contact?.chatOrigin;
+  const foreignOrigins = useMemo(
+    () => (contact ? foreignOriginsOf(contact) : []),
+    [contact],
+  );
+  const selfId = contact ? chatPlace(contact, user).selfId : user;
   const { messages, appendMessage } = usePolling(
-    user,
+    selfId,
     chat?.ownerId,
     chat?.chatId,
     sharedKey,
+    chatOrigin,
   );
   const liveActivity = useLiveActivity(chat?.chatId, messages);
+
+  // Where the contact's profile lives (F8): their home server, if that is not the chat's, else
+  // next to the chat. Unknown (and so not loaded) until the guest session there is settled.
+  const [profileAt, setProfileAt] = useState<Place & { owner: string }>();
+  const profileHome = contact?.profileHome;
+  useEffect(() => {
+    setProfileAt(undefined);
+    if (!contact) {
+      return;
+    }
+    let cancelled = false;
+    profilePlace(contact, user)
+      .then((place) => !cancelled && setProfileAt(place))
+      .catch((e) => console.error("Failed to resolve the profile place", e));
+    return () => {
+      cancelled = true;
+    };
+    // The place depends on where the profile and the chat live, not on the rest of the entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    user,
+    contact?.userId,
+    contact?.chatOrigin,
+    contact?.self?.userId,
+    profileHome?.origin,
+    profileHome?.userId,
+  ]);
 
   const {
     name: contactName,
@@ -69,12 +119,18 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   } = useContactProfile(
     user,
     contactUserId,
-    // A contact whose profile lives on another server cannot be read from here yet (F8).
-    contact?.profileHome ? undefined : publicProfiles?.[contactUserId],
+    profileAt ? publicProfiles?.[contactUserId] : undefined,
     sharedKey,
+    undefined,
+    profileAt,
   );
 
   useBackButton();
+  const bell = useMemo(
+    () => [<ChatBell key="bell" chatOrigin={chatOrigin} />],
+    [chatOrigin],
+  );
+  useActionIcons(bell);
 
   const handleChatsListLoaded = useCallback(
     (chatsDocument: {
@@ -217,10 +273,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
       setKeyError(true);
       return;
     }
-    // The chat lives on another server: not reachable from here before F8.
-    if (contact.chatOrigin) {
-      return;
-    }
     setChat({ ownerId: contact.owner, chatId: contact.chatId });
     contactService
       .loadChatKey(user, contact, chatsId, chatsDocumentKey)
@@ -228,7 +280,8 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         setSharedKey(key);
         setPublicProfiles(publicProfiles);
         setChatPending(pending);
-        if (authentication.keyPairs?.deviceKeyPair) {
+        // No push across servers (ADR 0013 A8): the notification keyring is for local chats only.
+        if (authentication.keyPairs?.deviceKeyPair && !contact.chatOrigin) {
           notificationKeyringService
             .rememberChat(user, authentication.keyPairs.deviceKeyPair, {
               owner: contact.owner,
@@ -261,6 +314,46 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     contact?.chatId,
     privateKey,
   ]);
+
+  // The document stays on our server, so the key entry is for the contact's id THERE (F8) -
+  // unlike the chat messages, which live on the chat's server.
+  const handleShare = useCallback(
+    async (document: DocumentMetadata) => {
+      if (!contact || !chatsDocumentInfo || !sharedKey) {
+        return;
+      }
+      const resolved = await contactService.resolveShareGrantee(
+        user,
+        {
+          documentId: chatsId,
+          name: chatsDocumentInfo.name,
+          key: chatsDocumentInfo.chatsDocumentKey,
+          revision: chatsDocumentInfo.revision,
+          contacts: chatsDocumentInfo.contacts,
+          groups: chatsDocumentInfo.groups,
+        },
+        contact,
+      );
+      if (!resolved) {
+        throw new Error("No address to share with " + contactUserId);
+      }
+      if (resolved.contacts) {
+        // Into the canonical state of the chat list (like handleJoinGroup): a copy kept here would
+        // be overwritten by its next republish, losing the id and the new revision.
+        updateChatsListRef.current?.(
+          { contacts: resolved.contacts, groups: chatsDocumentInfo.groups },
+          resolved.revision ?? null,
+        );
+      }
+      await documentService.shareDocument(
+        user,
+        document,
+        resolved.grantee,
+        sharedKey,
+      );
+    },
+    [contact, chatsDocumentInfo, sharedKey, user, chatsId, contactUserId],
+  );
 
   // Joins a group from an invitation posted in this 1:1 chat (ADR 0019
   // decision 3): resolves our own public profile (get-or-create, like
@@ -320,10 +413,6 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           <div className="padding">
             Could not load your chats right now. Retrying...
           </div>
-        ) : contact?.chatOrigin ? (
-          <div className="padding">
-            {t("Chats with contacts on other servers will follow shortly.")}
-          </div>
         ) : keyError ? (
           <div className="padding">
             There was an error decrypting the messages. This may be because the
@@ -339,6 +428,9 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           chat && (
             <ConversationView
               userId={user}
+              selfId={selfId}
+              chatOrigin={chatOrigin}
+              foreignOrigins={foreignOrigins}
               ownerId={chat.ownerId}
               chatId={chat.chatId}
               sharedKey={sharedKey}
@@ -346,14 +438,10 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
               messages={messages}
               onMessageSent={(newMessage) => appendMessage(newMessage)}
               notify={[contactUserId]}
-              share={(document) =>
-                documentService.shareDocument(
-                  user,
-                  document,
-                  contactUserId,
-                  sharedKey,
-                )
+              shareDisabled={
+                !!contact?.chatOrigin && !contact.localUserId && !contact.email
               }
+              share={handleShare}
               renderInvitation={(invitation) => (
                 <GroupInvitationMessage
                   groupId={invitation.groupId}

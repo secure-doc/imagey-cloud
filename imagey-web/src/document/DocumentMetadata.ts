@@ -4,6 +4,9 @@ export interface BaseMetadata {
   owner: string;
   revision: string;
   key: JsonWebKey;
+  // The server the document lives on, if not the own one (ADR 0013, F8); set by the
+  // DocumentService of that server when it loads the document.
+  origin?: string;
 }
 
 export interface ProfileMetadata extends BaseMetadata {
@@ -127,6 +130,9 @@ export interface ContactEntry {
   // Own UserId on `chatOrigin` (its ForeignUserMapping) and the address that mapping is bound
   // to - needed to renew the guest session there (rememberAddress).
   self?: { userId: string; address: string };
+  // The contact's UserId on THIS server (their ForeignUserMapping here), if it differs from
+  // `userId`: the grantee of documents we share into the chat - they stay on our server (F8).
+  localUserId?: string;
   // Where the contact's public profile lives, if not on the chat's server: the contact's home
   // server and UserId there (from the encrypted contactInfo).
   profileHome?: { origin: string; userId: string };

@@ -18,13 +18,17 @@ package cloud.imagey.domain.federation;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.Initialized;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -48,6 +52,7 @@ public class FederationSettings {
     private static final String REFETCH_COOLDOWN = "60";
     private static final String NEW_DOMAINS_PER_MINUTE = "30";
     private static final String SESSIONS_PER_MINUTE = "30";
+    private static final String GUEST_SESSION_TTL = "PT15M";
 
     @Inject
     @ConfigProperty(name = "federation.enabled", defaultValue = "false")
@@ -82,6 +87,13 @@ public class FederationSettings {
     @Inject
     @ConfigProperty(name = "federation.sessions.per-minute", defaultValue = SESSIONS_PER_MINUTE)
     private int sessionsPerMinute = Integer.parseInt(SESSIONS_PER_MINUTE);
+
+    // How long a guest token is valid (ISO-8601 duration); only the end-to-end test shortens it, so that
+    // the renewal during polling really happens
+    @Inject
+    @ConfigProperty(name = "federation.guest-session.ttl", defaultValue = GUEST_SESSION_TTL)
+    private String guestSessionTtl = GUEST_SESSION_TTL;
+    private Duration guestSessionLifetime = Duration.parse(GUEST_SESSION_TTL);
 
     // Reverse proxies (addresses or CIDR ranges) whose X-Forwarded-For is believed, besides loopback
     @Inject
@@ -137,6 +149,31 @@ public class FederationSettings {
     /** The most fetches per minute for domains that were never seen before (all callers together). */
     public int newDomainsPerMinute() {
         return newDomainsPerMinute;
+    }
+
+    /** The lifetime of a guest token (ADR 0013 decision 4: 15 minutes unless configured). */
+    public Duration guestSessionTtl() {
+        return guestSessionLifetime;
+    }
+
+    // A wrong value stops the server at startup instead of failing every guest login later: a text that
+    // is no ISO-8601 duration, or one that is not positive (the tokens would expire at once and the
+    // clients renew them in a loop). The bean itself is created lazily, so the start of the application
+    // creates it (and so runs this) through the observer below.
+    void onStartup(@Observes @Initialized(ApplicationScoped.class) Object event) {
+        validate();
+    }
+
+    @PostConstruct
+    void validate() {
+        try {
+            guestSessionLifetime = Duration.parse(guestSessionTtl);
+        } catch (DateTimeParseException e) {
+            throw new IllegalStateException("federation.guest-session.ttl is no ISO-8601 duration (e.g. PT15M): " + guestSessionTtl, e);
+        }
+        if (guestSessionLifetime.isZero() || guestSessionLifetime.isNegative()) {
+            throw new IllegalStateException("federation.guest-session.ttl must be positive: " + guestSessionTtl);
+        }
     }
 
     /** The proxies in front of this server ({@code federation.trusted-proxies}), as addresses or CIDR ranges. */

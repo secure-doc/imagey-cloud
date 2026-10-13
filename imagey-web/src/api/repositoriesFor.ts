@@ -17,12 +17,19 @@ import {
   GuestTokenProvider,
   unavailableGuestTokenProvider,
 } from "./GuestTokenProvider";
-import { createRemoteApiClient, parseOrigin } from "./RemoteApiClient";
+import {
+  createRemoteApiClient,
+  isOwnOrigin,
+  parseOrigin,
+} from "./RemoteApiClient";
+import { GuestSession } from "./GuestSessionStore";
 
 export interface Repositories {
   documents: DocumentRepository;
   messages: MessageRepository;
   contacts: ContactRepository;
+  // The valid guest session at that server; undefined for the own server.
+  session?: () => Promise<GuestSession>;
 }
 
 let provider: GuestTokenProvider = unavailableGuestTokenProvider;
@@ -38,10 +45,7 @@ export function setGuestTokenProvider(next: GuestTokenProvider): void {
 // cached per origin, so all callers share one guest session and one renewal.
 export function repositoriesFor(origin?: string): Repositories {
   // Compare with the own origin before parseOrigin, which rejects plain http (also for it).
-  if (
-    origin === undefined ||
-    new URL(origin).origin === window.location.origin
-  ) {
+  if (origin === undefined || isOwnOrigin(origin)) {
     return {
       documents: documentRepository,
       messages: messageRepository,
@@ -57,6 +61,7 @@ export function repositoriesFor(origin?: string): Repositories {
       documents: createDocumentRepository(client),
       messages: createMessageRepository(client),
       contacts: createContactRepository(client),
+      session: () => client.session(),
     };
     remote.set(server, repositories);
   }

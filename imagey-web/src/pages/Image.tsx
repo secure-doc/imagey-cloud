@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router";
 import { useBackButton, useTitle } from "../contexts/ActionBarContext";
 import { ImageInfo, useDetailInfo } from "../contexts/DetailContext";
 import Document from "../document/Document";
-import { documentService } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
 import { useDownloadAction } from "../hooks/useDownloadAction";
 import { useImageBlob } from "../hooks/useImageBlob";
 import {
@@ -32,6 +32,7 @@ export default function Image() {
     folder,
     chat,
     params.get("owner"),
+    params.get("origin"),
     toImageInfo,
   );
   useTitle(info?.name);
@@ -67,6 +68,7 @@ const toImageInfo = (
         mimeType: doc.mimeType,
         contentId: doc.contentId,
         accessPath,
+        origin: doc.origin,
       }
     : undefined;
 
@@ -79,7 +81,7 @@ const imageStyle = {
 function useFileBlob(info: ImageInfo, fileId: string) {
   return useImageBlob(
     () =>
-      documentService.loadFileContent(
+      servicesFor(info.origin).documents.loadFileContent(
         info.owner,
         info.documentId,
         fileId,
@@ -87,7 +89,7 @@ function useFileBlob(info: ImageInfo, fileId: string) {
         info.accessPath,
       ),
     info.mimeType,
-    [info.documentId, fileId, info.owner, info.accessPath],
+    [info.documentId, fileId, info.owner, info.accessPath, info.origin],
   );
 }
 
@@ -96,7 +98,7 @@ function useFileBlob(info: ImageInfo, fileId: string) {
 // document key already in hand, so this costs one metadata request and no
 // key request.
 async function loadContentId(info: ImageInfo): Promise<string> {
-  const doc = await documentService.loadDocumentWithKey(
+  const doc = await servicesFor(info.origin).documents.loadDocumentWithKey(
     info.owner,
     info.documentId,
     info.documentKey,
@@ -121,7 +123,7 @@ function ImageView({ info }: { info: ImageInfo }) {
       mimeType: info.mimeType,
       load: async () => {
         const contentId = info.contentId ?? (await loadContentId(info));
-        return documentService.loadFileContent(
+        return servicesFor(info.origin).documents.loadFileContent(
           info.owner,
           info.documentId,
           contentId,
