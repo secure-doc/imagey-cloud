@@ -60,7 +60,9 @@ export default function Activities() {
       style={{
         alignContent: "flex-start",
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(400px, 1fr))",
+        // min(): on phones narrower than 400px a fixed minimum would make
+        // every panel wider than the viewport.
+        gridTemplateColumns: "repeat(auto-fill, minmax(min(400px, 100%), 1fr))",
       }}
     >
       {loadFailed && <p>{t("Could not load your activities. Retrying...")}</p>}
