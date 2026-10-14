@@ -144,6 +144,9 @@ test("load existing profile with picture", async ({ page }) => {
     // Verify the profile picture is loaded (vitalykobzun-frau-7385461.jpg)
     const avatarImage = page.getByRole("img", { name: "Avatar" });
     await expect(avatarImage).toBeVisible();
+    // The portrait photo must be cropped into a round 120px avatar, not
+    // squashed into an ellipse (regressed once via Beer CSS' "responsive").
+    await expect(avatarImage).toHaveScreenshot("profile-avatar.png");
 
     await expect.poll(() => runningPactRequests).toBe(0);
   });

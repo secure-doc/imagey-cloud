@@ -24,6 +24,14 @@ export default defineConfig({
   // Playwright/Pact processes need ~1.5 cores each), more only adds flakiness.
   workers: process.env.CI ? 2 : 4,
 
+  // Screenshot baselines are shared between macOS (local) and Linux (CI), so
+  // keep the platform out of the file name and tolerate small rendering
+  // differences of the two Chromium builds.
+  snapshotPathTemplate: "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
+  expect: {
+    toHaveScreenshot: { maxDiffPixelRatio: 0.02 },
+  },
+
   // Reporter to use, see https://playwright.dev/docs/test-reporters
   reporter: "list",
 
