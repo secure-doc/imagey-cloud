@@ -3,6 +3,6 @@ node
 node_modules
 target
 coverage
-.nyc_output
+.coverage-raw
 pacts
 test-results
