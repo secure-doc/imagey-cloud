@@ -59,3 +59,41 @@ test("upload image from activity panel", async ({ page }) => {
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });
+
+test("empty states on the home page fit a mobile screen", async ({ page }) => {
+  // Given
+  await page.setViewportSize({ width: 375, height: 812 });
+  await prepareBillsLogin(page);
+  await prepareBillsEmptyContactRequests();
+  const p = await prepareBillsDocuments();
+
+  await p.executeTest(async (mockServer) => {
+    await setupMockServer(page, mockServer);
+    await loginAsBill(page);
+
+    // When
+    await page.getByRole("link", { name: "Home" }).first().click();
+
+    // Then
+    const uploadPanel = page.locator("article", { hasText: "Upload Images" });
+    const noContactsPanel = page.locator("article", {
+      hasText: "No contacts yet?",
+    });
+    await expect(uploadPanel).toBeVisible();
+    await expect(noContactsPanel).toBeVisible();
+
+    // A fixed 400px grid minimum once made every panel wider than the phone.
+    for (const panel of [uploadPanel, noContactsPanel]) {
+      const box = await panel.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+    }
+    // Only the layout is compared, see screenshot-hide-text.css.
+    await expect(page.locator("main")).toHaveScreenshot(
+      "home-empty-states-mobile.png",
+      { stylePath: "tests/integration/screenshot-hide-text.css" },
+    );
+
+    await expect.poll(() => runningPactRequests).toBe(0);
+  });
+});

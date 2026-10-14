@@ -1,0 +1,8 @@
+/*
+ * The app uses a system font stack (Helvetica Neue on macOS, something else
+ * on Linux), so text differs between local screenshot baselines and CI.
+ * Hide the glyphs but keep their space - screenshots then compare the layout.
+ */
+* {
+  color: transparent !important;
+}
