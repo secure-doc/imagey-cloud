@@ -2,6 +2,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useObjectUrl } from "../hooks/useObjectUrl";
 
+// A fixed square box: Beer CSS' "responsive small" is 100% wide but only 8rem
+// high, which turns the circle into a squashed ellipse.
+const AVATAR_STYLE = {
+  width: 120,
+  height: 120,
+  objectFit: "cover",
+  margin: "0 auto",
+} as const;
+
 export default function ProfilePicturePanel({
   picture,
   onPictureChange,
@@ -30,10 +39,14 @@ export default function ProfilePicturePanel({
           <img
             src={pictureUrl}
             alt="Avatar"
-            className="circle responsive small"
+            className="circle"
+            style={AVATAR_STYLE}
           />
         ) : (
-          <div className="circle surface center-align middle-align responsive small">
+          <div
+            className="circle surface center-align middle-align"
+            style={AVATAR_STYLE}
+          >
             <i className="extra">person</i>
           </div>
         )}
