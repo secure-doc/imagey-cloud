@@ -52,6 +52,14 @@ export interface ConversationViewProps {
     origin?: string | null;
     address?: string;
   }) => ReactNode;
+  // Renders a "shared-folder" message - only ever posted into a 1:1 chat.
+  renderSharedFolder?: (folder: {
+    documentId: string;
+    owner: string;
+    name: string;
+    contributions: boolean;
+    origin?: string | null;
+  }) => ReactNode;
   // Renders a sender label (name/avatar) above someone else's message - only
   // used in a group conversation (see useGroupMemberProfiles); a 1:1 chat has
   // exactly one counterpart and needs no per-message label.
@@ -80,6 +88,7 @@ export function ConversationView({
   contactUserId,
   group,
   renderInvitation,
+  renderSharedFolder,
   renderSender,
 }: ConversationViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -88,6 +97,16 @@ export function ConversationView({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // A folder shared again says what the share is now: the newest message about it wins, also
+  // when an older one is opened.
+  const latestContributions = new Map<string, boolean>();
+  for (const m of messages) {
+    const parsed = parseMessageContent(m.content);
+    if (parsed.type === "shared-folder") {
+      latestContributions.set(parsed.documentId, parsed.contributions);
+    }
+  }
 
   return (
     <>
@@ -140,6 +159,13 @@ export function ConversationView({
                   />
                 ) : parsed.type === "group-invitation" && renderInvitation ? (
                   renderInvitation(parsed)
+                ) : parsed.type === "shared-folder" && renderSharedFolder ? (
+                  renderSharedFolder({
+                    ...parsed,
+                    contributions:
+                      latestContributions.get(parsed.documentId) ??
+                      parsed.contributions,
+                  })
                 ) : parsed.type === "text" ? (
                   parsed.content
                 ) : (

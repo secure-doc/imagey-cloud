@@ -24,12 +24,14 @@ import static jakarta.ws.rs.core.Response.Status.CREATED;
 import static jakarta.ws.rs.core.Response.Status.FORBIDDEN;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.PRECONDITION_FAILED;
+import static jakarta.ws.rs.core.Response.Status.UNAUTHORIZED;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.io.FileUtils.forceDelete;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -40,6 +42,7 @@ import java.util.concurrent.Future;
 import java.util.stream.IntStream;
 
 import jakarta.inject.Inject;
+import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.Response;
 
@@ -337,6 +340,8 @@ public class DocumentUploadTest {
         documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
             member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
 
+        documentRepository.allowContributions(user, new DocumentId(FOLDER_ID), member);
+
         Response response = uploadAs(member, fullBody(
             jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
             binaryPart("folder", FOLDER_CONTENT),
@@ -358,6 +363,230 @@ public class DocumentUploadTest {
             binaryPart("document", DOCUMENT_CONTENT)));
 
         assertThat(response.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("A member cannot upload into a document the owner has not opened for contributions - 403, content unchanged")
+    void memberCannotUploadWithoutContributionsMarker() {
+        // Covers chats, groups and shared images alike: they are plain documents the members hold a key for.
+        User member = new User(new UserId("member@example.com"));
+        documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+
+        Response response = uploadAs(member, fullBody(
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+        assertThat(getDocument(user, FOLDER_ID)).isEqualTo("folder-without-any-document".getBytes(UTF_8));
+        assertThat(documentRepository.documentExists(member, new DocumentId(DOCUMENT_ID))).isFalse();
+    }
+
+    @Test
+    @DisplayName("A stranger uploading into a folder that does not exist gets 403, not 404 - no existence oracle")
+    void strangerUploadingIntoMissingFolder() {
+        User stranger = new User(new UserId("stranger@example.com"));
+        String unknownFolder = "00000000-0000-0000-0000-000000000000";
+
+        Response response = uploadAs(stranger, fullBody(
+            jsonPart("metadata", metadataJson(user, unknownFolder, DOCUMENT_ID, user.id().id(), unknownFolder)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("Only the owner opens a document for contributions - a member's PUT is refused")
+    void memberCannotOpenContributions() {
+        User member = new User(new UserId("member@example.com"));
+        documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+
+        Response response = contributions(member, user, FOLDER_ID, member, "PUT");
+
+        // The "owner" role check fails for anyone but the owner, which this stack reports as 401.
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(UNAUTHORIZED);
+        assertThat(documentRepository.allowsContributions(user, new DocumentId(FOLDER_ID), member)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Opening a document that does not exist for contributions leads to 404")
+    void openingMissingDocument() {
+        Response response = contributions(
+            user, user, "00000000-0000-0000-0000-000000000000", new User(new UserId("member@example.com")), "PUT");
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("Closing a folder stops new contributions; contributions already made stay readable")
+    void closingStopsNewContributions() {
+        User member = new User(new UserId("member@example.com"));
+        documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+        assertThat(contributions(user, user, FOLDER_ID, member, "PUT").getStatus()).isEqualTo(204);
+        assertThat(contributions(user, user, FOLDER_ID, member, "PUT").getStatus()).isEqualTo(204);
+        assertThat(uploadAs(member, fullBody(
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT))).getStatusInfo().toEnum()).isEqualTo(CREATED);
+
+        assertThat(contributions(user, user, FOLDER_ID, member, "DELETE").getStatus()).isEqualTo(204);
+
+        String secondDocument = "33333333-3333-3333-3333-333333333333";
+        Response response = uploadAs(member, fullBody(
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, secondDocument, user.id().id(), FOLDER_ID)),
+            binaryPart("folder", "other".getBytes(UTF_8)),
+            binaryPart("document", DOCUMENT_CONTENT)));
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+        assertThat(getDocument(member, DOCUMENT_ID)).isEqualTo(DOCUMENT_CONTENT);
+        assertThat(getDocument(user, FOLDER_ID)).isEqualTo(FOLDER_CONTENT);
+    }
+
+    @Test
+    @DisplayName("A member with the right on the shared folder uploads into a subfolder below it - no marker on the subfolder")
+    void memberUploadsIntoSubfolderViaAccessPath() {
+        User member = new User(new UserId("member@example.com"));
+        String subfolderId = "44444444-4444-4444-4444-444444444444";
+        documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+        documentRepository.persist(user, new DocumentId(subfolderId),
+            new EncryptedContent("subfolder".getBytes(UTF_8)));
+        documentRepository.create(user, new DocumentId(subfolderId), new EncryptedSharedKey(
+            user, new Kid(FOLDER_ID), new EncryptedSymmetricKey("c3ViLWtleQ==")));
+        documentRepository.allowContributions(user, new DocumentId(FOLDER_ID), member);
+        String chain = "{\"chain\":[{\"doc\":\"" + subfolderId + "\",\"owner\":\"" + user.id().id()
+            + "\",\"wrappedBy\":\"" + FOLDER_ID + "\"},{\"doc\":\"" + FOLDER_ID + "\",\"owner\":\""
+            + user.id().id() + "\",\"wrappedBy\":\"" + FOLDER_ID + "\"}]}";
+        String header = Base64.getUrlEncoder().withoutPadding().encodeToString(chain.getBytes(UTF_8));
+
+        Response withoutPath = uploadAs(member, null, fullBody(
+            jsonPart("metadata", metadataJson(user, subfolderId, DOCUMENT_ID, user.id().id(), subfolderId)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+        Response withPath = uploadAs(member, header, fullBody(
+            jsonPart("metadata", metadataJson(user, subfolderId, DOCUMENT_ID, user.id().id(), subfolderId)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(withoutPath.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+        assertThat(withPath.getStatusInfo().toEnum()).isEqualTo(CREATED);
+    }
+
+    @Test
+    @DisplayName("The right is per recipient: one with a read-only share is refused although another may contribute")
+    void readOnlyRecipientCannotUpload() {
+        User writer = new User(new UserId("writer@example.com"));
+        User reader = new User(new UserId("reader@example.com"));
+        for (User recipient: List.of(writer, reader)) {
+            documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+                recipient, new Kid(recipient.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+        }
+        assertThat(contributions(user, user, FOLDER_ID, writer, "PUT").getStatus()).isEqualTo(204);
+
+        Response asReader = uploadAs(reader, fullBody(
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+        Response asWriter = uploadAs(writer, fullBody(
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(asReader.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+        assertThat(asWriter.getStatusInfo().toEnum()).isEqualTo(CREATED);
+    }
+
+    @Test
+    @DisplayName("A right is only given to somebody the folder is shared with - otherwise 409")
+    void rightNeedsAGrant() {
+        User stranger = new User(new UserId("stranger@example.com"));
+
+        Response response = contributions(user, user, FOLDER_ID, stranger, "PUT");
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(CONFLICT);
+        assertThat(documentRepository.allowsContributions(user, new DocumentId(FOLDER_ID), stranger)).isFalse();
+    }
+
+    @Test
+    @DisplayName("The owner writes into a subfolder a member created in the member's own tree, without any marker")
+    void ownerWritesIntoContributorsSubfolder() {
+        User member = new User(new UserId("member@example.com"));
+        String subfolderId = "55555555-5555-5555-5555-555555555555";
+        // The member's folder below the owner's: a key issued by the owner, wrapped for the folder.
+        documentRepository.persist(member, new DocumentId(subfolderId),
+            new EncryptedContent("members-subfolder".getBytes(UTF_8)));
+        documentRepository.create(member, new DocumentId(subfolderId), new EncryptedSharedKey(
+            user, new Kid(FOLDER_ID), new EncryptedSymmetricKey("c3ViLWtleQ==")));
+        String chain = "{\"chain\":[{\"doc\":\"" + subfolderId + "\",\"owner\":\"" + member.id().id()
+            + "\",\"wrappedBy\":\"" + FOLDER_ID + "\"},{\"doc\":\"" + FOLDER_ID + "\",\"owner\":\""
+            + user.id().id() + "\",\"wrappedBy\":\"" + FOLDER_ID + "\"}]}";
+        String header = Base64.getUrlEncoder().withoutPadding().encodeToString(chain.getBytes(UTF_8));
+
+        Response response = uploadAs(user, header, fullBody(
+            jsonPart("metadata", metadataJson(member, subfolderId, DOCUMENT_ID, member.id().id(), subfolderId)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(CREATED);
+        assertThat(getDocument(member, subfolderId)).isEqualTo(FOLDER_CONTENT);
+    }
+
+    @Test
+    @DisplayName("A read-only share deeper down does not hide the right on the shared folder above it")
+    void rightAboveIsNotHiddenByShareBelow() {
+        User member = new User(new UserId("member@example.com"));
+        String subfolderId = "66666666-6666-6666-6666-666666666666";
+        documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+        documentRepository.persist(user, new DocumentId(subfolderId),
+            new EncryptedContent("subfolder".getBytes(UTF_8)));
+        documentRepository.create(user, new DocumentId(subfolderId), new EncryptedSharedKey(
+            user, new Kid(FOLDER_ID), new EncryptedSymmetricKey("c3ViLWtleQ==")));
+        // The subfolder was sent to the member on its own as well, without the right.
+        documentRepository.create(user, new DocumentId(subfolderId), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("c2VuZA==")));
+        String header = accessPath(subfolderId, user, FOLDER_ID, user, FOLDER_ID);
+
+        Response withoutRight = uploadAs(member, header, fullBody(
+            jsonPart("metadata", metadataJson(user, subfolderId, DOCUMENT_ID, user.id().id(), subfolderId)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+        documentRepository.allowContributions(user, new DocumentId(FOLDER_ID), member);
+        Response withRight = uploadAs(member, header, fullBody(
+            jsonPart("metadata", metadataJson(user, subfolderId, DOCUMENT_ID, user.id().id(), subfolderId)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(withoutRight.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+        assertThat(withRight.getStatusInfo().toEnum()).isEqualTo(CREATED);
+    }
+
+    @Test
+    @DisplayName("The caller's own settings document is no terminus for writing - a direct grant slot is not a folder of his tree")
+    void settingsDocumentIsNoTerminusForWriting() {
+        User member = new User(new UserId("member@example.com"));
+        documentRepository.create(user, new DocumentId(FOLDER_ID), new EncryptedSharedKey(
+            member, new Kid(member.id().id()), new EncryptedSymmetricKey("d3JhcHBlZA==")));
+        // The direct grant's slot is also the link to the member's own settings document.
+        String header = accessPath(FOLDER_ID, user, member.id().id(), member, member.id().id());
+
+        Response response = uploadAs(member, header, fullBody(
+            jsonPart("metadata", metadataJson(user, FOLDER_ID, DOCUMENT_ID, user.id().id(), FOLDER_ID)),
+            binaryPart("folder", FOLDER_CONTENT),
+            binaryPart("document", DOCUMENT_CONTENT)));
+
+        assertThat(response.getStatusInfo().toEnum()).isEqualTo(FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("Taking away a right that was never given is fine - the answer is the same")
+    void takingAwayAMissingRight() {
+        User member = new User(new UserId("member@example.com"));
+
+        assertThat(contributions(user, user, FOLDER_ID, member, "DELETE").getStatus()).isEqualTo(204);
     }
 
     @Test
@@ -425,12 +654,37 @@ public class DocumentUploadTest {
     }
 
     private Response uploadAs(User caller, String body) {
-        return newClient()
+        return uploadAs(caller, null, body);
+    }
+
+    private Response uploadAs(User caller, String accessPath, String body) {
+        Invocation.Builder request = newClient()
             .target("http://localhost:" + config.getHttpPort())
             .path("users").path(caller.id().id()).path("documents")
             .request()
+            .cookie(cookieFor(caller));
+        if (accessPath != null) {
+            request = request.header("Access-Path", accessPath);
+        }
+        return request.post(entity(body, "multipart/form-data; boundary=" + BOUNDARY));
+    }
+
+    // The Access-Path header for a chain of (doc, owner, wrappedBy) hops given as repeating triples.
+    private static String accessPath(String doc0, User owner0, String wrappedBy0, User owner1, String doc1) {
+        String chain = "{\"chain\":[{\"doc\":\"" + doc0 + "\",\"owner\":\"" + owner0.id().id()
+            + "\",\"wrappedBy\":\"" + wrappedBy0 + "\"},{\"doc\":\"" + doc1 + "\",\"owner\":\""
+            + owner1.id().id() + "\",\"wrappedBy\":\"" + doc1 + "\"}]}";
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(chain.getBytes(UTF_8));
+    }
+
+    private Response contributions(User caller, User owner, String documentId, User grantee, String method) {
+        return newClient()
+            .target("http://localhost:" + config.getHttpPort())
+            .path("users").path(owner.id().id()).path("documents").path(documentId).path("contributions")
+            .path(grantee.id().id())
+            .request()
             .cookie(cookieFor(caller))
-            .post(entity(body, "multipart/form-data; boundary=" + BOUNDARY));
+            .method(method);
     }
 
     private byte[] getDocument(User owner, String documentId) {

@@ -2,7 +2,11 @@ import { cryptoService } from "../authentication/CryptoService";
 import { UserId } from "../authentication/UserId";
 import { JsonWebKeyPair, Settings } from "../contexts/AuthenticationContext";
 import { PublicProfile } from "../profile/PublicProfile";
-import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
+import {
+  ContactEntry,
+  GroupEntry,
+  SharedFolderEntry,
+} from "../document/DocumentMetadata";
 import { ContactInfo, ContactRequest } from "./ContactRequest";
 import { contactRepository, ContactRepository } from "./ContactRepository";
 import { parseOrigin } from "../api/RemoteApiClient";
@@ -30,7 +34,13 @@ const MAX_CHATS_UPDATE_RETRIES = 3;
 // The "chats" document's list content - both `contacts` and `groups` need to
 // survive every read-modify-write of this document (see updateChatList
 // below), not just whichever one a particular caller is patching.
-export type ChatList = { contacts: ContactEntry[]; groups: GroupEntry[] };
+export type ChatList = {
+  contacts: ContactEntry[];
+  groups: GroupEntry[];
+  // Undefined = not known by the caller; updateChatList then looks it up
+  // instead of dropping the entries on write.
+  sharedFolders?: SharedFolderEntry[];
+};
 
 // Re-fetches and decrypts the "chats" document with a key we already hold,
 // returning just what updateChatList needs to re-apply its change after a
@@ -53,7 +63,11 @@ export async function reloadChatList(
   );
   const payload = JSON.parse(new TextDecoder().decode(decrypted));
   return {
-    list: { contacts: payload.contacts ?? [], groups: payload.groups ?? [] },
+    list: {
+      contacts: payload.contacts ?? [],
+      groups: payload.groups ?? [],
+      sharedFolders: payload.sharedFolders ?? [],
+    },
     revision: etag,
   };
 }
@@ -174,6 +188,33 @@ async function decryptContactInfo(
   }
 }
 
+// Loads the "chats" document with the user's settings key - the one place that knows its shape
+// (the lists a document written before they existed lacks are empty).
+export async function loadChatsDocument(
+  userId: UserId,
+  chatsId: string,
+  settingsKey: JsonWebKey,
+): Promise<ChatsDocumentState & { revision: string }> {
+  const loaded = await documentService.loadDocument(
+    userId,
+    chatsId,
+    userId,
+    settingsKey,
+  );
+  if (loaded.type !== "chatList") {
+    throw new Error(`Expected a chatList, got ${loaded.type}`);
+  }
+  return {
+    documentId: loaded.documentId,
+    name: loaded.name,
+    key: loaded.key,
+    revision: loaded.revision,
+    contacts: loaded.contacts,
+    groups: loaded.groups ?? [],
+    sharedFolders: loaded.sharedFolders ?? [],
+  };
+}
+
 // What the chat view keeps of the "chats" document to write it back.
 export type ChatsDocumentState = {
   documentId: string;
@@ -181,6 +222,28 @@ export type ChatsDocumentState = {
   key: JsonWebKey;
   revision: string | null;
 } & ChatList;
+
+// The shared folders of the "chats" document. A caller that did not read them
+// (most of the chat views only keep contacts and groups) cannot write them
+// back, so they are looked up: a write built on a list without them would
+// silently drop every shared folder. A concurrent change between this read and
+// the write is caught by the revision check of the write itself.
+export async function knownSharedFolders(
+  userId: UserId,
+  chatsDocument: Pick<ChatsDocumentState, "documentId" | "key"> & {
+    sharedFolders?: SharedFolderEntry[];
+  },
+): Promise<SharedFolderEntry[]> {
+  if (chatsDocument.sharedFolders) {
+    return chatsDocument.sharedFolders;
+  }
+  const { list } = await reloadChatList(
+    userId,
+    chatsDocument.documentId,
+    chatsDocument.key,
+  );
+  return list.sharedFolders ?? [];
+}
 
 // Applies `patch` to the "chats" document's whole list (contacts and groups)
 // and writes it back - a read-modify-write that re-reads the document and
@@ -203,6 +266,7 @@ export async function updateChatList(
   let currentList: ChatList = {
     contacts: chatsDocument.contacts,
     groups: chatsDocument.groups,
+    sharedFolders: await knownSharedFolders(userId, chatsDocument),
   };
   let currentRevision = chatsDocument.revision;
   for (let attempt = 1; attempt <= MAX_CHATS_UPDATE_RETRIES; attempt++) {
@@ -217,6 +281,7 @@ export async function updateChatList(
           type: "chatList",
           contacts: updatedList.contacts,
           groups: updatedList.groups,
+          sharedFolders: updatedList.sharedFolders,
         },
         currentRevision,
       );
@@ -404,6 +469,10 @@ export const contactService = {
           type: chatsDocument.type,
           contacts: appendContact(chatsDocument.contacts, contact),
           groups: chatsDocument.groups,
+          sharedFolders: await knownSharedFolders(userId, {
+            ...chatsDocument,
+            documentId: settings.chats,
+          }),
         },
         // Reject (rather than silently clobber) if the "chats" document changed
         // since we loaded it - another accepted request would otherwise be lost.
@@ -577,6 +646,10 @@ export const contactService = {
               type: chatsDocument.type,
               contacts: appendContact(chatsDocument.contacts, contact),
               groups: chatsDocument.groups,
+              sharedFolders: await knownSharedFolders(userId, {
+                ...chatsDocument,
+                documentId: settings.chats,
+              }),
             }),
           ).buffer,
         ],

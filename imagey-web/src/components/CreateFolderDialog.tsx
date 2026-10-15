@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { documentService, StoreResult } from "../document/DocumentService";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { useAccessPath } from "../contexts/FolderContext";
+import { useContributionDenied } from "../hooks/useContributionDenied";
 import Document from "../document/Document";
 import { FolderMetadata } from "../document/DocumentMetadata";
 
@@ -37,6 +38,8 @@ export default function CreateFolderDialog({
     parentFolder?.owner ?? "",
   );
 
+  const denied = useContributionDenied(parentFolder?.documentId ?? "");
+
   const handleCreate = async () => {
     if (!folderName.trim() || !user || !parentFolder || !parentFolderKey)
       return;
@@ -51,7 +54,9 @@ export default function CreateFolderDialog({
       );
       onCreated(result);
     } catch (e) {
-      console.error(e);
+      if (!denied.handle(e)) {
+        console.error(e);
+      }
     } finally {
       setIsCreating(false);
       onClose();

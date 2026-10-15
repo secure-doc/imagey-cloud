@@ -382,3 +382,9 @@ Settled 2026-09-04 (details and rationale in the implementation plan):
   rewrite again.
 - **ENCRYPTION.md sections 3-5** and the glossary need updating to describe the
   chosen at-rest representation.
+
+## Amendment (2026-10-15, folder sharing)
+
+The `contributions` marker (ADR 0004 amendment, ADR 0022) is stored in clear
+text next to the document, under the same hashed name as the recipient's key
+file. It reveals no edge that file does not reveal.

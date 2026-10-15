@@ -666,6 +666,7 @@ test("renameGroup updates only the renamed group's entry, leaving others untouch
             key: chatsDocumentKey,
             revision: '"chats-etag-0"',
             contacts: [],
+            sharedFolders: [],
             groups: [
               {
                 groupId,

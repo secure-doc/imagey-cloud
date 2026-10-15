@@ -36,6 +36,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
@@ -68,6 +69,7 @@ import cloud.imagey.domain.encryption.EncryptedContent;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.token.Kid;
 import cloud.imagey.domain.user.User;
+import cloud.imagey.infrastructure.ResourceConflictException;
 
 @ApplicationScoped
 @Path("{userId}/documents")
@@ -191,6 +193,42 @@ public class DocumentResource {
 
         documentRepository.create(user, documentId, key);
         return ok().build();
+    }
+
+    @PUT
+    @RolesAllowed("owner")
+    @Path("{documentId}/contributions/{grantee}")
+    public Response allowContributions(
+        @PathParam("userId") User user,
+        @PathParam("documentId") DocumentId documentId,
+        @PathParam("grantee") User grantee) {
+
+        requireExisting(user, documentId);
+        // The right belongs to a grant: only somebody the folder was shared with can be given it.
+        if (!documentRepository.hasDirectGrant(user, documentId, grantee)) {
+            throw new ResourceConflictException("Document " + documentId.id() + " is not shared with the grantee.");
+        }
+        documentRepository.allowContributions(user, documentId, grantee);
+        return noContent().build();
+    }
+
+    @DELETE
+    @RolesAllowed("owner")
+    @Path("{documentId}/contributions/{grantee}")
+    public Response denyContributions(
+        @PathParam("userId") User user,
+        @PathParam("documentId") DocumentId documentId,
+        @PathParam("grantee") User grantee) {
+
+        requireExisting(user, documentId);
+        documentRepository.denyContributions(user, documentId, grantee);
+        return noContent().build();
+    }
+
+    private void requireExisting(User user, DocumentId documentId) {
+        if (!documentRepository.documentExists(user, documentId)) {
+            throw new NotFoundException();
+        }
     }
 
     @POST

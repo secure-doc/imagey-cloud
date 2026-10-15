@@ -13,10 +13,14 @@ import { contactDisplayName } from "../contact/contactDisplayName";
 import DocumentMetadata, {
   ContactEntry,
   GroupEntry,
+  SharedFolderEntry,
 } from "../document/DocumentMetadata";
 import { documentService } from "../document/DocumentService";
 import { ConversationView } from "../chat/ConversationView";
 import { GroupInvitationMessage } from "../chat/GroupInvitationMessage";
+import { SharedFolderMessage } from "../chat/SharedFolderMessage";
+import { folderShareService } from "../folder/FolderShareService";
+import { useOpenSharedFolder } from "../hooks/useSharedFolders";
 import { useLiveActivity, usePolling } from "../chat/messageHooks";
 import { ChatsList } from "./Chats";
 import { useChatsId } from "../contexts/SettingsContext";
@@ -32,7 +36,11 @@ import {
 } from "../federation/whereabouts";
 
 type ChatsListUpdate = (
-  list: { contacts: ContactEntry[]; groups: GroupEntry[] },
+  list: {
+    contacts: ContactEntry[];
+    groups: GroupEntry[];
+    sharedFolders?: SharedFolderEntry[];
+  },
   revision: string | null,
 ) => void;
 
@@ -43,6 +51,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const settings = authentication.settings;
   const privateKey = authentication.keyPairs?.mainKeyPair.privateKey;
   const chatsId = useChatsId();
+  const openSharedFolder = useOpenSharedFolder();
 
   const [sharedKey, setSharedKey] = useState<JsonWebKey>();
   const [publicProfiles, setPublicProfiles] =
@@ -60,6 +69,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
   const [chatsDocumentInfo, setChatsDocumentInfo] = useState<{
     contacts: ContactEntry[];
     groups: GroupEntry[];
+    sharedFolders?: SharedFolderEntry[];
     chatsDocumentKey: JsonWebKey;
     name: string;
     revision: string;
@@ -137,6 +147,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
     (chatsDocument: {
       contacts: ContactEntry[];
       groups: GroupEntry[];
+      sharedFolders?: SharedFolderEntry[];
       key: JsonWebKey;
       name: string;
       revision: string;
@@ -144,6 +155,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
       setChatsDocumentInfo({
         contacts: chatsDocument.contacts,
         groups: chatsDocument.groups,
+        sharedFolders: chatsDocument.sharedFolders,
         chatsDocumentKey: chatsDocument.key,
         name: chatsDocument.name,
         revision: chatsDocument.revision,
@@ -181,6 +193,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           revision: chatsDocumentInfo.revision,
           contacts: chatsDocumentInfo.contacts,
           groups: chatsDocumentInfo.groups,
+          sharedFolders: chatsDocumentInfo.sharedFolders,
         },
         contactUserId,
         {
@@ -228,6 +241,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           revision: chatsDocumentInfo.revision,
           contacts: chatsDocumentInfo.contacts,
           groups: chatsDocumentInfo.groups,
+          sharedFolders: chatsDocumentInfo.sharedFolders,
         },
         contactUserId,
       )
@@ -332,6 +346,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           revision: chatsDocumentInfo.revision,
           contacts: chatsDocumentInfo.contacts,
           groups: chatsDocumentInfo.groups,
+          sharedFolders: chatsDocumentInfo.sharedFolders,
         },
         contact,
       );
@@ -342,7 +357,11 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
         // Into the canonical state of the chat list (like handleJoinGroup): a copy kept here would
         // be overwritten by its next republish, losing the id and the new revision.
         updateChatsListRef.current?.(
-          { contacts: resolved.contacts, groups: chatsDocumentInfo.groups },
+          {
+            contacts: resolved.contacts,
+            groups: chatsDocumentInfo.groups,
+            sharedFolders: chatsDocumentInfo.sharedFolders,
+          },
           resolved.revision ?? null,
         );
       }
@@ -407,6 +426,7 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
           revision: chatsDocumentInfo.revision,
           contacts: chatsDocumentInfo.contacts,
           groups: chatsDocumentInfo.groups,
+          sharedFolders: chatsDocumentInfo.sharedFolders,
         },
         publicProfile,
         groupOrigin,
@@ -433,6 +453,75 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
       foreignOrigins,
       contact?.self?.address,
       authentication.email,
+    ],
+  );
+
+  // Opens a folder shared in this chat. The first time it is taken over into "Shared with me"
+  // (its key cached in the "chats" document), then the folder is shown.
+  const handleOpenSharedFolder = useCallback(
+    async (shared: {
+      documentId: string;
+      owner: string;
+      contributions: boolean;
+      origin?: string | null;
+    }) => {
+      if (!chatsDocumentInfo || !sharedKey || !contact) {
+        return;
+      }
+      // Where the folder lives, as the message says, relative to the chat. It comes from the
+      // other party, so only a server they are known to live on is contacted.
+      const folderOrigin =
+        shared.origin === undefined ? chatOrigin : (shared.origin ?? undefined);
+      if (
+        folderOrigin !== undefined &&
+        folderOrigin !== chatOrigin &&
+        !foreignOrigins.includes(folderOrigin)
+      ) {
+        throw new Error("Folder on an unexpected server: " + folderOrigin);
+      }
+      const known = chatsDocumentInfo.sharedFolders?.find(
+        (f) => f.documentId === shared.documentId,
+      );
+      let entry = known;
+      // Shared again with other rights (the message is the newest one about the folder, see
+      // ConversationView): the entry is taken over anew.
+      if (!entry || entry.contributions !== shared.contributions) {
+        const accepted = await folderShareService.acceptSharedFolder(
+          user,
+          {
+            documentId: chatsId,
+            name: chatsDocumentInfo.name,
+            key: chatsDocumentInfo.chatsDocumentKey,
+            revision: chatsDocumentInfo.revision,
+            contacts: chatsDocumentInfo.contacts,
+            groups: chatsDocumentInfo.groups,
+            sharedFolders: chatsDocumentInfo.sharedFolders,
+          },
+          sharedKey,
+          { ...shared, origin: folderOrigin },
+          contact,
+        );
+        entry = accepted.entry;
+        updateChatsListRef.current?.(
+          {
+            contacts: chatsDocumentInfo.contacts,
+            groups: chatsDocumentInfo.groups,
+            sharedFolders: accepted.sharedFolders,
+          },
+          accepted.revision,
+        );
+      }
+      openSharedFolder(entry);
+    },
+    [
+      chatsDocumentInfo,
+      sharedKey,
+      contact,
+      chatOrigin,
+      foreignOrigins,
+      user,
+      chatsId,
+      openSharedFolder,
     ],
   );
 
@@ -486,6 +575,13 @@ export default function Chat({ contactUserId }: { contactUserId: string }) {
                 !!contact?.chatOrigin && !contact.localUserId && !contact.email
               }
               share={handleShare}
+              renderSharedFolder={(shared) => (
+                <SharedFolderMessage
+                  name={shared.name}
+                  contributions={shared.contributions}
+                  onOpen={() => handleOpenSharedFolder(shared)}
+                />
+              )}
               renderInvitation={(invitation) => (
                 <GroupInvitationMessage
                   groupId={invitation.groupId}

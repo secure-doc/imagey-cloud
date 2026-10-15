@@ -1,16 +1,32 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { useUser } from "./AuthenticationContext";
 import { documentService } from "../document/DocumentService";
 
 export interface FolderInfo {
   parentId?: string;
   key?: JsonWebKey;
+  // Set for a folder of another user's tree (a shared folder or one below it):
+  // its owner, and the server it lives on if that is not the own one.
+  owner?: string;
+  origin?: string;
+  // Whether the owner allows contributions (as told, display only - the server decides).
+  contributions?: boolean;
+  // A contribution was refused (403): the user is told once.
+  contributionsDenied?: boolean;
 }
 
 export interface FolderContextState {
   folders: Record<string, FolderInfo>;
   registerParentFolder: (folderId: string, parentId: string) => void;
   registerKey: (folderId: string, key: JsonWebKey) => void;
+  // Merges what is known about a folder, e.g. where a shared folder lives.
+  registerFolder: (folderId: string, info: Partial<FolderInfo>) => void;
 }
 
 export const FolderContext = createContext<FolderContextState>(
@@ -21,12 +37,45 @@ export function useParentFolderId(folderId: string): string {
   return useContext(FolderContext).folders[folderId]?.parentId || "";
 }
 
+type Hop = { doc: string; owner: string; wrappedBy: string };
+
+/**
+ * The hops of {@code startId}'s folder chain, as far as it is known: one hop
+ * per folder, each in its owner's tree (a folder registered with an owner is
+ * somebody else's; any other belongs to the caller). The chain ends at the
+ * first folder of the caller's own tree - the server accepts a hop the caller
+ * owns as the terminus - or, for a shared folder, at the topmost known folder,
+ * the one the caller holds a direct grant on.
+ */
+function folderChain(
+  folders: Record<string, FolderInfo>,
+  userId: string,
+  startId: string,
+  startOwner: string,
+): Hop[] {
+  const hops: Hop[] = [];
+  const seen = new Set<string>();
+  let cur = startId;
+  let owner = startOwner;
+  while (!seen.has(cur)) {
+    seen.add(cur);
+    const parent = folders[cur]?.parentId;
+    if (owner === userId || !parent || parent === userId) {
+      hops.push({ doc: cur, owner, wrappedBy: cur });
+      return hops;
+    }
+    hops.push({ doc: cur, owner, wrappedBy: parent });
+    cur = parent;
+    owner = folders[cur]?.owner ?? userId;
+  }
+  return hops;
+}
+
 /**
  * Builds the {@code Access-Path} proof-hint header for a non-owner access to
- * {@code documentId} in {@code owner}'s tree (ADR 0009). Walks the known
- * {@code parentId} chain up to (but not into) the caller's own settings
- * document, emitting one {@code {doc, owner, wrappedBy}} hop per level plus a
- * self-referential terminus hop for the topmost shared folder.
+ * {@code documentId} in {@code owner}'s tree (ADR 0009): one {@code {doc, owner,
+ * wrappedBy}} hop per level of the known {@code parentId} chain (see
+ * folderChain for where it ends).
  *
  * Returns {@code undefined} - meaning "send no header" - when {@code owner} is
  * the caller (own tree) or when no parent chain is known (a direct chat / folder
@@ -41,29 +90,36 @@ export function buildAccessPath(
   if (!owner || owner === userId) {
     return undefined;
   }
-  const hops: { doc: string; owner: string; wrappedBy: string }[] = [];
-  const seen = new Set<string>();
-  let cur = documentId;
-  while (
-    folders[cur]?.parentId &&
-    folders[cur].parentId !== userId &&
-    !seen.has(cur)
-  ) {
-    seen.add(cur);
-    const parent = folders[cur].parentId as string;
-    hops.push({ doc: cur, owner, wrappedBy: parent });
-    cur = parent;
-  }
-  if (hops.length === 0) {
-    return undefined;
-  }
-  hops.push({ doc: cur, owner, wrappedBy: cur });
-  return encodeAccessPath(hops);
+  const hops = folderChain(folders, userId, documentId, owner);
+  return hops.length > 1 ? encodeAccessPath(hops) : undefined;
 }
 
-function encodeAccessPath(
-  hops: { doc: string; owner: string; wrappedBy: string }[],
-): string {
+/**
+ * Builds the {@code Access-Path} header for a CHILD of a folder (an entry of
+ * {@code folderId}'s content) owned by {@code childOwner}: the child's key is
+ * wrapped by the folder, so the chain starts with the child and continues with
+ * the folder's own chain (docs/plans/share-folders.md §2.4). Returns
+ * {@code undefined} - "send no header" - when child and folder both belong to
+ * the caller.
+ */
+export function buildChildAccessPath(
+  folders: Record<string, FolderInfo>,
+  userId: string,
+  childId: string,
+  childOwner: string,
+  folderId: string,
+  folderOwner: string,
+): string | undefined {
+  if ((!childOwner || childOwner === userId) && folderOwner === userId) {
+    return undefined;
+  }
+  return encodeAccessPath([
+    { doc: childId, owner: childOwner, wrappedBy: folderId },
+    ...folderChain(folders, userId, folderId, folderOwner),
+  ]);
+}
+
+function encodeAccessPath(hops: Hop[]): string {
   const json = JSON.stringify({ chain: hops });
   return btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -101,6 +157,27 @@ export function useAccessPath(
   const { folders } = useContext(FolderContext);
   const user = useUser();
   return buildAccessPath(folders, user, documentId, owner);
+}
+
+// The Access-Path of the entries of a folder, per entry (see buildChildAccessPath).
+export function useChildAccessPath(
+  folderId: string,
+  folderOwner: string,
+): (childId: string, childOwner?: string) => string | undefined {
+  const { folders } = useContext(FolderContext);
+  const user = useUser();
+  return useCallback(
+    (childId: string, childOwner?: string) =>
+      buildChildAccessPath(
+        folders,
+        user,
+        childId,
+        childOwner ?? folderOwner,
+        folderId,
+        folderOwner,
+      ),
+    [folders, user, folderId, folderOwner],
+  );
 }
 
 export function useKey(folderId: string): JsonWebKey | undefined {

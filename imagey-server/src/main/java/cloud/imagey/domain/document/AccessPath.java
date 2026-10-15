@@ -110,5 +110,10 @@ public record AccessPath(List<Hop> hops) {
 
     /** One link of the chain. {@link #parse} rejects a hop with a missing field before building one. */
     public record Hop(DocumentId doc, User owner, DocumentId wrappedBy) {
+
+        /** Whether this names its owner's settings document (its id is the owner's userId). */
+        public boolean isSettingsDocument() {
+            return doc.id().equals(owner.id().id());
+        }
     }
 }

@@ -14,7 +14,16 @@ export function useFolderIcons(
   folder: Document<FolderMetadata> | undefined,
   onCreateFolder: () => void,
   onDocumentUploaded: (result: StoreResult) => void,
+  options: {
+    onShareFolder?: () => void;
+    // Whether the user may add content here (always for an own folder; for
+    // a shared one as the owner told us).
+    canAdd?: boolean;
+    // The folder belongs to somebody else: it cannot be shared on.
+    shared?: boolean;
+  } = {},
 ) {
+  const { onShareFolder, canAdd = true, shared = false } = options;
   const { t } = useTranslation();
   const documentsId = useDocumentsId();
   const parentId = useParentFolderId(id);
@@ -35,7 +44,23 @@ export function useFolderIcons(
       );
     }
 
-    if (folder) {
+    if (id === documentsId) {
+      icons.push(
+        <button
+          key="shared-with-me"
+          aria-label="shared-with-me"
+          title={t("Shared with me")}
+          className="circle transparent"
+          onClick={() => navigate("/shared")}
+        >
+          <i>folder_shared</i>
+        </button>,
+      );
+    }
+
+    if (folder && !canAdd) {
+      // A folder shared read-only: nothing to add.
+    } else if (folder) {
       icons.push(
         <button
           key="add-menu"
@@ -58,6 +83,11 @@ export function useFolderIcons(
             <li>
               <a onClick={onCreateFolder}>{t("Create Folder")}</a>
             </li>
+            {onShareFolder && !shared && id !== documentsId && (
+              <li>
+                <a onClick={onShareFolder}>{t("Share folder")}</a>
+              </li>
+            )}
           </menu>
         </button>,
       );
@@ -83,6 +113,9 @@ export function useFolderIcons(
     navigate,
     onCreateFolder,
     onDocumentUploaded,
+    onShareFolder,
+    canAdd,
+    shared,
   ]);
   useActionIcons(actionIcons);
 }

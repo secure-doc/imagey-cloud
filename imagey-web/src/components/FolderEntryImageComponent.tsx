@@ -1,4 +1,4 @@
-import { documentService } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
 import { FolderEntry } from "../document/DocumentMetadata";
 import { useImageBlob } from "../hooks/useImageBlob";
 import { ImageThumbnail } from "./ImageThumbnail";
@@ -10,6 +10,7 @@ import { ImageThumbnail } from "./ImageThumbnail";
 export default function FolderEntryImageComponent({
   entry,
   folderOwner,
+  folderOrigin,
   folderKey,
   accessPath,
   className = "small-width small-height",
@@ -17,6 +18,7 @@ export default function FolderEntryImageComponent({
 }: {
   entry: FolderEntry;
   folderOwner: string;
+  folderOrigin?: string;
   folderKey: JsonWebKey;
   accessPath?: string;
   className?: string;
@@ -24,14 +26,14 @@ export default function FolderEntryImageComponent({
 }) {
   const { objectUrl, error } = useImageBlob(
     () =>
-      documentService.loadFolderEntryContent(
-        folderOwner,
+      servicesFor(folderOrigin).documents.loadFolderEntryContent(
+        entry.owner ?? folderOwner,
         entry,
         folderKey,
         accessPath,
       ),
     entry.mimeType,
-    [folderOwner, entry, folderKey, accessPath],
+    [folderOwner, folderOrigin, entry, folderKey, accessPath],
   );
 
   return (

@@ -199,6 +199,9 @@ export function createDocumentService(
       // re-apply our addition and retry so the concurrent change is not lost.
       let currentDocuments = parentFolder.documents;
       let currentRevision: string | null = parentFolder.revision;
+      // Carried along unchanged, but re-read with the rest after a 412: a share recorded by the
+      // owner meanwhile must not be written back away.
+      let currentSharedWith = parentFolder.sharedWith;
       for (let attempt = 1; attempt <= MAX_FOLDER_UPDATE_RETRIES; attempt++) {
         // The wrapped child key, symmetric under the folder's OWN key - reused
         // both as the document's server-side key envelope entry below and as
@@ -210,6 +213,8 @@ export function createDocumentService(
         );
         const newEntry: FolderEntry = {
           ...folderEntryBase,
+          // A contribution lives in the contributor's own tree.
+          ...(folderOwner !== userId ? { owner: userId } : {}),
           sharedKey: { sharedKey: encryptedKey },
         };
         const newDocuments = [...currentDocuments, newEntry];
@@ -222,6 +227,7 @@ export function createDocumentService(
           key: parentFolder.key,
           type: parentFolder.type,
           documents: newDocuments,
+          ...(currentSharedWith ? { sharedWith: currentSharedWith } : {}),
         };
         const newEncryptedParent = await cryptoService.encryptDocument(
           parentFolderKey,
@@ -265,6 +271,7 @@ export function createDocumentService(
           );
           currentDocuments = reloaded.documents;
           currentRevision = reloaded.revision;
+          currentSharedWith = reloaded.sharedWith;
         }
       }
       // Unreachable: the final iteration either returns or rethrows.
@@ -552,6 +559,18 @@ export function createDocumentService(
         accessPath,
       );
     },
+    allowContributions: (
+      userId: string,
+      documentId: string,
+      grantee: string,
+    ): Promise<void> =>
+      repository.allowContributions(userId, documentId, grantee),
+    denyContributions: (
+      userId: string,
+      documentId: string,
+      grantee: string,
+    ): Promise<void> =>
+      repository.denyContributions(userId, documentId, grantee),
     // Sharing a document with a contact is structurally the same operation
     // as adding it to any other folder: the document's own symmetric key gets
     // a second keys/{kid} entry, this time wrapped with the chat's shared key
@@ -621,14 +640,18 @@ async function fetchAndDecryptContent(
 
 // Re-fetches and decrypts a folder document whose symmetric key we already
 // hold, returning just what storeDocument needs to re-apply its change after a
-// concurrent-modification 412: the current child list and the current revision.
+// concurrent-modification 412: the current child list, share list and revision.
 async function reloadFolderDocuments(
   documents: DocumentRepository,
   owner: string,
   folderId: string,
   folderKey: JsonWebKey,
   accessPath?: string,
-): Promise<{ documents: FolderEntry[]; revision: string | null }> {
+): Promise<{
+  documents: FolderEntry[];
+  revision: string | null;
+  sharedWith: FolderMetadata["sharedWith"];
+}> {
   const { content, etag } = await documents.loadDocument(
     owner,
     folderId,
@@ -636,7 +659,11 @@ async function reloadFolderDocuments(
   );
   const decrypted = await cryptoService.decryptDocument(folderKey, content);
   const payload = JSON.parse(new TextDecoder().decode(decrypted));
-  return { documents: payload.documents ?? [], revision: etag };
+  return {
+    documents: payload.documents ?? [],
+    revision: etag,
+    sharedWith: payload.sharedWith,
+  };
 }
 
 export async function decryptDocument(
@@ -682,6 +709,7 @@ export async function decryptDocument(
         type: "chatList",
         contacts: payload.contacts,
         groups: payload.groups,
+        sharedFolders: payload.sharedFolders,
       };
     case "chat":
       return {
@@ -702,6 +730,7 @@ export async function decryptDocument(
         ...base,
         type: "folder",
         documents: payload.documents,
+        sharedWith: payload.sharedWith,
       };
     case "file":
       return {

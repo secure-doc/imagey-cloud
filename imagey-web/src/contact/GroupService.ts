@@ -14,6 +14,7 @@ import { PublicProfile } from "../profile/PublicProfile";
 import {
   ChatList,
   ChatsDocumentState,
+  knownSharedFolders,
   reloadChatList,
   updateChatList,
 } from "./ContactService";
@@ -195,6 +196,7 @@ export const groupService = {
     let currentList: ChatList = {
       contacts: chatsDocument.contacts,
       groups: chatsDocument.groups,
+      sharedFolders: await knownSharedFolders(userId, chatsDocument),
     };
     let currentRevision = chatsDocument.revision;
     let folderETag: string | null = null;
@@ -209,6 +211,7 @@ export const groupService = {
               type: "chatList",
               contacts: currentList.contacts,
               groups: updatedGroups,
+              sharedFolders: currentList.sharedFolders,
             }),
           ).buffer,
         ],
@@ -233,7 +236,7 @@ export const groupService = {
           [],
         );
         folderETag = result.folderETag;
-        currentList = { contacts: currentList.contacts, groups: updatedGroups };
+        currentList = { ...currentList, groups: updatedGroups };
         break;
       } catch (e) {
         if (

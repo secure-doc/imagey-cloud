@@ -441,6 +441,7 @@ async function mockChatsDocument(
   // (no `groups` key at all), matching how a real pre-Phase-1 "chats"
   // document looks on the wire.
   groups?: TestGroupEntry[],
+  sharedFolders?: object[],
 ): Promise<JsonWebKey> {
   const givenStates = given === undefined ? [] : ([] as string[]).concat(given);
   const key = chatsDocumentKey ?? (await generateAesGcmKeyJwk());
@@ -459,6 +460,7 @@ async function mockChatsDocument(
       JSON.stringify({
         contacts: contactEntries,
         ...(groups ? { groups } : {}),
+        ...(sharedFolders ? { sharedFolders } : {}),
         type: "chatList",
         name: "Chats",
       }),
@@ -502,6 +504,7 @@ export async function prepareMarysChatsDocument(
   given?: string | string[],
   chatsDocumentKey?: JsonWebKey,
   groups?: TestGroupEntry[],
+  sharedFolders?: object[],
 ): Promise<JsonWebKey> {
   return mockChatsDocument(
     "d20cf443-4f96-418f-a957-c8cbef8677c3",
@@ -511,6 +514,7 @@ export async function prepareMarysChatsDocument(
     given,
     chatsDocumentKey,
     groups,
+    sharedFolders,
   );
 }
 
@@ -555,7 +559,7 @@ export async function prepareAlicesChatsDocument(
 // exercise the chat UI itself (which doesn't care how the key was
 // obtained). See mockChatDocumentSharedViaSync below for the non-owner
 // branch.
-async function mockChatDocument({
+export async function mockChatDocument({
   ownerEmail,
   chatId,
   chatsId,

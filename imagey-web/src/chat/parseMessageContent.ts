@@ -28,6 +28,16 @@ export type ParsedMessageContent =
       // The address the inviter registered the reader under on the group's server (F9), if the
       // group is not on the chat's server: the guest session there is bound to it.
       address?: string;
+    }
+  | {
+      type: "shared-folder";
+      documentId: string;
+      owner: string;
+      name: string;
+      // Whether the owner opened the folder for contributions (display only).
+      contributions: boolean;
+      // Where the folder lives, relative to the reader, like `shared-document`.
+      origin?: string | null;
     };
 
 // The `origin` of a message comes from the other party: only a well-formed one passes. The own
@@ -57,6 +67,29 @@ export function parseMessageContent(content: string): ParsedMessageContent {
         type: "shared-document",
         documentId: payload.documentId,
         owner: payload.owner,
+        ...(payload.origin !== undefined
+          ? { origin: parseDocumentOrigin(payload.origin) }
+          : {}),
+      };
+    } catch {
+      // fall through to plain text
+    }
+  } else if (content.startsWith('{"type":"shared-folder"')) {
+    try {
+      const payload = JSON.parse(content);
+      if (
+        typeof payload.documentId !== "string" ||
+        typeof payload.owner !== "string" ||
+        typeof payload.name !== "string"
+      ) {
+        throw new TypeError("Invalid shared folder");
+      }
+      return {
+        type: "shared-folder",
+        documentId: payload.documentId,
+        owner: payload.owner,
+        name: payload.name,
+        contributions: payload.contributions === true,
         ...(payload.origin !== undefined
           ? { origin: parseDocumentOrigin(payload.origin) }
           : {}),

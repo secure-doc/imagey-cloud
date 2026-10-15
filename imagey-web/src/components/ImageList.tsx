@@ -6,8 +6,11 @@ import FolderImageComponent from "./FolderImageComponent";
 interface ImageListProps {
   entries: FolderEntry[];
   folderOwner: string;
+  // The server the folder lives on, if not the own one.
+  folderOrigin?: string;
   folderKey: JsonWebKey;
-  accessPath?: string;
+  // The Access-Path for reading one entry (see useChildAccessPath).
+  accessPathFor?: (entry: FolderEntry) => string | undefined;
   onFolderClick?: (entry: FolderEntry) => void;
   onImageClick?: (entry: FolderEntry) => void;
   onFileClick: (entry: FolderEntry) => void | Promise<void>;
@@ -16,8 +19,9 @@ interface ImageListProps {
 export default function ImageList({
   entries,
   folderOwner,
+  folderOrigin,
   folderKey,
-  accessPath,
+  accessPathFor,
   onFolderClick,
   onImageClick,
   onFileClick,
@@ -44,8 +48,9 @@ export default function ImageList({
             <FolderEntryImageComponent
               entry={entry}
               folderOwner={folderOwner}
+              folderOrigin={folderOrigin}
               folderKey={folderKey}
-              accessPath={accessPath}
+              accessPath={accessPathFor?.(entry)}
               onClick={onImageClick ? () => onImageClick(entry) : undefined}
             />
           </div>
