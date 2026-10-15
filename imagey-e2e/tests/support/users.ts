@@ -7,6 +7,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { measureCoverage, saveCoverage } from "./coverage";
 import { mailCount, waitForMailLink } from "./mailbox";
 
 export const PASSWORD = "E2E-Password-123!";
@@ -37,6 +38,10 @@ export function imagePath(name: string): string {
   );
 }
 
+export function assetPath(name: string): string {
+  return path.join(import.meta.dirname, "..", "assets", name);
+}
+
 // The two independent servers of the stack: A is the default, B the second one (federation).
 export type Server = "a" | "b";
 
@@ -54,6 +59,7 @@ export function baseURL(): string {
 const openContexts: BrowserContext[] = [];
 
 export async function closeAllDevices(): Promise<void> {
+  await saveCoverage();
   await Promise.all(openContexts.splice(0).map((context) => context.close()));
 }
 
@@ -64,7 +70,9 @@ export async function newDevice(
 ): Promise<Device> {
   const context = await browser.newContext({ baseURL: serverURL(server) });
   openContexts.push(context);
-  return { context, page: await context.newPage() };
+  await measureCoverage(context);
+  const page = await context.newPage();
+  return { context, page };
 }
 
 // Registers a fresh user with a verification mail from Greenmail, entirely through the UI. Also
@@ -197,6 +205,20 @@ export async function uploadImageHere(
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(imagePath(imageName));
   await expect(page.getByAltText(imageName)).toBeVisible({ timeout: 30_000 });
+}
+
+// Uploads a file that is not an image into the folder that is open on the images page. The file
+// chooser accepts images only, but setFiles does not look at that.
+export async function uploadFileHere(page: Page, name: string): Promise<void> {
+  const addMenuButton = page.locator("*[aria-label='add-menu']");
+  await expect(addMenuButton).toBeVisible();
+  await expect(page.locator("text='Upload Document'")).toBeAttached();
+  await addMenuButton.click();
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.locator("text='Upload Document'").click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles(assetPath(name));
+  await expect(page.getByLabel(name)).toBeVisible({ timeout: 30_000 });
 }
 
 // Sends a contact request / invitation to `email` from the chats page.
@@ -347,7 +369,15 @@ export async function loginOnNewDevice(
   await expect(
     page.getByText("you can now activate it with another device"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "OK" }).click();
+}
+
+// The device waits for its activation; "OK" tries to unlock it again, which works once another
+// device has activated it.
+export async function retryUnlock(device: Device): Promise<void> {
+  await device.page.getByRole("button", { name: "OK" }).click();
+  await expect(device.page.getByRole("link", { name: "Images" })).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 // Activates the device that is waiting for it, on a device that is already active.

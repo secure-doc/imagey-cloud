@@ -16,6 +16,8 @@
     <skipTests>false</skipTests>
     <!-- Skips the E2E phase; -DskipTests skips it as well, -DskipE2E=false runs it nevertheless -->
     <skipE2E>${skipTests}</skipE2E>
+    <!-- Skips the combined coverage gate (CI runs it in its own job, where the contract data is available) -->
+    <skipCombinedCoverage>${skipE2E}</skipCombinedCoverage>
   </properties>
 
   <dependencies>
@@ -86,6 +88,18 @@
               <arguments>run e2e</arguments>
               <!-- The plugin skips "-DskipTests" on its own; skipping is controlled by skipE2E here -->
               <skipTests>false</skipTests>
+            </configuration>
+          </execution>
+          <execution>
+            <id>combined coverage gate</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <workingDirectory>../imagey-web</workingDirectory>
+              <arguments>run test:coverage:combined</arguments>
+              <skip>${skipCombinedCoverage}</skip>
             </configuration>
           </execution>
         </executions>

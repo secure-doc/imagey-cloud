@@ -10,12 +10,14 @@
     "prettier": "prettier . -w",
     "preview": "vite preview",
     "test": "playwright test",
-    "test:coverage": "rm -rf .coverage-raw && playwright test --retries=0 && node scripts/coverage-report.mjs",
-    "test:coverage:report": "node scripts/coverage-report.mjs",
+    "test:coverage": "rm -rf target/coverage-istanbul/contract && playwright test --retries=0 && node scripts/coverage-report.mjs --suite contract",
+    "test:coverage:report": "node scripts/coverage-report.mjs --suite contract",
     "test:coverage:ui": "open coverage/index.html",
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug",
-    "i18n:check": "i18next-cli extract"
+    "i18n:check": "i18next-cli extract",
+    "build:coverage": "COVERAGE=1 vite build --outDir dist-coverage && vite build -c vite.sw.config.ts --outDir dist-coverage",
+    "test:coverage:combined": "node scripts/coverage-report.mjs --suite combined"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",

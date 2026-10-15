@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createInstrumenter } from "istanbul-lib-instrument";
 
 // Code-coverage instrumentation for the Playwright suite, which runs against
-// `npm run dev`.
+// `npm run dev`, and for the E2E bundle (`npm run build:coverage`).
 //
 // We lower each `src` file (TS + JSX -> JS) ourselves and then run a single
 // istanbul-lib-instrument pass over the result, rather than using
@@ -27,7 +27,11 @@ function coverageInstrument(): Plugin {
 
   return {
     name: "imagey:coverage-instrument",
-    apply: (_config, { command }) => command === "serve",
+    // The dev server (Pact suite) and, with COVERAGE=1, the build of the bundle that the
+    // E2E suite runs against. Both instrument the same lowered source, so the coverage of
+    // the two suites can be merged statement by statement.
+    apply: (_config, { command }) =>
+      command === "serve" || process.env.COVERAGE === "1",
     enforce: "pre",
     async transform(code, id) {
       const file = id.split("?", 1)[0];

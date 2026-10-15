@@ -3,7 +3,14 @@
 // E2E_KEEP=1 keeps the stack running afterwards for debugging.
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  readdirSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +22,16 @@ const bundle = join(
   "target",
   "imagey-server-meecrowave-distribution.zip",
 );
+// The frontend as the E2E suite measures it: instrumented (imagey-web, npm run build:coverage),
+// replacing the uninstrumented imagey-web jar of the server bundle in the image.
+function findCoverageJar() {
+  const target = join(root, "..", "imagey-web", "target");
+  const name = existsSync(target)
+    ? readdirSync(target).find((f) => /^imagey-web-.*-coverage\.jar$/.test(f))
+    : undefined;
+  return name ? join(target, name) : undefined;
+}
+
 const compose = [
   "compose",
   "-p",
@@ -153,7 +170,19 @@ try {
       `${bundle} not found. Build imagey-server first (mvn package -pl imagey-server -am).`,
     );
   }
+  rmSync(join(root, "target", "coverage-istanbul"), {
+    recursive: true,
+    force: true,
+  });
+  const coverageJar = findCoverageJar();
+  if (!coverageJar) {
+    fail(
+      "imagey-web-*-coverage.jar not found. Build imagey-web with -DskipCoverageBundle=false " +
+        "(a build without -DskipE2E does that).",
+    );
+  }
   mkdirSync(imageContext, { recursive: true });
+  copyFileSync(coverageJar, join(imageContext, "imagey-web-coverage.jar"));
   copyFileSync(
     bundle,
     join(imageContext, "imagey-server-meecrowave-distribution.zip"),
@@ -176,6 +205,20 @@ try {
   ));
   if (status !== 0) {
     saveServerLog();
+  }
+  // The raw coverage report for the combined gate, also when tests failed. A frontend without
+  // installed dependencies (imagey-web) only costs the report.
+  const report = run(
+    "node",
+    [
+      join(root, "..", "imagey-web", "scripts", "coverage-report.mjs"),
+      "--suite",
+      "e2e",
+    ],
+    { cwd: join(root, "..", "imagey-web"), stdio: "inherit" },
+  );
+  if (report.status !== 0) {
+    console.error("E2E: the coverage report could not be created");
   }
 } catch (error) {
   console.error(error instanceof E2eError ? `E2E: ${error.message}` : error);

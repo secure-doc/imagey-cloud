@@ -14,7 +14,24 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <skipTests>false</skipTests>
+    <!-- The instrumented bundle for the E2E suite (see the profile); skipped unless E2E runs -->
+    <skipCoverageBundle>true</skipCoverageBundle>
   </properties>
+
+  <profiles>
+    <profile>
+      <!-- A build that runs the E2E tests (no -DskipE2E) needs the instrumented bundle -->
+      <id>e2e-coverage-bundle</id>
+      <activation>
+        <property>
+          <name>!skipE2E</name>
+        </property>
+      </activation>
+      <properties>
+        <skipCoverageBundle>false</skipCoverageBundle>
+      </properties>
+    </profile>
+  </profiles>
 
   <build>
     <plugins>
@@ -64,13 +81,24 @@
             </configuration>
           </execution>
           <execution>
+            <id>build instrumented bundle</id>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <phase>compile</phase>
+            <configuration>
+              <arguments>run build:coverage</arguments>
+              <skip>${skipCoverageBundle}</skip>
+            </configuration>
+          </execution>
+          <execution>
             <id>install playwright browsers</id>
             <goals>
               <goal>npx</goal>
             </goals>
             <phase>generate-test-resources</phase>
             <configuration>
-              <arguments>playwright install</arguments>
+              <arguments>playwright install chromium</arguments>
               <skip>${skipTests}</skip>
             </configuration>
           </execution>
@@ -107,6 +135,22 @@
               </resources>              
             </configuration>
           </execution>
+          <execution>
+            <id>copy-instrumented-js</id>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <phase>prepare-package</phase>
+            <configuration>
+              <skip>${skipCoverageBundle}</skip>
+              <outputDirectory>${project.build.directory}/coverage-classes/META-INF/resources/</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/dist-coverage/</directory>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>
@@ -118,6 +162,19 @@
             <goals>
               <goal>test-jar</goal>
             </goals>
+          </execution>
+          <execution>
+            <!-- The same frontend, instrumented, for the E2E suite; not a dependency of the server -->
+            <id>coverage-jar</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <phase>package</phase>
+            <configuration>
+              <classifier>coverage</classifier>
+              <classesDirectory>${project.build.directory}/coverage-classes</classesDirectory>
+              <skipIfEmpty>true</skipIfEmpty>
+            </configuration>
           </execution>
         </executions>
       </plugin>

@@ -2,6 +2,7 @@ import { test, expect } from "./support/fixtures";
 import {
   activateDevice,
   loginOnNewDevice,
+  retryUnlock,
   newDevice,
   registerUser,
   setPassword,
@@ -21,7 +22,9 @@ test("E1: alice activates her second device, which then sees her image", async (
   await loginOnNewDevice(second, alice.email);
   await activateDevice(alice);
 
-  // Device 2 now unlocks with the password and reads what device 1 stored.
+  // Device 2 retries and is let in...
+  await retryUnlock(second);
+  // ... and unlocks with the password after a reload, reading what device 1 stored.
   await second.page.reload();
   await setPassword(second.page, "unlock");
   await second.page.getByRole("link", { name: "Images" }).click();

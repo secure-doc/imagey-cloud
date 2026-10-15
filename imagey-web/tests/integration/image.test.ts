@@ -347,22 +347,6 @@ test("open an own shared image detail view directly after a reload", async ({
   await expect(page).toHaveURL(`/chats/${LAURA}`);
 });
 
-// Other side of this story with real clients: imagey-e2e/tests/e5-share-image.e2e.ts (E5, docs/plans/e2e-test-setup.md)
-test("open an image shared by a contact directly after a reload", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 412, height: 915 });
-  await routeChatWithBeachImageSharedByLaura(page);
-
-  // The chat key has to be resolved from the "chats" document first
-  await login(page, `/images/${BEACH_ID}?chat=${LAURA}&owner=${LAURA}`);
-
-  await expect(page.getByAltText(BEACH_NAME)).toBeVisible({
-    timeout: 10_000,
-  });
-  await expect(page.getByText("No image found")).toBeHidden();
-});
-
 test("an image shared by a contact without a chat cannot be resolved", async ({
   page,
 }) => {

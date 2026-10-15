@@ -14,7 +14,7 @@ import {
   messageId,
   messageTimestamp,
 } from "./setup";
-import { ALICE_ID, LAURA_ID, MARY_ID } from "./testdata";
+import { ALICE_ID, MARY_ID } from "./testdata";
 
 // Download/share for non-image documents (docs/plans/open-documents.md, part
 // A): a folder or chat tile for a `file` document, clicked, either downloads
@@ -29,12 +29,10 @@ test.beforeEach("Clear local storage", async ({ page }) => {
 });
 
 const MARY = MARY_ID;
-const LAURA = LAURA_ID;
 const ALICE = ALICE_ID;
 const ROOT_ID = TestData.mary.settings!.documents;
 const CHATS_ID = TestData.mary.settings!.chats;
 const ROOT_KEY = TestData.mary.documents[0].key!;
-const CHAT_ID = "chat-laura-document";
 const GROUP_ID = "77777777-7777-7777-7777-777777777001";
 const FILE_ID = "11111111-1111-1111-1111-111111111111";
 const CONTENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -121,92 +119,6 @@ async function routeFileDocument(
     },
   );
   return { contentRequests: () => requests };
-}
-
-// Mary's chat with Laura (owned by Mary) sharing one `file` document.
-async function routeChatSharingFile(
-  page: Page,
-  {
-    fileKey,
-    name,
-    mimeType,
-    content,
-  }: { fileKey: JsonWebKey; name: string; mimeType: string; content: Buffer },
-) {
-  const chatsKey = await generateAesGcmKeyJwk();
-  const chatKey = await generateAesGcmKeyJwk();
-  const settingsKey = TestData.mary.settingsKey!;
-
-  // SharedDocumentMessage resolves Mary's OWN share through her root
-  // folder's key (isOwner branch), same as useKey(documentsId) anywhere
-  // else - only the key entry is needed, not the folder's own content.
-  await page.route(
-    `**/users/${MARY}/documents/${ROOT_ID}/keys/${MARY}`,
-    async (route) =>
-      route.fulfill({
-        status: 200,
-        json: { sharedKey: await encryptKeyEnvelope(ROOT_KEY, settingsKey) },
-      }),
-  );
-  await routeGeneratedDocument(
-    page,
-    CHATS_ID,
-    await encryptedDocument(chatsKey, {
-      type: "chatList",
-      name: "Chats",
-      contacts: [
-        {
-          userId: LAURA,
-          chatId: CHAT_ID,
-          owner: MARY,
-          name: "Laura",
-          profileRevision: "0",
-        },
-      ],
-    }),
-    MARY,
-    await encryptKeyEnvelope(chatsKey, settingsKey),
-  );
-  await routeGeneratedDocument(
-    page,
-    CHAT_ID,
-    await encryptedDocument(chatKey, {
-      type: "chat",
-      name: "Chat",
-      publicProfiles: {},
-    }),
-    CHATS_ID,
-    await encryptKeyEnvelope(chatKey, chatsKey),
-  );
-  // Mary is the sender/owner of this share, so SharedDocumentMessage reaches
-  // it through her OWN root folder (isOwner branch), exactly like a folder
-  // tile - not through the chat key, which only non-owner recipients use.
-  await routeFileDocument(page, { fileKey, name, mimeType, content });
-
-  const message = (
-    await encryptedDocument(chatKey, {
-      type: "shared-document",
-      documentId: FILE_ID,
-      owner: MARY,
-    })
-  ).toString("base64");
-  await page.route(
-    new RegExp(`/users/${MARY}/documents/${CHAT_ID}/messages`),
-    (route) =>
-      route.fulfill({
-        status: 200,
-        json: route.request().url().includes("sinceId")
-          ? []
-          : [
-              {
-                id: messageId(1),
-                timestamp: messageTimestamp(1),
-                sender: MARY,
-                content: message,
-              },
-            ],
-      }),
-  );
 }
 
 // A group Alice owns, that Mary is a member of (her "chats" document already
@@ -382,30 +294,6 @@ test("an HTML file downloads its original content instead of being rendered", as
   expect(
     await page.evaluate(() => (window as unknown as { __pwn?: boolean }).__pwn),
   ).toBeUndefined();
-});
-
-// Other side of this story with real clients: imagey-e2e/tests/e5-share-image.e2e.ts (E5, docs/plans/e2e-test-setup.md)
-test("a shared file in a 1:1 chat downloads on click", async ({ page }) => {
-  const fileKey = await generateAesGcmKeyJwk();
-  const content = Buffer.from("shared note content");
-  await routeChatSharingFile(page, {
-    fileKey,
-    name: "shared.txt",
-    mimeType: "text/plain",
-    content,
-  });
-  await routeContactRequests(page);
-
-  await loginAsMaryAt(page, "/");
-  await page.getByRole("link", { name: "Chats" }).first().click();
-  await page.getByText("Laura", { exact: true }).first().click();
-  await expect(page.getByLabel("shared.txt")).toBeVisible();
-
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    page.getByLabel("shared.txt").click(),
-  ]);
-  expect(download.suggestedFilename()).toBe("shared.txt");
 });
 
 test("a shared file in a group chat downloads via the two-hop Access-Path", async ({
