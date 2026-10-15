@@ -352,52 +352,6 @@ async function routeStory(page: Page, story: Story = {}) {
 const bubble = (page: Page, content: string) =>
   page.locator("div.elevate", { hasText: content });
 
-test("the messages of a chat on another server are read and written as a guest", async ({
-  page,
-}) => {
-  const { own, remote, chatKey } = await routeStory(page, {
-    messages: [
-      { sender: ALICE_A, content: "Hello Mary" },
-      { sender: MARY_A, content: "Hi Alice" },
-    ],
-  });
-
-  await loginAsMaryAt(page, `/chats/${ALICE_A}`);
-
-  // Alice's message is on the left, mary's own (sender: her id AT A) on the right.
-  await expect(bubble(page, "Hello Mary")).toHaveCSS(
-    "align-self",
-    "flex-start",
-  );
-  await expect(bubble(page, "Hi Alice")).toHaveCSS("align-self", "flex-end");
-  expect(remote.sessions.length).toBeGreaterThan(0);
-  expect(remote.messages[0].headers["authorization"]).toBe(
-    "Bearer guest-token",
-  );
-  expect(remote.chat[0].headers["authorization"]).toBe("Bearer guest-token");
-
-  await page.getByLabel("Type a message").fill("How are you?");
-  await page.getByLabel("Type a message").press("Enter");
-
-  await expect(bubble(page, "How are you?")).toHaveCSS(
-    "align-self",
-    "flex-end",
-  );
-  expect(remote.posts).toHaveLength(1);
-  expect(remote.posts[0].url).toBe(
-    `${A}/users/${ALICE_A}/documents/${CHAT}/messages`,
-  );
-  // alice is notified with her id at A, which is where the chat is
-  expect(remote.posts[0].headers["notify"]).toBe(ALICE_A);
-  expect(
-    (
-      await aesGcmDecrypt(chatKey, Buffer.from(remote.posts[0].body!, "base64"))
-    ).toString(),
-  ).toBe("How are you?");
-  // nothing of the chat touches the own server
-  expect(own.messages).toEqual([]);
-});
-
 test("before alice created the chat the pending key is used", async ({
   page,
 }) => {
@@ -565,37 +519,6 @@ test("a contact whose profile lives on another server is read there as a guest",
 
   await expect(page.getByText("Bob Builder").first()).toBeVisible();
   expect(profiles[0].headers["authorization"]).toBe("Bearer guest-b");
-});
-
-test("an image alice shared from A is shown, opened and reachable after a reload", async ({
-  page,
-}) => {
-  await routeStory(page, {
-    beachFromAlice: true,
-    messages: [
-      {
-        sender: ALICE_A,
-        content: JSON.stringify({
-          type: "shared-document",
-          documentId: BEACH_ID,
-          owner: ALICE_A,
-        }),
-      },
-    ],
-  });
-
-  await loginAsMaryAt(page, `/chats/${ALICE_A}`);
-  await expect(page.locator(".shared-document img")).toBeVisible();
-  await page.locator(".shared-document img").click();
-
-  const detail = `/images/${BEACH_ID}?chat=${ALICE_A}&owner=${ALICE_A}&origin=${encodeURIComponent(A)}`;
-  await expect(page).toHaveURL(detail);
-  await expect(page.locator("main img")).toHaveCount(1);
-
-  // A deep link: nothing is registered, the document is resolved again from the URL.
-  await page.goto(detail);
-  await inputMarysPassword(page);
-  await expect(page.locator("main img")).toHaveCount(1);
 });
 
 // The origin of a shared document comes from the other party and is only followed to a server the

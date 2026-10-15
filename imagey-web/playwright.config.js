@@ -22,7 +22,7 @@ export default defineConfig({
   // Tests are isolated (own browser context, own Pact mock server), so run them
   // in parallel. A 4 vCPU CI runner is saturated by two workers (browser +
   // Playwright/Pact processes need ~1.5 cores each), more only adds flakiness.
-  workers: process.env.CI ? 2 : 4,
+  workers: process.env.CI ? 3 : 4,
 
   // Screenshot baselines are shared between macOS (local) and Linux (CI), so
   // keep the platform out of the file name and tolerate small rendering

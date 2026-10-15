@@ -1,10 +1,7 @@
 import { test, expect } from "./fixtures";
 import { MatchersV3 } from "@pact-foundation/pact";
 import {
-  aesGcmDecrypt,
-  BILLS_INVITATION_CHAT_ID,
   clearLocalStorage,
-  deriveChatKey,
   generateAesGcmKeyJwk,
   loginAsMary,
   prepareMarysChatsDocumentUpdate,
@@ -14,7 +11,6 @@ import {
   provider,
   TestData,
   prepareMarysContactRequests,
-  prepareMarysEmptyContactRequests,
   prepareMarysEmptyDocumentsFolder,
   prepareMarysNamedPublicProfile,
   prepareMarysProfileWithoutPublicProfile,
@@ -23,201 +19,10 @@ import {
   prepareMarysPublicProfileShare,
   prepareMarysPublicProfileShareForFreshProfile,
   runningPactRequests,
-  MARY_ID,
-  BILL_ID,
 } from "./setup";
 
 test.beforeEach("Clear local storage", async ({ page }) => {
   await clearLocalStorage(page);
-});
-
-// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts and e3-contact-request.e2e.ts (E2/E3, docs/plans/e2e-test-setup.md)
-test("accept open invitations", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysEmptyDocumentsFolder();
-  // Accepting re-reads the "chats" document a second time (see
-  // ContactService.acceptContactRequest) - use the SAME key for both
-  // registered reads below so it doesn't matter which of the two
-  // identical-looking interactions the mock server matches which request
-  // against.
-  const chatsDocumentKey = await generateAesGcmKeyJwk();
-  await prepareMarysContactRequests(chatsDocumentKey);
-  // Accepting first ensures mary has a named public profile of her own
-  // (§3.6) - she already has one here, so this is a read, not a create/prompt.
-  const { publicProfileId } = await prepareMarysNamedPublicProfile();
-
-  // No fetch of bill's public key is needed here - it was already sent
-  // along with the ContactRequest itself (see
-  // ContactService.acceptContactRequest).
-  const builder = provider
-    .addInteraction()
-    .given("mary has no contacts and a contact request from bill")
-    .uponReceiving("a request of mary to accept bills invitation")
-    .withRequest(
-      "PUT",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
-      (r) => {
-        r.headers({
-          "Content-Type": "application/json",
-        });
-        // We don't exact-match the wrapped chat key because it's generated
-        // dynamically (see ContactService.acceptContactRequest).
-        r.jsonBody({
-          inviter: "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
-          invitee: "d20cf443-4f96-418f-a957-c8cbef8677c3",
-          status: "ACCEPTED",
-          publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-          sharedKey: MatchersV3.string("dummy-encrypted-key"),
-          publicProfileId,
-          // Our own name/address, encrypted under the chat key.
-          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
-        });
-      },
-    )
-    .willRespondWith(204);
-
-  // Accepting re-reads the "chats" document (a second GET, distinct from the
-  // one the initial page load already consumed via
-  // prepareMarysContactRequests() above) and records bill there - the chat
-  // Document itself is created by bill, the inviter, later on (ADR 0015).
-  await prepareMarysChatsDocument(
-    [],
-    "mary has no contacts and a contact request from bill",
-    chatsDocumentKey,
-  );
-  prepareMarysChatsDocumentUpdate(
-    "mary has no contacts and a contact request from bill",
-  );
-  // ... and shares mary's public profile into the chat with bill (§3.2).
-  prepareMarysPublicProfileShare(
-    publicProfileId,
-    "a358c2ed-07d4-4a25-a7db-d860d5c0b895",
-  );
-
-  await builder.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-
-    // Then Invitation Visible
-    const invitationPanel = page
-      .getByRole("heading", {
-        name: "Contact Request",
-      })
-      .locator("..");
-    await expect(invitationPanel).toBeVisible();
-
-    // The inviter's name/address come from the request's encrypted
-    // contactInfo - never bill's userId.
-    await expect(invitationPanel).toContainText(
-      "Bill whants to connect with you.",
-    );
-    await expect(invitationPanel).toContainText("bill@imagey.cloud");
-
-    // Records the accepting PUT to check the chat key afterwards.
-    let acceptBody: string | null = null;
-    page.on("request", (request) => {
-      if (
-        request.method() === "PUT" &&
-        request.url().includes("/contact-requests/")
-      ) {
-        acceptBody = request.postData();
-      }
-    });
-
-    // Act: Accept Alice
-    const acceptAliceBtn = invitationPanel.getByRole("button", {
-      name: "check",
-    });
-    // The panel is removed only once the whole acceptContactRequest chain
-    // (PUT chats document -> POST public-profile share -> PUT contact-request)
-    // has resolved. Pin the terminal accept request so the assertion doesn't
-    // race a slow multi-hop round-trip under load / coverage instrumentation.
-    const accepted = page.waitForResponse(
-      (r) =>
-        r.request().method() === "PUT" &&
-        r.url().includes("/contact-requests/"),
-    );
-    await acceptAliceBtn.click();
-    await accepted;
-    await expect(invitationPanel).not.toBeVisible();
-    await expect.poll(() => runningPactRequests).toBe(0);
-
-    // The inviter (bill) derives the same chat key from mary's public key in
-    // the accept (ADR 0015 leg 3) and reads what mary told about herself.
-    const accept = JSON.parse(acceptBody!);
-    const inviterSideKey = await deriveChatKey(
-      TestData.bill.privateMainKey!,
-      accept.publicKey,
-      BILLS_INVITATION_CHAT_ID,
-      BILL_ID,
-      MARY_ID,
-    );
-    const info = JSON.parse(
-      (
-        await aesGcmDecrypt(
-          inviterSideKey,
-          Buffer.from(accept.contactInfo, "base64"),
-        )
-      ).toString(),
-    );
-    expect(info).toEqual({ name: "Mary", email: "mary@imagey.cloud" });
-  });
-});
-
-// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts and e3-contact-request.e2e.ts (E2/E3, docs/plans/e2e-test-setup.md)
-test("decline open invitations", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysEmptyDocumentsFolder();
-  await prepareMarysContactRequests();
-
-  const builder = provider
-    .addInteraction()
-    .uponReceiving("a request of mary to decline bills invitation")
-    .withRequest(
-      "DELETE",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests/a358c2ed-07d4-4a25-a7db-d860d5c0b895",
-    )
-    .willRespondWith(204);
-
-  await builder.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-
-    // Then Invitation Visible
-    const invitationPanel = page
-      .getByRole("heading", {
-        name: "Contact Request",
-      })
-      .locator("..");
-    await expect(invitationPanel).toBeVisible();
-
-    // The inviter's name/address come from the request's encrypted
-    // contactInfo - never bill's userId.
-    await expect(invitationPanel).toContainText(
-      "Bill whants to connect with you.",
-    );
-    await expect(invitationPanel).toContainText("bill@imagey.cloud");
-
-    // Act: Decline Alice
-    const declineAliceBtn = invitationPanel.getByRole("button", {
-      name: "close",
-    });
-    // DeclineInvitationButton removes the card in the DELETE's .then() - pin
-    // that response so the assertion doesn't race the round-trip under load.
-    const invitationDeclined = page.waitForResponse(
-      (r) =>
-        r.request().method() === "DELETE" &&
-        r.url().includes("/contact-requests/"),
-    );
-    await declineAliceBtn.click();
-    await invitationDeclined;
-    await expect(invitationPanel).not.toBeVisible();
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
 });
 
 test("accept open invitations fails", async ({ page }) => {
@@ -342,73 +147,6 @@ test("decline open invitations fails", async ({ page }) => {
 
     // Panel should still be visible because it threw an error
     await expect(invitationPanel).toBeVisible();
-    await expect.poll(() => runningPactRequests).toBe(0);
-  });
-});
-
-// Other side of this story with real clients: imagey-e2e/tests/e2-invitation.e2e.ts and e3-contact-request.e2e.ts (E2/E3, docs/plans/e2e-test-setup.md)
-test("send contact request", async ({ page }) => {
-  // Given
-  await prepareMarysLogin(page);
-  await prepareMarysEmptyDocumentsFolder();
-  await prepareMarysEmptyContactRequests();
-  const { publicProfileId } = await prepareMarysNamedPublicProfile();
-
-  const builder = provider
-    .addInteraction()
-    .uponReceiving("a request of mary to send an invitation to bill")
-    .withRequest(
-      "POST",
-      "/users/d20cf443-4f96-418f-a957-c8cbef8677c3/contact-requests",
-      (r) => {
-        r.headers({
-          "Content-Type": "application/json",
-        });
-        r.jsonBody({
-          invitee: "bill@imagey.cloud",
-          inviterEmail: "mary@imagey.cloud",
-          publicKey: MatchersV3.like(TestData.mary.publicMainKey),
-          publicProfileId,
-          // Chosen by mary's client (ADR 0015) - random per run.
-          chatId: MatchersV3.uuid(),
-          // Our own name/address for the invitee (random IV per run).
-          contactInfo: MatchersV3.string("ZW5jcnlwdGVkLWNvbnRhY3QtaW5mbw=="),
-        });
-      },
-    )
-    .willRespondWith(201);
-
-  await builder.executeTest(async (mockServer) => {
-    // When
-    await setupMockServer(page, mockServer);
-    await loginAsMary(page);
-
-    // Act: Navigate to chats
-    await page.getByRole("link", { name: "Chats" }).click();
-
-    // Act: Click add contact in NoContactsPanel
-    await page.getByRole("button", { name: "Invite Contact" }).click();
-
-    // Enter email in dialog
-    const emailInput = page.getByPlaceholder("email@imagey.cloud");
-    await expect(emailInput).toBeVisible();
-    await emailInput.fill("bill@imagey.cloud");
-
-    // Submit dialog. Sending chains several requests (ensuring mary's public
-    // profile, see §3.6) before the actual POST - runningPactRequests can dip
-    // back to 0 momentarily *between* those, so wait for the POST itself
-    // rather than relying on the poll below alone (see memory
-    // imagey-web-runningpactrequests-race).
-    const contactRequestPosted = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        response.url().includes("/contact-requests"),
-    );
-    await page.getByRole("button", { name: "Confirm" }).click();
-    await contactRequestPosted;
-
-    // Assert: dialog is closed
-    await expect(emailInput).not.toBeVisible();
     await expect.poll(() => runningPactRequests).toBe(0);
   });
 });

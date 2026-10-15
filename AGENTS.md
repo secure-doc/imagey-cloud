@@ -59,3 +59,18 @@ requests, Playwright against a live backend):
 - Clean up afterwards with `docker compose down`.
 - See the [Local Testing section in the README](README.md#local-testing-and-registration)
   for how to test registration and read the local Greenmail emails.
+
+## Frontend Coverage Gates
+
+- Both suites measure with Istanbul (instrumented dev server for Pact, instrumented
+  bundle for E2E). The thresholds and the exclude lists live in
+  `imagey-web/coverage.config.mjs`.
+- **Contract gate** (`mvn verify` in `imagey-web`): Pact suite only, without
+  `contractExcluded`. **Combined gate** (`npm run test:coverage:combined` in
+  `imagey-web`, in `mvn verify` of `imagey-e2e`, in CI the PR-only job
+  `coverage`): Pact + E2E, only `alwaysExcluded` left out.
+- A file belongs on `contractExcluded` only if the Pact suite cannot cover it (several
+  users or devices) and an E2E test does. Close gaps with E2E tests, not excludes.
+- A build without `-DskipE2E` also builds the instrumented bundle
+  (`-DskipCoverageBundle=false`); `-DskipE2E` skips the combined gate,
+  `-DskipCombinedCoverage` skips only the gate.
