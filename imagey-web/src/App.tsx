@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import "./translation/i18n";
+import { useTranslation } from "react-i18next";
 import "beercss";
 import "material-dynamic-colors";
 import AuthenticationComponent from "./authentication/AuthenticationComponent";
@@ -71,6 +72,8 @@ function App() {
   const [email, setEmail] = useState<Email>();
   const [keyPairs, setKeyPairs] = useState<JsonWebKeyPairs>();
   const [settings, setSettings] = useState<SettingsType | undefined>();
+  const [settingsLoadFailed, setSettingsLoadFailed] = useState(false);
+  const { t } = useTranslation();
   const [folders, setFolders] = useState<Record<string, FolderInfo>>({});
 
   const [details, setDetails] = useState<Record<string, DetailInfo>>({});
@@ -136,16 +139,20 @@ function App() {
   }, [user, keyPairs]);
 
   useEffect(() => {
-    if (user && keyPairs && !settings) {
+    if (user && keyPairs && !settings && !settingsLoadFailed) {
       documentService
         .getSettings(
           user,
           keyPairs.mainKeyPair.publicKey,
           keyPairs.mainKeyPair.privateKey,
         )
-        .then((s) => setSettings(s));
+        .then((s) => setSettings(s))
+        .catch((e) => {
+          console.error("Failed to load settings", e);
+          setSettingsLoadFailed(true);
+        });
     }
-  }, [user, keyPairs, settings]);
+  }, [user, keyPairs, settings, settingsLoadFailed]);
 
   // The landing page of an emailed invitation needs no session (ADR 0013 A11).
   if (window.location.pathname === "/join") {
@@ -161,6 +168,19 @@ function App() {
           setKeyPairs(keyPairs);
         }}
       />
+    );
+  }
+
+  if (settingsLoadFailed) {
+    return (
+      <dialog className="surface-bright" open>
+        <p>{t("Could not load your settings.")}</p>
+        <nav className="right-align">
+          <button onClick={() => setSettingsLoadFailed(false)}>
+            {t("Retry")}
+          </button>
+        </nav>
+      </dialog>
     );
   }
 
