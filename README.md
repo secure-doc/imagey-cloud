@@ -12,9 +12,6 @@ To test the application locally and complete the registration process, follow th
 6. Replace the domain part of the extracted link (`https://imagey.cloud`) with your local frontend address (`http://localhost:5173` or the respective port).
 7. Open the modified link in your browser to complete the registration by setting a password. You will then be logged in and can access features such as the user profile.
 
-> **Note:** The test data (key files) changed its derivation labels. If you started `docker compose up`
-> before, run `docker compose down -v` once so the old `data` volume is discarded.
-
 ## E2E Tests
 
 The `imagey-e2e` module tests flows with several users or devices against the real backend

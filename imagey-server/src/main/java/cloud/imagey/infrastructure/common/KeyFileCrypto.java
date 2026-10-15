@@ -65,8 +65,8 @@ public class KeyFileCrypto {
 
     // HKDF-Expand, single block: the configured secret is required to be >= 256 bits of entropy, so
     // it is used directly as the PRK. The trailing 0x01 is the HKDF block counter.
-    private static final byte[] NAME_INFO = infoBlock("keyfile-name/v1");
-    private static final byte[] WITNESS_INFO = infoBlock("keyfile-witness/v1");
+    private static final byte[] NAME_INFO = infoBlock("imagey/keyfile-name/v1");
+    private static final byte[] WITNESS_INFO = infoBlock("imagey/keyfile-witness/v1");
 
     private final SecureRandom random = new SecureRandom();
 
