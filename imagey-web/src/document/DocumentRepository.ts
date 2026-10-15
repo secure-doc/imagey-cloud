@@ -217,6 +217,34 @@ export function createDocumentRepository(api: ApiClient) {
       return { content, etag: response.headers.get("ETag") };
     },
 
+    // Gives `grantee` - somebody the folder is shared with - the right to contribute to it and
+    // everything below it (owner only); idempotent.
+    allowContributions: async (
+      userId: string,
+      documentId: string,
+      grantee: string,
+    ): Promise<void> => {
+      const response = await api.fetch(
+        `/users/${userId}/documents/${documentId}/contributions/${grantee}`,
+        { method: "PUT" },
+      );
+      return resolve(response, () => Promise.resolve());
+    },
+
+    // Takes the right away again for new contributions (owner only); idempotent, also if it was
+    // never given.
+    denyContributions: async (
+      userId: string,
+      documentId: string,
+      grantee: string,
+    ): Promise<void> => {
+      const response = await api.fetch(
+        `/users/${userId}/documents/${documentId}/contributions/${grantee}`,
+        { method: "DELETE" },
+      );
+      return resolve(response, () => Promise.resolve());
+    },
+
     storeSharedKey: async (
       userId: string,
       documentId: string,

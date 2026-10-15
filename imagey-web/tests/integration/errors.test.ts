@@ -673,6 +673,7 @@ test.describe("ContactService error paths", () => {
           key: chatsKey as JsonWebKey,
           revision: '"v1"',
           contacts: [alice],
+          sharedFolders: [],
         };
         return [
           await window.contactService.updateContactProfileSnapshot(

@@ -8,6 +8,7 @@ import { contactService } from "./contact/ContactService";
 import { groupService } from "./contact/GroupService";
 import { deviceService } from "./device/DeviceService";
 import { documentService } from "./document/DocumentService";
+import { folderShareService } from "./folder/FolderShareService";
 import { cryptoService } from "./authentication/CryptoService";
 import { publicProfileService } from "./profile/publicProfileService";
 import { handlePush } from "./notification/handlePush";
@@ -37,6 +38,7 @@ declare global {
     groupService: typeof groupService;
     deviceService: typeof deviceService;
     documentService: typeof documentService;
+    folderShareService: typeof folderShareService;
     cryptoService: typeof cryptoService;
     publicProfileService: typeof publicProfileService;
     handlePush: typeof handlePush;
@@ -71,6 +73,7 @@ if (import.meta.env.DEV) {
   window.groupService = groupService;
   window.deviceService = deviceService;
   window.documentService = documentService;
+  window.folderShareService = folderShareService;
   window.cryptoService = cryptoService;
   window.publicProfileService = publicProfileService;
   window.handlePush = handlePush;

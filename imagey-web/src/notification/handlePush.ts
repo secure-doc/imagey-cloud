@@ -99,6 +99,9 @@ function previewText(
   if (content.type === "shared-document") {
     return t("Shared a document");
   }
+  if (content.type === "shared-folder") {
+    return t("Shared the folder {{name}}", { name: content.name });
+  }
   if (content.type === "group-invitation") {
     return t("Invites you to {{name}}", { name: content.name });
   }

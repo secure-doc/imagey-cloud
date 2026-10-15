@@ -4,6 +4,7 @@ import { useAuthentication } from "../contexts/AuthenticationContext";
 import Document from "../document/Document";
 import { FolderMetadata } from "../document/DocumentMetadata";
 import { useAccessPath, useKey } from "../contexts/FolderContext";
+import { useContributionDenied } from "../hooks/useContributionDenied";
 
 export default function UploadButton({
   className,
@@ -32,6 +33,8 @@ export default function UploadButton({
   // direct-grant scan needs no header.
   const accessPath = useAccessPath(folder.documentId, folder.owner);
 
+  const denied = useContributionDenied(folder.documentId);
+
   const handleUpload = async (files: File[]) => {
     if (!user || !folderKey) return;
 
@@ -50,6 +53,10 @@ export default function UploadButton({
             onUploadComplete(result);
           }
         }
+      }
+    } catch (e) {
+      if (!denied.handle(e)) {
+        throw e;
       }
     } finally {
       setIsUploading(false);

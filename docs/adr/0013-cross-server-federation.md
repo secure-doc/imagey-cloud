@@ -889,3 +889,10 @@ key URL or key fetch above refers to this path.
 - The local invitation flow changes shape (A1): one more redirect and one
   more request. No stored data changes.
 
+
+## Amendment (2026-10-15, folder sharing)
+
+Reading a folder of a contact on another server needs no new server code (the
+guest session and the Access-Path of A4/A13 suffice, ADR 0022). Contributions
+from a guest (F10c) build on ADR 0022 and the `contributions` marker of the ADR
+0004 amendment.

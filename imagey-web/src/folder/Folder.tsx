@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { documentService, StoreResult } from "../document/DocumentService";
+import { servicesFor } from "../api/servicesFor";
+import ShareFolderDialog from "../components/ShareFolderDialog";
+import { ShareFolderResult } from "./FolderShareService";
 import { useUser } from "../contexts/AuthenticationContext";
 import { useFolderIcons } from "./hooks";
 import { useTranslation } from "react-i18next";
@@ -8,6 +11,7 @@ import { useContext } from "react";
 import {
   FolderContext,
   useAccessPath,
+  useChildAccessPath,
   useKey,
   useParentFolderId,
 } from "../contexts/FolderContext";
@@ -42,11 +46,29 @@ export default function Folder({ id }: { id: string }) {
   const parentId = useParentFolderId(id);
   const parentKey = useKey(parentId);
   const key = useKey(id);
-  const { registerParentFolder, registerKey } = useContext(FolderContext);
+  const { folders, registerParentFolder, registerKey, registerFolder } =
+    useContext(FolderContext);
+  // Set for a folder of another user's tree (shared with us, or below such a folder): it is
+  // read with the key and owner told by the folder it was reached from, not through our own
+  // key chain.
+  const shared = folders[id]?.owner;
+  // Only a shared folder's key is told by the registry; an own folder registers the key it
+  // loaded itself, which must not trigger a reload.
+  const sharedKey = shared ? folders[id]?.key : undefined;
+  const sharedOrigin = folders[id]?.origin;
+  const sharedContributions = folders[id]?.contributions ?? false;
   const { registerDetail } = useContext(DetailContext);
   const navigate = useNavigate();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const accessPath = useAccessPath(id, folder?.owner ?? "");
+  const [showShare, setShowShare] = useState(false);
+  // The entries of the folder are read with their own Access-Path (the child, then the folder).
+  const childAccessPath = useChildAccessPath(id, folder?.owner ?? "");
+  const accessPathFor = useCallback(
+    (entry: FolderEntry) => childAccessPath(entry.documentId, entry.owner),
+    [childAccessPath],
+  );
+  // Known before the folder is loaded, as it is needed to load it.
+  const loadAccessPath = useAccessPath(id, shared ?? "");
 
   // A child (document or sub-folder) was just added to this folder. Reflect
   // it in the in-memory `folder` object: its `documents` array and
@@ -74,6 +96,7 @@ export default function Folder({ id }: { id: string }) {
       if (!folder || !entry.mediumImageId) {
         return;
       }
+      const accessPath = accessPathFor(entry);
       let documentKey: JsonWebKey;
       try {
         documentKey = await documentService.loadFolderEntryKey(
@@ -88,21 +111,55 @@ export default function Folder({ id }: { id: string }) {
         kind: "image",
         documentId: entry.documentId,
         name: entry.name,
-        owner: folder.owner,
+        owner: entry.owner ?? folder.owner,
         documentKey,
         mediumImageId: entry.mediumImageId,
         mimeType: entry.mimeType,
         accessPath,
+        origin: folder.origin,
       });
       navigate(`/images/${entry.documentId}?folder=${id}`);
     },
-    [folder, accessPath, registerDetail, navigate, id],
+    [folder, accessPathFor, registerDetail, navigate, id],
   );
 
   const { open: openFile, element: openFileElement } = useOpenDocument();
   const handleFileClick = useCallback(
     async (entry: FolderEntry) => {
       if (!folder) {
+        return;
+      }
+      const accessPath = accessPathFor(entry);
+      if (isPlayableMedia(entry.mimeType) && shared) {
+        // A shared folder is not part of our own tree, which the media page would resolve the
+        // document in after a reload - so everything it needs is registered up front.
+        const documentKey = await documentService.loadFolderEntryKey(
+          entry,
+          folder.key,
+        );
+        const doc = await servicesFor(
+          folder.origin,
+        ).documents.loadDocumentWithKey(
+          entry.owner ?? folder.owner,
+          entry.documentId,
+          documentKey,
+          accessPath,
+        );
+        if (doc.type === "file") {
+          registerDetail({
+            kind: "media",
+            documentId: doc.documentId,
+            name: doc.name,
+            owner: doc.owner,
+            documentKey,
+            mimeType: doc.mimeType,
+            contentId: doc.contentId,
+            size: doc.size,
+            accessPath,
+            origin: folder.origin,
+          });
+          navigate(`/media/${entry.documentId}?folder=${id}`);
+        }
         return;
       }
       if (isPlayableMedia(entry.mimeType)) {
@@ -123,8 +180,10 @@ export default function Folder({ id }: { id: string }) {
           entry,
           folder.key,
         );
-        const doc = await documentService.loadDocumentWithKey(
-          folder.owner,
+        const doc = await servicesFor(
+          folder.origin,
+        ).documents.loadDocumentWithKey(
+          entry.owner ?? folder.owner,
           entry.documentId,
           documentKey,
           accessPath,
@@ -132,7 +191,7 @@ export default function Folder({ id }: { id: string }) {
         if (doc.type !== "file") {
           throw new Error(`Expected a file document, got ${doc.type}`);
         }
-        return documentService.loadFileContent(
+        return servicesFor(folder.origin).documents.loadFileContent(
           doc.owner,
           doc.documentId,
           doc.contentId,
@@ -141,12 +200,65 @@ export default function Folder({ id }: { id: string }) {
         );
       });
     },
-    [folder, id, accessPath, openFile, navigate],
+    [folder, id, accessPathFor, openFile, navigate, shared, registerDetail],
   );
 
-  useFolderIcons(id, folder, handleCreateFolder, handleChildAdded);
+  // The owner's record of a share (and the new revision) after a successful share.
+  const handleShared = useCallback((result: ShareFolderResult) => {
+    setFolder((prev) =>
+      prev
+        ? {
+            ...prev,
+            sharedWith: result.sharedWith,
+            revision: result.revision ?? prev.revision,
+          }
+        : prev,
+    );
+  }, []);
+  const handleShareFolder = useCallback(() => setShowShare(true), []);
+
+  // Our own folders always take contributions; so does the folder of somebody else in our tree
+  // only as long as its owner says so.
+  const canAdd = !shared || sharedContributions;
+  const contributionsDenied = !!folders[id]?.contributionsDenied;
+  useEffect(() => {
+    if (contributionsDenied) {
+      const timer = setTimeout(
+        () => registerFolder(id, { contributionsDenied: false }),
+        6000,
+      );
+      return () => clearTimeout(timer);
+    }
+  }, [contributionsDenied, id, registerFolder]);
+  const deniedElement = contributionsDenied ? (
+    <div className="snackbar error active">
+      {t("You can no longer add anything to this folder.")}
+    </div>
+  ) : null;
+  useFolderIcons(id, folder, handleCreateFolder, handleChildAdded, {
+    onShareFolder: handleShareFolder,
+    canAdd,
+    shared: !!shared,
+  });
 
   useEffect(() => {
+    if (shared) {
+      if (!sharedKey) {
+        return;
+      }
+      servicesFor(sharedOrigin)
+        .documents.loadDocumentWithKey(shared, id, sharedKey, loadAccessPath)
+        .then((document) => {
+          if (document.type !== "folder") {
+            console.error(`Expected a folder document, got ${document.type}`);
+            setLoadError(true);
+            return;
+          }
+          setFolder(document);
+        })
+        .catch(() => setLoadError(true));
+      return;
+    }
     if (!parentKey) {
       return;
     }
@@ -168,7 +280,17 @@ export default function Folder({ id }: { id: string }) {
         // error and let the user retry instead.
         setLoadError(true);
       });
-  }, [user, id, parentId, parentKey, registerKey]);
+  }, [
+    user,
+    id,
+    parentId,
+    parentKey,
+    registerKey,
+    shared,
+    sharedKey,
+    sharedOrigin,
+    loadAccessPath,
+  ]);
 
   if (loadError) {
     return (
@@ -184,15 +306,31 @@ export default function Folder({ id }: { id: string }) {
       </main>
     );
   }
+  if (folder.documents.length === 0 && !canAdd) {
+    return (
+      <main>
+        {deniedElement}
+        <div className="column scroll">{t("This folder is empty.")}</div>
+      </main>
+    );
+  }
   if (folder.documents.length === 0) {
     return (
       <main>
+        {deniedElement}
         {showCreateFolder && (
           <CreateFolderDialog
             parentFolder={folder}
             parentFolderKey={key}
             onClose={() => setShowCreateFolder(false)}
             onCreated={handleChildAdded}
+          />
+        )}
+        {showShare && (
+          <ShareFolderDialog
+            folder={folder}
+            onClose={() => setShowShare(false)}
+            onShared={handleShared}
           />
         )}
         <div className="column scroll">
@@ -224,6 +362,7 @@ export default function Folder({ id }: { id: string }) {
   }
   return (
     <main>
+      {deniedElement}
       {showCreateFolder && (
         <CreateFolderDialog
           parentFolder={folder}
@@ -232,17 +371,39 @@ export default function Folder({ id }: { id: string }) {
           onCreated={handleChildAdded}
         />
       )}
+      {showShare && (
+        <ShareFolderDialog
+          folder={folder}
+          onClose={() => setShowShare(false)}
+          onShared={handleShared}
+        />
+      )}
       {openFileElement}
       <div className="column scroll">
         <ImageList
           entries={folder.documents}
           folderOwner={folder.owner}
+          folderOrigin={folder.origin}
           folderKey={folder.key}
-          accessPath={accessPath}
+          accessPathFor={accessPathFor}
           onImageClick={handleImageClick}
           onFileClick={handleFileClick}
-          onFolderClick={(entry) => {
+          onFolderClick={async (entry) => {
             registerParentFolder(entry.documentId, id);
+            const childOwner = entry.owner ?? folder.owner;
+            if (shared || childOwner !== user) {
+              // The key of a folder of another tree (shared with us, or contributed to ours) is
+              // unwrapped from its entry here, it cannot be derived from our own key chain.
+              registerFolder(entry.documentId, {
+                key: await documentService.loadFolderEntryKey(
+                  entry,
+                  folder.key,
+                ),
+                owner: childOwner,
+                origin: folder.origin,
+                contributions: shared ? sharedContributions : true,
+              });
+            }
             navigate("/documents/" + entry.documentId);
           }}
         />

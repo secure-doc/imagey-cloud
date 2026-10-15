@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import "./translation/i18n";
 import { useTranslation } from "react-i18next";
 import "beercss";
 import "material-dynamic-colors";
 import AuthenticationComponent from "./authentication/AuthenticationComponent";
 import { ActionBarContextProvider } from "./contexts/ActionBarContextProvider";
-import { BrowserRouter, Route, Routes, Outlet } from "react-router";
+import { BrowserRouter, NavLink, Route, Routes, Outlet } from "react-router";
 import Navigation from "./components/Navigation";
 import Image from "./pages/Image";
 import Media from "./pages/Media";
@@ -39,11 +39,57 @@ import { documentService } from "./document/DocumentService";
 import Folder from "./folder/Folder";
 import { FolderContext, FolderInfo } from "./contexts/FolderContext";
 import DocumentsPage from "./pages/DocumentsPage";
+import SharedWithMe from "./pages/SharedWithMe";
+import {
+  useRegisterSharedFolder,
+  useSharedFolders,
+} from "./hooks/useSharedFolders";
 import { DetailContext, DetailInfo } from "./contexts/DetailContext";
 
 function DocumentRoute() {
+  const { t } = useTranslation();
   const { documentId } = useParams();
-  return documentId ? <Folder id={documentId} /> : null;
+  const { folders } = useContext(FolderContext);
+  const registerShared = useRegisterSharedFolder();
+  // Nothing is known about this folder yet (a reload, or a link): it may be one shared with us,
+  // which is told by the "chats" document. A folder of our own tree is found by its parents.
+  const unknown =
+    !!documentId &&
+    !folders[documentId]?.parentId &&
+    !folders[documentId]?.owner;
+  const { folders: sharedFolders, reload } = useSharedFolders(unknown);
+  const shared = sharedFolders?.find((f) => f.documentId === documentId);
+  useEffect(() => {
+    if (shared) {
+      registerShared(shared);
+    }
+  }, [shared, registerShared]);
+  if (!documentId || (unknown && (sharedFolders === undefined || shared))) {
+    return null;
+  }
+  if (unknown && sharedFolders === null) {
+    // Whether it is shared with us is not known: say so instead of claiming it is not.
+    return (
+      <main>
+        <div className="column scroll">
+          <p>{t("Could not load your folders.")}</p>
+          <button onClick={reload}>{t("Retry")}</button>
+        </div>
+      </main>
+    );
+  }
+  if (unknown) {
+    // Its key and place cannot be derived: it has to be opened from the folder it is in.
+    return (
+      <main>
+        <div className="column scroll">
+          <p>{t("This folder cannot be opened directly.")}</p>
+          <NavLink to="/documents">{t("Open your folders")}</NavLink>
+        </div>
+      </main>
+    );
+  }
+  return <Folder id={documentId} />;
 }
 
 function ChatRoute() {
@@ -88,7 +134,7 @@ function App() {
       if (folder.parentId === parentId) {
         return prev;
       }
-      return { ...prev, [id]: { parentId, key: folder.key } };
+      return { ...prev, [id]: { ...folder, parentId } };
     });
   }, []);
 
@@ -98,9 +144,16 @@ function App() {
       if (folder.key === key) {
         return prev;
       }
-      return { ...prev, [id]: { parentId: folder.parentId, key } };
+      return { ...prev, [id]: { ...folder, key } };
     });
   }, []);
+
+  const registerFolder = useCallback(
+    (id: string, info: Partial<FolderInfo>) => {
+      setFolders((prev) => ({ ...prev, [id]: { ...prev[id], ...info } }));
+    },
+    [],
+  );
 
   // The settings document is the parent of the documents root folder, so the
   // root folder key can be derived on every page, not just the documents page.
@@ -207,6 +260,7 @@ function App() {
             folders,
             registerParentFolder,
             registerKey,
+            registerFolder,
           }}
         >
           <DetailContext.Provider value={{ details, registerDetail }}>
@@ -226,6 +280,7 @@ function App() {
                       <Route index element={<DocumentsPage />} />
                       <Route path=":documentId" element={<DocumentRoute />} />
                     </Route>
+                    <Route path="shared" element={<SharedWithMe />} />
                     <Route
                       path="chats"
                       element={<Chats id={settings.chats} />}

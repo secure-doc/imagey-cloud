@@ -27,6 +27,27 @@ export interface ChatListMetadata extends BaseMetadata {
   // Groups the user owns or has joined (ADR 0019); optional so existing
   // "chats" Documents stay valid without a migration (ADR 0008).
   groups?: GroupEntry[];
+  // Folders other users shared with the user, taken over from a "shared-folder"
+  // chat message; optional for the same reason as `groups`.
+  sharedFolders?: SharedFolderEntry[];
+}
+
+// A folder another user shared with the user (docs/plans/share-folders.md
+// §2.3), listed under "Shared with me".
+export interface SharedFolderEntry {
+  documentId: string;
+  // The folder's owner, as a UserId on the folder's server.
+  owner: string;
+  name: string;
+  // Cached like GroupEntry.groupKey: opening the folder needs no detour
+  // through the chat. Protected by the encryption of the "chats" document.
+  folderKey: JsonWebKey;
+  // As told by the owner - display only, the server decides on every upload.
+  contributions: boolean;
+  // Where the folder lives, if not on the own server, and the own UserId
+  // there - same conventions as GroupEntry.
+  chatOrigin?: string;
+  self?: { userId: string; address?: string };
 }
 
 export interface ChatMetadata extends BaseMetadata {
@@ -76,6 +97,9 @@ export interface GroupEntry {
 export interface FolderMetadata extends BaseMetadata {
   type: "folder";
   documents: FolderEntry[];
+  // Contacts the owner shared this folder with, kept here (encrypted) so the
+  // owner's other devices know about it too.
+  sharedWith?: { contactUserId: string; contributions: boolean }[];
 }
 
 export interface FileMetadata extends BaseMetadata {
@@ -107,6 +131,9 @@ export interface FolderEntry {
   type: "folder" | "file" | "image";
   mimeType?: string;
   mediumImageId?: string;
+  // The owner of the child, if it is not the owner of the folder: a document
+  // contributed by a member lives in the contributor's tree.
+  owner?: string;
   sharedKey: { sharedKey: string };
 }
 

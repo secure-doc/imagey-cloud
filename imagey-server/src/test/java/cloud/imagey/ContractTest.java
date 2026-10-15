@@ -35,6 +35,7 @@ import static org.apache.commons.io.FileUtils.writeStringToFile;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -80,6 +81,7 @@ public class ContractTest {
     private static final String MARY = UserFactory.MARY_ID.id();
     private static final String JOE = UserFactory.JOE_ID.id();
     private static final String ALICE = UserFactory.ALICE_ID.id();
+    private static final String LAURA = UserFactory.LAURA_ID.id();
     // mary's {"name":"Mary","email":"mary@imagey.cloud"}, encrypted under the key of her chat with alice
     // ("chat-mary", ADR 0015/0016).
     private static final String MARYS_CONTACT_INFO
@@ -740,6 +742,50 @@ public class ContractTest {
             "{\"id\":\"" + messageId(902) + "\",\"sender\":\"" + ALICE + "\",\"channel\":\"" + MARY + ":" + ALICE + "\","
             + "\"content\":\"AAAA\"}",
             UTF_8);
+    }
+
+    // docs/plans/share-folders.md: alice shared folders with mary - her tree holds the folders and,
+    // for each, the direct-grant key entry (issuer == kid == mary) mary reads them through. The
+    // content is opaque to the server; mary may read, not contribute (no contributions marker).
+    // Mary shared her folder (the one of the "mary has a folder" pact fixtures) with laura: the grant
+    // laura's right to contribute is bound to.
+    @State("Mary has shared her folder with laura")
+    void maryHasSharedHerFolderWithLaura() throws IOException {
+        user = getMary();
+        writeKey(MARY, "90838b2c-cea8-4d0c-85eb-9937cda788fc", LAURA, LAURA, "d3JhcHBlZC1mb2xkZXIta2V5");
+    }
+
+    @State("Alice has shared a folder with mary")
+    void aliceHasSharedAFolderWithMary() throws IOException {
+        user = getMary();
+        for (String folderId : List.of("5a1c0000-0000-4000-8000-000000000001", "5a1c0000-0000-4000-8000-000000000003")) {
+            File folder = new File(getAlicesData(), "documents/" + folderId);
+            folder.mkdirs();
+            // Binary like real encrypted content: the verifier detects the content type from the bytes.
+            byte[] encrypted = java.util.Base64.getDecoder().decode("9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs"
+                + "+ZVQCgQHdU+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U"
+                + "+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX");
+            java.nio.file.Files.write(new File(folder, "metadata.enc").toPath(), encrypted);
+            writeKey(ALICE, folderId, MARY, MARY, "d3JhcHBlZC1mb2xkZXIta2V5");
+        }
+    }
+
+    // Phase 2 of docs/plans/share-folders.md: alice shared a folder with mary (direct grant) and gave
+    // her the right to contribute, so mary may add a document to it.
+    @State("Alice has opened a folder for contributions")
+    void aliceHasOpenedAFolderForContributions() throws IOException {
+        user = getMary();
+        File folder = new File(getAlicesData(), "documents/alices-open-folder");
+        folder.mkdirs();
+        byte[] encrypted = java.util.Base64.getDecoder().decode("9rqYm7w6z5rfLM7bvp9qU1uFNQfLzcO0OPAz39BJFvLcx+1KdPuRs"
+            + "+ZVQCgQHdU+B6YbHY4lHAlmLGLsx6xm9t7psn+LXqGfuNAZKhQUDG4XxWHFrMg1eB5JyKeM8GQYzysFgWo7gz1U"
+            + "+Ly+2D6XSxCaFmmuBQ29zD9U0P8TO38KpXWX");
+        java.nio.file.Files.write(new File(folder, "metadata.enc").toPath(), encrypted);
+        File rights = new File(folder, "contributions");
+        rights.mkdirs();
+        java.nio.file.Files.write(new File(rights, keyFileCrypto.fileName("alices-open-folder", MARY)).toPath(),
+            new byte[0]);
+        writeKey(ALICE, "alices-open-folder", MARY, MARY, "d3JhcHBlZC1mb2xkZXIta2V5");
     }
 
     @State("Alice has received a message from Mary with shared doc")

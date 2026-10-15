@@ -23,6 +23,7 @@ import jakarta.validation.ValidationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cloud.imagey.domain.document.AccessPath.Hop;
 import cloud.imagey.domain.encryption.EncryptedSharedKey;
 import cloud.imagey.domain.user.User;
 import cloud.imagey.infrastructure.PreconditionFailedException;
@@ -48,7 +49,8 @@ public class DocumentService {
      * <p>The upload is rejected unless
      * <ul>
      *   <li>the target folder already exists in {@code folderOwner}'s tree,</li>
-     *   <li>{@code caller} owns that folder or is a member of it,</li>
+     *   <li>{@code caller} owns that folder, or the owner gave {@code caller} the right to contribute to the
+     *       shared folder the caller's Access-Path ends at,</li>
      *   <li>the shared key is issued by {@code folderOwner} (it wraps the document key under the
      *       folder key), and</li>
      *   <li>the shared key's {@code kid} is the folder id.</li>
@@ -104,6 +106,8 @@ public class DocumentService {
         User folderOwner = upload.folderOwner();
         DocumentId folderId = upload.folderId();
         EncryptedSharedKey sharedKey = upload.sharedKey();
+        // Checked before the folder is loaded: a stranger must not learn whether a document exists.
+        requireFolderAccess(folderOwner, caller, folderId, accessPath);
         EncryptedMetadata folder = documentRepository.loadEncryptedMetadataWithETag(folderOwner, folderId)
             .orElseThrow(() -> new ResourceNotFoundException("Folder " + folderId.id() + " does not exist."));
         if (documentRepository.documentExists(caller, upload.documentId())) {
@@ -112,7 +116,6 @@ public class DocumentService {
             // its metadata silently overwritten before create() 409s on the write-once key file.
             throw new ResourceConflictException("Document " + upload.documentId().id() + " already exists.");
         }
-        requireFolderAccess(folderOwner, caller, folderId, accessPath);
         if (!folderOwner.equals(sharedKey.issuer())) {
             throw new ValidationException("The shared key issuer must be the folder owner.");
         }
@@ -136,9 +139,30 @@ public class DocumentService {
     }
 
     private void requireFolderAccess(User folderOwner, User caller, DocumentId folderId, AccessPath accessPath) {
-        if (!caller.equals(folderOwner)
-            && !documentRepository.verifyAccess(folderOwner, folderId, caller, accessPath)) {
-            throw new ResourceForbiddenException("The current user is not a member of folder " + folderId.id() + ".");
+        if (caller.equals(folderOwner)) {
+            return;
         }
+        // ADR 0004 amendment: membership grants reading, not writing. Writing needs the owner's
+        // explicit right for this very caller on a shared folder the caller's Access-Path passes -
+        // any of them, so a read-only share deeper down does not hide a right further up - and so
+        // covers everything below it. A folder of the caller's own tree on the path needs none: it
+        // is his. The caller's settings document is no such folder: its slot is the one a direct
+        // grant is filed under, which its owner can plant for anyone. The answer is the same for
+        // "not a member", "no right" and "does not exist".
+        boolean allowed = documentRepository.findTermini(folderOwner, folderId, caller, accessPath).stream()
+            .filter(terminus -> !terminus.isSettingsDocument())
+            .anyMatch(terminus -> mayContribute(terminus, caller));
+        if (!allowed) {
+            throw notAllowed(folderId);
+        }
+    }
+
+    private boolean mayContribute(Hop terminus, User caller) {
+        return terminus.owner().equals(caller)
+            || documentRepository.allowsContributions(terminus.owner(), terminus.doc(), caller);
+    }
+
+    private static ResourceForbiddenException notAllowed(DocumentId folderId) {
+        return new ResourceForbiddenException("Not allowed to add to " + folderId.id() + ".");
     }
 }

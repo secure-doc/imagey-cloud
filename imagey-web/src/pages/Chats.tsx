@@ -6,8 +6,12 @@ import ContactRequestDialog from "../contact/ContactRequestDialog";
 import DisplayNamePrompt from "../contact/DisplayNamePrompt";
 import { useAuthentication } from "../contexts/AuthenticationContext";
 import { contactRepository } from "../contact/ContactRepository";
-import { contactService } from "../contact/ContactService";
-import { ContactEntry, GroupEntry } from "../document/DocumentMetadata";
+import { contactService, loadChatsDocument } from "../contact/ContactService";
+import {
+  ContactEntry,
+  GroupEntry,
+  SharedFolderEntry,
+} from "../document/DocumentMetadata";
 import { ContactRequest } from "../contact/ContactRequest";
 import { contactDisplayName } from "../contact/contactDisplayName";
 import { useInvitationInfo } from "../hooks/useInvitationInfo";
@@ -15,7 +19,6 @@ import AcceptInvitationButton from "../invitation/AcceptInvitationButton";
 import DeclineInvitationButton from "../invitation/DeclineInvitationButton";
 import NoContactsPanel from "../activity/NoContactsPanel";
 import CreateGroupDialog from "../components/CreateGroupDialog";
-import { documentService } from "../document/DocumentService";
 import { publicProfileService } from "../profile/publicProfileService";
 import { useReloadableLoad } from "../hooks/useReloadableLoad";
 import { useSendContactRequest } from "../hooks/useSendContactRequest";
@@ -64,6 +67,7 @@ export function ChatsList({
   onLoaded?: (chatsDocument: {
     contacts: ContactEntry[];
     groups: GroupEntry[];
+    sharedFolders?: SharedFolderEntry[];
     key: JsonWebKey;
     name: string;
     revision: string;
@@ -84,7 +88,11 @@ export function ChatsList({
   // this list's older state.
   registerUpdate?: (
     update: (
-      list: { contacts: ContactEntry[]; groups: GroupEntry[] },
+      list: {
+        contacts: ContactEntry[];
+        groups: GroupEntry[];
+        sharedFolders?: SharedFolderEntry[];
+      },
       revision: string | null,
     ) => void,
   ) => void;
@@ -100,6 +108,7 @@ export function ChatsList({
   const [chatsDocument, setChatsDocument] = useState<{
     contacts: ContactEntry[];
     groups: GroupEntry[];
+    sharedFolders?: SharedFolderEntry[];
     key: JsonWebKey;
     name: string;
     revision: string;
@@ -149,22 +158,13 @@ export function ChatsList({
       .catch((e) => console.error("Failed to fetch contact requests", e));
 
     try {
-      const loaded = await documentService.loadDocument(
-        user,
-        id,
-        user,
-        settingsKey,
-      );
-      if (loaded.type !== "chatList") {
-        throw new Error(
-          `Expected the chats document to be a chatList, got ${loaded.type}`,
-        );
-      }
+      const loaded = await loadChatsDocument(user, id, settingsKey);
       onLoadError?.(false);
       rememberForeignAddresses(loaded.contacts, loaded.groups);
       setChatsDocument({
         contacts: loaded.contacts,
         groups: loaded.groups ?? [],
+        sharedFolders: loaded.sharedFolders ?? [],
         key: loaded.key,
         name: loaded.name,
         revision: loaded.revision,
@@ -216,6 +216,7 @@ export function ChatsList({
               ...prev,
               contacts: list.contacts,
               groups: list.groups,
+              sharedFolders: list.sharedFolders ?? prev.sharedFolders,
               revision: revision ?? prev.revision,
             }
           : prev,
@@ -392,6 +393,7 @@ export function ChatsList({
             revision: chatsDocument.revision,
             contacts: chatsDocument.contacts,
             groups: chatsDocument.groups,
+            sharedFolders: chatsDocument.sharedFolders,
           }}
           chatsId={id}
           onClose={() => setIsGroupDialogOpen(false)}
@@ -402,6 +404,7 @@ export function ChatsList({
               ...prev!,
               contacts: list.contacts,
               groups: list.groups,
+              sharedFolders: list.sharedFolders ?? prev!.sharedFolders,
               revision: revision ?? prev!.revision,
             }))
           }

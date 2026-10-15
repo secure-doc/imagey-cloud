@@ -18,8 +18,11 @@ package cloud.imagey.domain.document;
 
 import static java.util.Optional.empty;
 
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -115,6 +118,27 @@ public class DocumentRepository extends AbstractUserFileRepository {
     }
 
     /**
+     * Lets {@code grantee} add documents to the shared folder {@code documentId} - and, since an
+     * Access-Path proves the target lies below it, to everything below it (see {@link
+     * DocumentService#uploadDocument}). The right is the owner's decision per (folder, recipient):
+     * an empty plaintext object under the same hashed name as the recipient's key file, so it
+     * reveals no edge the key file does not reveal (ADR 0009) and changes neither {@code
+     * metadata.enc} nor its ETag. Idempotent.
+     */
+    public void allowContributions(User owner, DocumentId documentId, User grantee) {
+        put(contributionsMarker(owner, documentId, grantee), new byte[0]);
+    }
+
+    /** Takes the right away for <em>new</em> contributions; contributions already made stay. */
+    public void denyContributions(User owner, DocumentId documentId, User grantee) {
+        delete(contributionsMarker(owner, documentId, grantee));
+    }
+
+    public boolean allowsContributions(User owner, DocumentId documentId, User grantee) {
+        return exists(contributionsMarker(owner, documentId, grantee));
+    }
+
+    /**
      * The wrapped key for {@code (documentId, kid)} in {@code user}'s tree, located directly by its
      * hashed file name (ADR 0009). Only the ciphertext comes back - {@code issuer} / {@code kid} are
      * not stored.
@@ -159,7 +183,11 @@ public class DocumentRepository extends AbstractUserFileRepository {
      * chat key alike - so this needs no client input.
      */
     public boolean hasDirectGrant(User owner, DocumentId doc, User caller) {
-        return anyWitnessMatches(owner, doc, caller.id().id(), caller.id().id());
+        return hasDirectGrant(owner, doc, caller, new HashMap<>());
+    }
+
+    private boolean hasDirectGrant(User owner, DocumentId doc, User caller, Map<String, List<Witness>> cache) {
+        return anyWitnessMatches(owner, doc, caller.id().id(), caller.id().id(), cache);
     }
 
     /**
@@ -187,50 +215,92 @@ public class DocumentRepository extends AbstractUserFileRepository {
      * {@code isIssuerInKeyChain}'s "kid == issuer's own id" guard).
      */
     public boolean verifyAccess(User urlOwner, DocumentId urlDoc, User caller, AccessPath path) {
-        if (hasDirectGrant(urlOwner, urlDoc, caller)) {
-            return true;
+        return !walk(urlOwner, urlDoc, caller, path, true).isEmpty();
+    }
+
+    /**
+     * Every hop of the proof that terminates for {@code caller}, in chain order: the document itself
+     * for a direct grant, and each hop past the first that is a direct grant for {@code caller} or
+     * one {@code caller} owns. That is where the owner's decisions about {@code caller} sit - the
+     * shared folders {@code caller} holds a direct grant on, or folders of {@code caller}'s own tree.
+     * A shared folder deeper down must not hide the one above it, so the chain is followed to its
+     * end (each link is pinned by a stored witness, like for {@link #verifyAccess}).
+     */
+    public List<Hop> findTermini(User urlOwner, DocumentId urlDoc, User caller, AccessPath path) {
+        return walk(urlOwner, urlDoc, caller, path, false);
+    }
+
+    private List<Hop> walk(User urlOwner, DocumentId urlDoc, User caller, AccessPath path, boolean firstOnly) {
+        List<Hop> termini = new ArrayList<>();
+        // The key files of a folder are read once for the whole proof: every hop asks two questions
+        // of the same folder (linked to the previous hop? a direct grant for the caller?).
+        Map<String, List<Witness>> cache = new HashMap<>();
+        if (hasDirectGrant(urlOwner, urlDoc, caller, cache)) {
+            termini.add(new Hop(urlDoc, urlOwner, urlDoc));
         }
-        if (path == null || path.hops().isEmpty()) {
-            return false;
+        if (firstOnly && !termini.isEmpty()) {
+            return termini;
         }
-        List<Hop> hops = path.hops();
-        Hop first = hops.get(0);
-        if (!first.doc().equals(urlDoc) || !first.owner().equals(urlOwner)) {
-            return false;
+        if (path != null && startsAt(path, urlOwner, urlDoc)) {
+            followChain(path.hops(), caller, firstOnly, termini, cache);
         }
+        return termini;
+    }
+
+    private static boolean startsAt(AccessPath path, User urlOwner, DocumentId urlDoc) {
+        return !path.hops().isEmpty()
+            && path.hops().get(0).doc().equals(urlDoc)
+            && path.hops().get(0).owner().equals(urlOwner);
+    }
+
+    private void followChain(
+        List<Hop> hops, User caller, boolean firstOnly, List<Hop> termini, Map<String, List<Witness>> cache) {
         for (int i = 0; i < hops.size() - 1; i++) {
-            Hop current = hops.get(i);
             Hop next = hops.get(i + 1);
-            if (!isLinkedByWitness(current, next)) {
-                return false;
+            if (!isLinkedByWitness(hops.get(i), next, cache)) {
+                return;
             }
-            if (isTerminus(next, caller)) {
-                return true;
+            if (isTerminus(next, caller, cache)) {
+                termini.add(next);
+                if (firstOnly) {
+                    return;
+                }
             }
             if (isOwnSettingsDocument(next)) {
-                return false;
+                return;
+            }
+        }
+    }
+
+    private boolean isLinkedByWitness(Hop current, Hop next, Map<String, List<Witness>> cache) {
+        return current.wrappedBy().equals(next.doc())
+            && anyWitnessMatches(current.owner(), current.doc(), next.owner().id().id(), next.doc().id(), cache);
+    }
+
+    private boolean isTerminus(Hop hop, User caller, Map<String, List<Witness>> cache) {
+        if (isOwnSettingsDocument(hop)) {
+            return hop.owner().equals(caller);
+        }
+        return hop.owner().equals(caller) || hasDirectGrant(hop.owner(), hop.doc(), caller, cache);
+    }
+
+    private boolean isOwnSettingsDocument(Hop hop) {
+        return hop.isSettingsDocument();
+    }
+
+    private boolean anyWitnessMatches(
+        User owner, DocumentId doc, String issuerId, String kidId, Map<String, List<Witness>> cache) {
+        List<Witness> witnesses = cache.computeIfAbsent(owner.id().id() + "/" + doc.id(), k -> witnessesOf(owner, doc));
+        for (Witness witness: witnesses) {
+            if (keyFileCrypto.witnessMatches(witness.witness(), witness.salt(), issuerId, kidId)) {
+                return true;
             }
         }
         return false;
     }
 
-    private boolean isLinkedByWitness(Hop current, Hop next) {
-        return current.wrappedBy().equals(next.doc())
-            && anyWitnessMatches(current.owner(), current.doc(), next.owner().id().id(), next.doc().id());
-    }
-
-    private boolean isTerminus(Hop hop, User caller) {
-        if (isOwnSettingsDocument(hop)) {
-            return hop.owner().equals(caller);
-        }
-        return hop.owner().equals(caller) || hasDirectGrant(hop.owner(), hop.doc(), caller);
-    }
-
-    private boolean isOwnSettingsDocument(Hop hop) {
-        return hop.doc().id().equals(hop.owner().id().id());
-    }
-
-    private boolean anyWitnessMatches(User owner, DocumentId doc, String issuerId, String kidId) {
+    private List<Witness> witnessesOf(User owner, DocumentId doc) {
+        List<Witness> witnesses = new ArrayList<>();
         for (String key : list(keysFolder(owner, doc)).keys()) {
             if (!key.endsWith(KEY_FILE_SUFFIX)) {
                 continue;
@@ -239,18 +309,13 @@ public class DocumentRepository extends AbstractUserFileRepository {
             if (stored == null) {
                 continue;
             }
-            byte[] salt;
             try {
-                salt = Base64.getDecoder().decode(stored.salt());
+                witnesses.add(new Witness(Base64.getDecoder().decode(stored.salt()), stored.witness()));
             } catch (IllegalArgumentException e) {
                 LOG.warn("Ignoring key file with a non-base64 salt {}", key);
-                continue;
-            }
-            if (keyFileCrypto.witnessMatches(stored.witness(), salt, issuerId, kidId)) {
-                return true;
             }
         }
-        return false;
+        return witnesses;
     }
 
     private Optional<StoredKeyFile> readStoredKeyFile(String key) {
@@ -269,11 +334,20 @@ public class DocumentRepository extends AbstractUserFileRepository {
         return join(documentFolder(user, documentId), "keys");
     }
 
+    private String contributionsMarker(User owner, DocumentId documentId, User grantee) {
+        return join(documentFolder(owner, documentId), "contributions",
+            keyFileCrypto.fileName(documentId.id(), grantee.id().id()));
+    }
+
     private String metadataFile(User user, DocumentId documentId) {
         return join(documentFolder(user, documentId), "metadata.enc");
     }
 
     private String documentFolder(User user, DocumentId documentId) {
         return join(getUserPrefix(user), "documents", documentId.id());
+    }
+
+    /** The salt and witness of one key file - all a membership test needs of it. */
+    private record Witness(byte[] salt, String witness) {
     }
 }

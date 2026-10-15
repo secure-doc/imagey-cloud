@@ -91,3 +91,33 @@ instead of being transported. In addition, `member` has one narrowly scoped,
 uncached fallback for the messages sub-resource only: the invitee of an
 `ACCEPTED` exchange naming `(owner, chatId)` may post and read messages before
 the chat document exists (ADR 0015 decision 4). There are still only two roles.
+
+## Amendment (2026-10-15, folder sharing)
+
+Decision 3 is narrowed: membership grants **reading**, not **writing**. Adding a
+document to a folder in someone else's tree (`POST /documents` with
+`caller != folderOwner`) needs the owner's explicit **right for this caller**:
+a plaintext marker `{owner}/documents/{shared folder}/contributions/{H}` with
+`H` the hashed name of the caller's own key file (`KeyFileCrypto.fileName`), set
+only by the owner (`PUT /users/{owner}/documents/{id}/contributions/{grantee}`,
+only for somebody the folder is shared with; `DELETE` takes it away for new
+contributions). The server looks for it at the shared folders **on the
+caller's Access-Path** - the folders the caller holds a direct grant on; any of
+them may carry it, so a read-only share deeper down does not hide a right
+further up. The right covers everything below such a folder, however deep and
+whoever created it. A folder of the caller's own tree on the path needs no
+marker: it is his own. The caller's own settings document never counts: its
+slot is the one a direct grant is filed under.
+Without it any member of a chat, group or shared image could replace that
+document's content, since the server cannot tell a folder from any other
+document; and a marker per folder instead of per recipient would let a
+read-only recipient write as soon as another one may. The marker is read
+uncached, so taking the right away takes effect at once. A stranger gets the
+same 403 whether the document is missing, the right is missing or it is not
+theirs.
+
+Known limit: a contributor rewrites the whole folder content, so "contributions
+allowed" means "edit together", not "append only". The marker is named like the
+recipient's key file, so it reveals no edge the key file does not reveal (ADR
+0009).
+See `docs/plans/share-folders.md`.
