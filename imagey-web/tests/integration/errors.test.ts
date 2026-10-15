@@ -3082,6 +3082,35 @@ test("Chat.tsx shows a chats-load error when the chats document fails to load", 
   ).toBeVisible();
 });
 
+test("App shows a retry dialog instead of an eternal spinner when the settings fail to load", async ({
+  page,
+}) => {
+  let keyRequests = 0;
+  await loginMary(page, async (p) => {
+    await p.route(`**/users/${MARY}/documents/${MARY}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: "",
+      }),
+    );
+    // The settings key is gone (e.g. the key file name no longer matches).
+    await p.route(`**/users/${MARY}/documents/${MARY}/keys/0`, (route) => {
+      keyRequests++;
+      return route.fulfill({ status: 404 });
+    });
+  });
+
+  await expect(page.getByText("Could not load your settings.")).toBeVisible();
+  await expect(page.getByText("Loading settings...")).not.toBeVisible();
+  expect(keyRequests).toBe(1);
+
+  // Retry loads the settings again (and fails again, with the same dialog).
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect.poll(() => keyRequests).toBe(2);
+  await expect(page.getByText("Could not load your settings.")).toBeVisible();
+});
+
 test("Chat.tsx shows a decryption error for a contact that isn't in mary's chats list", async ({
   page,
 }) => {
