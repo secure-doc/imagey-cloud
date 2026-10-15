@@ -41,6 +41,25 @@ class KeyFileCryptoTest {
         assertThat(crypto.fileName(D1, F)).endsWith(".json");
     }
 
+    // Known-answer test: the expected values were computed independently of this class (HKDF-Expand
+    // of the secret with the labels "imagey/keyfile-name/v1" / "imagey/keyfile-witness/v1", then
+    // HMAC-SHA256). Key files already on disk are found only under exactly these names and
+    // witnesses, so changing a label, the separator or the encoding breaks every existing
+    // deployment (ADR 0009) - if this test fails, you almost certainly need a data migration,
+    // not new expected values.
+    @Test
+    @DisplayName("fileName and witness match fixed values, so existing key files stay resolvable")
+    void knownAnswer() {
+        assertThat(crypto.fileName(D1, G)).isEqualTo("fGYBTjwMDZ2C5Lff-DgsNWqjm5srysnKV9zYaHUuwy4.json");
+        byte[] salt = new byte[16];
+        for (int i = 0; i < salt.length; i++) {
+            salt[i] = (byte) i;
+        }
+        String witness = "Mfu2kM4/lS2N+cqe9BWte6dXRIut5Jia0yDAEfPY12w=";
+        assertThat(crypto.witness(salt, F, G)).isEqualTo(witness);
+        assertThat(crypto.witnessMatches(witness, salt, F, G)).isTrue();
+    }
+
     @Test
     @DisplayName("fileName is a function of both endpoints - it does not collide with documents/{kid}/")
     void fileNameEdgeUnique() {
